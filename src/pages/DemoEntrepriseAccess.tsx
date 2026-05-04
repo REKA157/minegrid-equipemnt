@@ -7,10 +7,9 @@ import { Building2 } from 'lucide-react';
  * widgets) pour démonstrations. Elle NE DOIT PAS être exposée dans la
  * navigation publique.
  *
- * Protégée par le code démo unifié 'minegrid2026' (même code que Global
- * Monitor / Login demo / promo abonnement).
+ * Protégée par un code temporaire injecté via VITE_MONITOR_TEMP_ACCESS_CODE.
  */
-const DEMO_ACCESS_CODE = 'minegrid2026';
+const DEMO_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
 
 export default function DemoEntrepriseAccess() {
   const [code, setCode] = useState('');
@@ -63,7 +62,11 @@ export default function DemoEntrepriseAccess() {
           </p>
         </div>
 
-        {granted ? (
+        {!DEMO_ACCESS_CODE ? (
+          <div className="bg-amber-50 text-amber-800 text-sm px-4 py-3 rounded-md">
+            Accès démo désactivé sur cet environnement.
+          </div>
+        ) : granted ? (
           <div className="bg-green-50 text-green-800 text-sm px-4 py-3 rounded-md">
             Accès activé. Redirection vers la configuration…
           </div>

@@ -84,7 +84,23 @@ async def require_user_or_admin(
             if sub:
                 return True
         except JWTError:
-            pass
+            # Fallback robuste: vérifier le token auprès de Supabase Auth
+            if settings.supabase_url and settings.supabase_service_role_key:
+                auth_url = f"{settings.supabase_url.rstrip('/')}/auth/v1/user"
+                auth_headers = {
+                    "apikey": settings.supabase_service_role_key,
+                    "Authorization": f"Bearer {credentials.credentials}",
+                }
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        auth_res = await client.get(auth_url, headers=auth_headers)
+                    if 200 <= auth_res.status_code < 300:
+                        auth_data = auth_res.json()
+                        uid = auth_data.get("id")
+                        if isinstance(uid, str) and uid:
+                            return True
+                except Exception:
+                    pass
 
     if x_admin_token and settings.admin_token:
         if hmac.compare_digest(x_admin_token.encode(), settings.admin_token.encode()):

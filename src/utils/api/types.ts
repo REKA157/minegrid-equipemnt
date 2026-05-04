@@ -192,4 +192,15 @@ export interface SalesPerformanceData {
     prospects: { value: number; target: number; trend: 'up' | 'down' | 'stable' };
     responseTime: { value: number; target: number; trend: 'up' | 'down' | 'stable' };
   };
+  /** Score ventilé : catalogue + pipeline + couverture annonces (aligné widgets convergents) */
+  convergent?: {
+    engagementScore: number;
+    pipelineScore: number;
+    stockCoverageScore: number;
+    pipelineOpen: number;
+    pipelineWon: number;
+    pipelineTotal: number;
+    monitorLinkedLeads: number;
+    staleOpenLeads: number;
+  };
 }

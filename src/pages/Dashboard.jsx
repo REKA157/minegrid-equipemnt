@@ -5,6 +5,7 @@ import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData
 import { supabaseClient as supabase } from '../utils/supabaseClient';
 import { logger } from '../utils/logger';
 import { toast } from '../utils/toast';
+const PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
 // Fonction utilitaire pour vérifier si une configuration valide existe
 const hasValidConfiguration = () => {
     // Vérifier d'abord si la configuration a été explicitement validée
@@ -185,10 +186,10 @@ export default function Dashboard({ section = 'overview' }) {
     useEffect(() => {
         // Mettre à jour le nom de la navigation selon le type d'abonnement
         setNavigation(prev => prev.map(item => {
-            if (item.name === 'Vue d\'ensemble' || item.name === 'Tableau de bord') {
+            if (item.name === 'Vue d\'ensemble' || item.name === 'Tableau de bord' || item.name === 'Mon espace') {
                 return {
                     ...item,
-                    name: (!hasActiveSubscription || subscriptionType === 'gratuit') ? 'Vue d\'ensemble' : 'Tableau de bord'
+                    name: (!hasActiveSubscription || subscriptionType === 'gratuit') ? 'Vue d\'ensemble' : 'Mon espace'
                 };
             }
             return item;
@@ -285,7 +286,9 @@ export default function Dashboard({ section = 'overview' }) {
                     .order('created_at', { ascending: false });
 
                 if (error) {
-                    logger.error('Erreur lors du chargement des messages:', error);
+                    if (error.code !== 'PGRST205') {
+                        logger.error('Erreur lors du chargement des messages:', error);
+                    }
                     setMessages([]);
                 } else {
                     setMessages(messagesData || []);
@@ -615,7 +618,17 @@ export default function Dashboard({ section = 'overview' }) {
         }
     };
 
-    const maxWeeklyViews = Math.max(...weeklyData, 1);
+    const weeklyViewValues = (Array.isArray(weeklyData) ? weeklyData : []).map((entry) => {
+        if (typeof entry === 'number') {
+            return Number.isFinite(entry) ? entry : 0;
+        }
+        if (entry && typeof entry === 'object') {
+            const views = Number(entry.views ?? 0);
+            return Number.isFinite(views) ? views : 0;
+        }
+        return 0;
+    });
+    const maxWeeklyViews = Math.max(1, ...weeklyViewValues);
 
     // Fonctions pour la page de paiement
     const handlePaymentMethodChange = (method) => {
@@ -623,7 +636,11 @@ export default function Dashboard({ section = 'overview' }) {
     };
 
     const handlePromoCodeValidation = () => {
-        if (promoCode === 'minegrid2026') {
+        if (!PROMO_CODE) {
+            toast('Les codes promo sont désactivés sur cet environnement.');
+            return;
+        }
+        if (promoCode === PROMO_CODE) {
             toast('✅ Code promo valide ! Accès temporaire de 30 jours.');
             activateSubscriptionWithPromo();
         } else {
@@ -726,7 +743,7 @@ export default function Dashboard({ section = 'overview' }) {
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-800 bg-clip-text text-transparent">
-                            {(!hasActiveSubscription || subscriptionType === 'gratuit') ? 'Vue d\'ensemble' : 'Tableau de bord'}
+                            {(!hasActiveSubscription || subscriptionType === 'gratuit') ? 'Vue d\'ensemble' : 'Mon espace'}
                         </h1>
                         <p className="text-gray-600 mt-2 text-lg">
                             Bienvenue{userName ? `, ${userName}` : ''}
@@ -741,7 +758,7 @@ export default function Dashboard({ section = 'overview' }) {
                                 <ChevronRight className="h-4 w-4 text-orange-400" />
                                 <li>
                                     <span className="text-gray-700 font-medium">
-                                        {(!hasActiveSubscription || subscriptionType === 'gratuit') ? 'Vue d\'ensemble' : 'Tableau de bord'}
+                                        {(!hasActiveSubscription || subscriptionType === 'gratuit') ? 'Vue d\'ensemble' : 'Mon espace'}
                                     </span>
                                 </li>
                             </ol>
@@ -789,14 +806,14 @@ export default function Dashboard({ section = 'overview' }) {
                                             key={item.name}
                                             href={item.href}
                                             className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                                                (activeSection === 'overview' && (item.name === 'Vue d\'ensemble' || item.name === 'Tableau de bord')) || 
+                                                (activeSection === 'overview' && (item.name === 'Vue d\'ensemble' || item.name === 'Tableau de bord' || item.name === 'Mon espace')) || 
                                                 (activeSection === item.name.toLowerCase().replace(' ', '').replace('\'', ''))
                                                     ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md'
                                                     : 'text-gray-700 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100 hover:text-orange-700'
                                             }`}
                                         >
                                             <Icon className="h-5 w-5 mr-3" />
-                                            {item.name}
+                                            {item.name === 'Tableau de bord' ? 'Mon espace' : item.name}
                                         </a>
                                     );
                                 })}
@@ -1081,22 +1098,22 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <div className="flex items-center justify-between text-sm">
                                                         <span className="text-gray-600">Vues cette semaine</span>
                                                         <span className="font-medium text-gray-900">
-                                                            {weeklyData.reduce((sum, day) => sum + day.views, 0)}
+                                                            {weeklyViewValues.reduce((sum, views) => sum + views, 0)}
                                                         </span>
                                                     </div>
                                                     <div className="space-y-2">
                                                         {weekDays.map((day, index) => {
-                                                            const dayData = weeklyData[index] || { views: 0 };
+                                                            const dayViews = weeklyViewValues[index] || 0;
                                                             return (
                                                                 <div key={day} className="flex items-center space-x-3">
                                                                     <span className="text-xs text-gray-500 w-8">{day}</span>
                                                                     <div className="flex-1 bg-gray-200 rounded-full h-2">
                                                                         <div
                                                                             className="bg-gradient-to-r from-orange-400 to-orange-600 h-2 rounded-full transition-all duration-300"
-                                                                            style={{ width: `${getBarWidth(dayData.views, maxWeeklyViews)}%` }}
+                                                                            style={{ width: `${getBarWidth(dayViews, maxWeeklyViews)}%` }}
                                                                         ></div>
                                                                     </div>
-                                                                    <span className="text-xs text-gray-600 w-8 text-right">{dayData.views}</span>
+                                                                    <span className="text-xs text-gray-600 w-8 text-right">{dayViews}</span>
                                                                 </div>
                                                             );
                                                         })}
@@ -2165,7 +2182,7 @@ export default function Dashboard({ section = 'overview' }) {
                                             <span className="font-medium">Offre spéciale</span>
                                         </div>
                                         <p className="text-sm text-orange-700 mt-1">
-                                            Utilisez le code <strong>minegrid2026</strong> pour un accès temporaire de 30 jours
+                                            Utilisez votre code promo temporaire pour un accès de 30 jours
                                         </p>
                                     </div>
                                 </div>

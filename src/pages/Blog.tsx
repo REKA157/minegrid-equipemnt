@@ -3,9 +3,18 @@ import { Calendar, User, ArrowRight, ArrowLeft } from 'lucide-react';
 
 const ALLOWED_TAGS = new Set(['p','br','b','strong','em','i','ul','ol','li','h1','h2','h3','h4','a','span','div','blockquote']);
 function sanitizeHtml(html: string): string {
-  return html.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (match, tag) => {
-    return ALLOWED_TAGS.has(tag.toLowerCase()) ? match : '';
-  }).replace(/on\w+\s*=/gi, '');
+  return html
+    .replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (match, tag) => {
+      return ALLOWED_TAGS.has(tag.toLowerCase()) ? match : '';
+    })
+    .replace(/\s(on\w+|style)\s*=\s*(['"]).*?\2/gi, '')
+    .replace(/\s(href|src)\s*=\s*(['"])\s*(javascript:|data:).*?\2/gi, '')
+    .replace(/<a\b(?![^>]*\brel=)[^>]*>/gi, (anchorTag) => {
+      if (/target\s*=\s*(['"])_blank\1/i.test(anchorTag)) {
+        return anchorTag.replace(/>$/, ' rel="noopener noreferrer">');
+      }
+      return anchorTag;
+    });
 }
 
 interface BlogProps {

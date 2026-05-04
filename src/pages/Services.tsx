@@ -124,7 +124,7 @@ const services = [
 ];
 
 export default function Services({ service }: ServicesProps) {
-  const [selectedService, setSelectedService] = React.useState<number | null>(null);
+  const [selectedService, setSelectedService] = React.useState<string | null>(null);
   const filteredServices = service && serviceGroups[service]
   ? services.filter((s) => serviceGroups[service].includes(s.id))
   : services;
@@ -139,32 +139,37 @@ export default function Services({ service }: ServicesProps) {
         </p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-  {filteredServices.map((srv, index) => {
+      <div className="grid w-full gap-4 sm:gap-6 lg:gap-8 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]">
+  {filteredServices.map((srv) => {
     const Icon = srv.icon;
+    const isOpen = selectedService === srv.id;
     return (
       <div 
-        key={index} 
-        className="bg-white p-6 rounded-lg shadow-md transition-all duration-300 cursor-pointer hover:shadow-lg"
-        onClick={() => setSelectedService(selectedService === index ? null : index)}
+        key={srv.id}
+        className="bg-white p-5 sm:p-6 rounded-lg border border-gray-100 shadow-md transition-all duration-300 hover:shadow-lg flex flex-col"
       >
-        <Icon className="h-12 w-12 mb-4 mx-auto" />
-        <h3 className="text-xl font-semibold mb-2 text-center">{srv.title}</h3>
-        <p className="text-center mb-4">{srv.description}</p>
-        
-        <div className={`overflow-hidden transition-all duration-300 ${selectedService === index ? 'max-h-96' : 'max-h-0'}`}>
-          <ul className="mt-4 space-y-2">
+        <Icon className="h-10 w-10 sm:h-12 sm:w-12 mb-3 sm:mb-4 mx-auto" />
+        <h3 className="text-lg sm:text-xl font-semibold mb-2 text-center leading-tight">{srv.title}</h3>
+        <p className="text-center text-sm sm:text-base mb-4">{srv.description}</p>
+
+        <button
+          type="button"
+          className="mt-auto w-full bg-orange-100 px-4 py-2.5 rounded-md hover:bg-orange-200 transition-colors text-orange-700 text-sm sm:text-base font-medium"
+          onClick={() => setSelectedService(isOpen ? null : srv.id)}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? 'Masquer les détails' : 'En savoir plus'}
+        </button>
+
+        <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-[28rem] sm:max-h-96' : 'max-h-0'}`}>
+          <ul className="mt-4 space-y-2 text-sm sm:text-base">
             {srv.details.map((detail, idx) => (
-              <li key={idx} className="flex items-center">
-                <div className="w-2 h-2 bg-gray-300 rounded-full mr-2"></div>
+              <li key={idx} className="flex items-start leading-relaxed">
+                <div className="w-2 h-2 bg-gray-300 rounded-full mr-2 mt-2"></div>
                 {detail}
               </li>
             ))}
           </ul>
-          
-          <button className="mt-6 w-full bg-orange-100 px-4 py-2 rounded-md hover:bg-orange-200 transition-colors text-orange-700 font-medium">
-            En savoir plus
-          </button>
         </div>
       </div>
     );

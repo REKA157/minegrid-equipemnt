@@ -2,13 +2,25 @@ import React, { useState } from 'react';
 import { Mail, Lock, ChevronRight } from 'lucide-react';
 import { loginUser } from '../utils/api';
 import { toast } from '../utils/toast';
-// Code d'accès démo partagé (même valeur que Global Monitor et Register).
-const TEMP_ACCESS_CODE = 'minegrid2026';
+import supabase from '../utils/supabaseClient';
+const TEMP_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+
+  const handleOAuthLogin = async (provider: 'google' | 'linkedin_oidc') => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) {
+      toast(`Connexion ${provider === 'google' ? 'Google' : 'LinkedIn'} indisponible : ${error.message}`);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,8 +31,9 @@ export default function Login() {
       // Optionnel : tu peux stocker la session dans le localStorage si tu veux
       localStorage.setItem('user', JSON.stringify(user));
       window.location.hash = '#dashboard';  
-    } catch (err: any) {
-      toast('Erreur de connexion : ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erreur inconnue';
+      toast('Erreur de connexion : ' + message);
     }
   };
 
@@ -108,7 +121,9 @@ export default function Login() {
               </div>
 
               <div className="text-sm">
-              <a href="#mot-de-passe-oublie" className="...">Mot de passe oublié ?</a>
+                <a href="#mot-de-passe-oublie" className="font-medium text-primary-600 hover:text-primary-500">
+                  Mot de passe oublié ?
+                </a>
               </div>
             </div>
 
@@ -135,12 +150,14 @@ export default function Login() {
             <div className="mt-6 grid grid-cols-2 gap-3">
               <button
                 type="button"
+                onClick={() => void handleOAuthLogin('google')}
                 className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
               >
                 Google
               </button>
               <button
                 type="button"
+                onClick={() => void handleOAuthLogin('linkedin_oidc')}
                 className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
               >
                 LinkedIn
@@ -156,6 +173,9 @@ export default function Login() {
 }
 
 function TempAccessBlock() {
+  if (!TEMP_ACCESS_CODE) {
+    return null;
+  }
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);

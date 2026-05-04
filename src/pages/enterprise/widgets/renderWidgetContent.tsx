@@ -1,12 +1,10 @@
-import { InventoryStatusWidget } from './InventoryStatusWidget';
 import { getListData } from './getListData';
 import { getChartData } from './getChartData';
 import { SalesEvolutionWidgetEnriched } from './SalesEvolutionWidgetEnriched';
-import { DailyActionsPriorityWidget } from '../../DailyActionsWidgetFixed';
+import DailyActionsPriorityWidget from '../../../components/dashboard/widgets/DailyActionsPriorityWidget';
 import { getDailyActionsData } from './getDailyActionsData';
 import { SalesPipelineWidget } from './SalesPipelineWidget';
-import { PerformanceScoreWidget } from './PerformanceScoreWidget';
-import { getPerformanceScoreData } from './getPerformanceScoreData';
+import DashboardSalesPerformanceScoreWidget from '../../../components/dashboard/widgets/SalesPerformanceScoreWidget';
 import { DailyActionsWidget } from './DailyActionsWidget';
 import { NotificationsWidget } from './NotificationsWidget';
 import { getNotificationsData } from './getNotificationsData';
@@ -26,9 +24,12 @@ import { EquipmentAvailabilityWidget } from './EquipmentAvailabilityWidget';
 import { getEquipmentAvailabilityData } from './getEquipmentAvailabilityData';
 import { PreventiveMaintenanceWidget } from './PreventiveMaintenanceWidget';
 import { getMaintenanceData } from './getMaintenanceData';
-import { SalesPerformanceScoreWidget } from './SalesPerformanceScoreWidget';
-import { getSalesPerformanceScoreData } from './getSalesPerformanceScoreData';
+import StockStatusWidget from '../../../components/dashboard/widgets/StockStatusWidget';
 import React from 'react';
+
+function dailyActionsWidgetSize(s: 'small' | 'normal' | 'large'): 'small' | 'medium' | 'large' {
+  return s === 'normal' ? 'medium' : s;
+}
 
 export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' | 'large' = 'normal') => {
   console.log('[DEBUG] Appel widget ID:', widget.id);
@@ -38,7 +39,7 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
 
   // Cas spécial pour le widget "Plan d'action stock & revente" (anciennement "État du stock")
   if (widget.id === 'stock-status' || widget.id === 'inventory-status' || widget.id === 'stock-action') {
-    return <InventoryStatusWidget data={getListData(widget.id)} />;
+    return <StockStatusWidget />;
   }
 
   // Cas spécial pour le widget "Évolution des ventes enrichie"
@@ -62,11 +63,11 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
   // Cas spécial pour le widget "Actions prioritaires du jour"
   if (widget.id === 'daily-actions') {
     console.log('[DEBUG] Widget daily-actions détecté, utilisation de getDailyActionsData');
-    return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={widgetSize} />;
+    return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
   }
 
   // Cas spécial pour le widget "Pipeline commercial"
-  if (widget.id === 'sales-pipeline') {
+  if (widget.id === 'sales-pipeline' || widget.id === 'leads-pipeline') {
     return <SalesPipelineWidget data={getListData(widget.id)} />;
   }
 
@@ -74,7 +75,7 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
 
   // Cas spécial pour le widget "Score de performance commerciale"
   if (widget.id === 'performance-score') {
-    return <PerformanceScoreWidget data={getPerformanceScoreData()} />;
+    return <DashboardSalesPerformanceScoreWidget />;
   }
 
   // Cas spécial pour le widget "Assistant Prospection Active"
@@ -89,7 +90,7 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
 
   // Cas spécial pour le widget "Actions commerciales prioritaires"
   if (widget.id === 'daily-actions-priority' || widget.type === 'daily-actions') {
-    return <DailyActionsPriorityWidget data={getListData(widget.id)} widgetSize={widgetSize} />;
+    return <DailyActionsPriorityWidget data={getListData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
   }
 
   // Cas spécial pour le widget "Notifications"
@@ -111,6 +112,9 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
     case 'metric':
       return <MetricWidget widget={widget} data={getMetricData(widget.id)} />;
     case 'list':
+      if (widget.id === 'leads-pipeline') {
+        return <SalesPipelineWidget data={getListData(widget.id)} />;
+      }
       return <ListWidget
         widget={widget}
         data={getListData(widget.id)}
@@ -165,10 +169,7 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
       return <NotificationsWidget data={getNotificationsData(widget.id)} />;
     case 'performance':
       console.log('[DEBUG] Rendu du widget performance pour:', widget.id);
-      if (widget.id === 'sales-metrics') {
-        return <SalesPerformanceScoreWidget data={getSalesPerformanceScoreData()} />;
-      }
-      return <PerformanceScoreWidget data={getPerformanceScoreData()} />;
+      return <DashboardSalesPerformanceScoreWidget />;
     case 'pipeline':
       console.log('[DEBUG] Rendu du widget pipeline pour:', widget.id);
       if (widget.id === 'sales-pipeline') {
@@ -178,12 +179,12 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
     case 'priority':
       console.log('[DEBUG] Rendu du widget priority pour:', widget.id);
       if (widget.id === 'daily-actions') {
-        return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={widgetSize} />;
+        return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
       }
       return <div>Widget priorité non reconnu: {widget.id}</div>;
     case 'daily-actions':
       console.log('[DEBUG] Rendu du widget daily-actions pour:', widget.id);
-      return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={widgetSize} />;
+      return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
     case 'analytics':
       console.log('[DEBUG] Rendu du widget analytics pour:', widget.id);
       return <div>Widget analytics: {widget.title}</div>;

@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import FinancingSimulator from '../components/FinancingSimulator';
 import { Info, Upload, FileText, User, Banknote, FileCheck2, FileSignature, FileSpreadsheet, FileInput, ShieldCheck, ClipboardEdit, X } from 'lucide-react';
-
-// Simuler récupération de l'utilisateur connecté
-const mockUser = {
-  company: 'Ma Société SARL',
-  email: 'contact@masociete.com',
-  manager: 'Jean Dupont',
-};
+import { useAuth } from '../hooks/useAuth';
+import { submitContactMessage } from '../utils/api/contact';
+import { toast } from '../utils/toast';
 
 const requiredDocs = [
   { key: 'kbis', label: "Extrait Kbis ou registre de commerce", icon: <FileText className="h-5 w-5 text-primary-600" /> },
@@ -25,12 +21,26 @@ export default function FinancingRequest() {
   const [note, setNote] = useState('');
   const [machinePrice, setMachinePrice] = useState(50000);
   const [success, setSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
 
-  // Simuler sécurité utilisateur connecté
-  const user = mockUser; // Remplacer par useAuth() ou contexte réel
   if (!user) {
-    window.location.href = '/login';
-    return null;
+    return (
+      <div className="max-w-3xl mx-auto py-12 px-4">
+        <div className="bg-white rounded-xl shadow p-8 text-center">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-3">Connexion requise</h2>
+          <p className="text-gray-600 mb-6">
+            Connectez-vous pour soumettre une demande de financement.
+          </p>
+          <a
+            href="#connexion"
+            className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+          >
+            Aller à la connexion
+          </a>
+        </div>
+      </div>
+    );
   }
 
   const handleFileChange = (key: string, file: File | null) => {
@@ -41,10 +51,53 @@ export default function FinancingRequest() {
     setUploadedDocs((prev) => ({ ...prev, [key]: null }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Envoyer les données et fichiers à l'API/n8n
-    setSuccess(true);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const uploadedList = Object.entries(uploadedDocs)
+        .filter(([, file]) => Boolean(file))
+        .map(([key, file]) => `- ${key}: ${file?.name}`)
+        .join('\n');
+
+      const userEmail = user.email || '';
+      const displayName =
+        (user.user_metadata?.full_name as string | undefined) ||
+        [user.user_metadata?.first_name, user.user_metadata?.last_name].filter(Boolean).join(' ') ||
+        'Utilisateur Minegrid';
+      const company =
+        (user.user_metadata?.company as string | undefined) ||
+        (user.user_metadata?.company_name as string | undefined) ||
+        '';
+
+      await submitContactMessage({
+        name: displayName,
+        email: userEmail,
+        company: company || null,
+        subject: 'Demande de financement - Accord de principe',
+        service: 'financing',
+        message: [
+          `Prix machine estimé: ${machinePrice} EUR`,
+          `Apport disponible: ${apport || 'non renseigné'} EUR`,
+          '',
+          'Note:',
+          note || 'Aucune note',
+          '',
+          'Documents transmis:',
+          uploadedList || 'Aucun document joint (noms non fournis)',
+        ].join('\n'),
+      });
+
+      setSuccess(true);
+      toast('Demande de financement envoyée avec succès.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast(`Envoi impossible pour le moment: ${message}`);
+      setSuccess(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -63,15 +116,28 @@ export default function FinancingRequest() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Société</label>
-            <input type="text" value={user.company} disabled className="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50" />
+            <input
+              type="text"
+              value={(user.user_metadata?.company as string | undefined) || (user.user_metadata?.company_name as string | undefined) || ''}
+              disabled
+              className="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input type="email" value={user.email} disabled className="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50" />
+            <input type="email" value={user.email || ''} disabled className="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Gérant</label>
-            <input type="text" value={user.manager} disabled className="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50" />
+            <input
+              type="text"
+              value={
+                (user.user_metadata?.full_name as string | undefined) ||
+                [user.user_metadata?.first_name, user.user_metadata?.last_name].filter(Boolean).join(' ')
+              }
+              disabled
+              className="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Apport disponible (€)</label>
@@ -108,8 +174,12 @@ export default function FinancingRequest() {
             ))}
           </ul>
         </div>
-        <button type="submit" className="w-full bg-primary-600 text-white py-3 rounded-xl font-semibold text-lg hover:bg-primary-700 shadow-md transition-colors">
-          Envoyer la demande
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full bg-primary-600 text-white py-3 rounded-xl font-semibold text-lg hover:bg-primary-700 shadow-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? 'Envoi en cours...' : 'Envoyer la demande'}
         </button>
         {success && (
           <div className="mt-4 p-3 bg-green-50 text-green-800 rounded-lg border border-green-200">

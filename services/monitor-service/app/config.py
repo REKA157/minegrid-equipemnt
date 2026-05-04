@@ -19,7 +19,12 @@ class Settings(BaseSettings):
 
     admin_token: str = ""
 
-    allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:5175"
+    allowed_origins: str = (
+        "http://localhost:5173,"
+        "http://localhost:5174,"
+        "http://localhost:5175,"
+        "http://localhost:5176"
+    )
 
     geocoder_mode: str = "none"
     mapbox_token: str = ""

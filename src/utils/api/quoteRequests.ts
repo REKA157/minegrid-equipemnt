@@ -1,5 +1,6 @@
 import supabase from '../supabaseClient';
 import { supabaseCall } from '../supabaseCall';
+import { logger } from '../logger';
 
 export type QuoteRequestStatus = 'new' | 'contacted' | 'qualified' | 'closed';
 
@@ -46,17 +47,15 @@ function cleanQuotePayload(payload: QuoteRequestPayload): QuoteRequestPayload {
 
 export async function submitQuoteRequest(
   payload: QuoteRequestPayload,
-): Promise<QuoteRequestRow> {
+): Promise<void> {
   const cleaned = cleanQuotePayload(payload);
-  return supabaseCall<QuoteRequestRow>(
-    () =>
-      supabase
-        .from('quote_requests')
-        .insert(cleaned)
-        .select()
-        .single(),
-    { label: 'submitQuoteRequest' },
-  );
+  const { error } = await supabase.from('quote_requests').insert(cleaned);
+  if (error) {
+    logger.error('[supabaseCall:submitQuoteRequest]', error);
+    const err = new Error(error.message || 'submitQuoteRequest failed');
+    (err as Error & { cause?: unknown }).cause = error;
+    throw err;
+  }
 }
 
 export async function getQuoteRequests(

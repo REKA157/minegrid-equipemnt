@@ -59,6 +59,39 @@ function safeReadConfig(role: string): ShellDashboardConfig {
 const persist = (role: string, config: ShellDashboardConfig) =>
   localStorage.setItem(storageKey(role), JSON.stringify(config));
 
+/** Réaligne titre, type et champs catalogue sur la source métier (évite titres obsolètes dans localStorage). */
+function reconcileWidgetsWithSource(
+  stored: ShellWidget[],
+  source: ShellWidgetsSource,
+  validIds: string[],
+): ShellWidget[] {
+  return stored
+    .filter((w) => validIds.includes(w.id))
+    .map((w) => {
+      const canonical = source.widgets.find((s) => s.id === w.id);
+      if (!canonical) return w;
+      return {
+        ...canonical,
+        ...w,
+        title: canonical.title,
+        type: canonical.type,
+        description: canonical.description,
+        dataSource: canonical.dataSource,
+      } as ShellWidget;
+    });
+}
+
+/** Empreinte du catalogue widgets (ignore la référence de l'objet source). */
+function widgetsCatalogKey(source: ShellWidgetsSource): string {
+  return source.widgets
+    .map(
+      (w) =>
+        `${w.id}\u0001${String(w.type ?? '')}\u0001${String(w.title ?? '')}\u0001${String(w.description ?? '')}\u0001${String(w.dataSource ?? '')}`,
+    )
+    .sort()
+    .join('\u0002');
+}
+
 export function useShellState(options: UseShellStateOptions) {
   const { role, widgetsSource, validIds } = options;
   const [config, setConfig] = useState<ShellDashboardConfig | null>(null);
@@ -67,11 +100,15 @@ export function useShellState(options: UseShellStateOptions) {
   const [saveStatus, setSaveStatus] = useState<ShellSaveStatus>('idle');
   const addTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Chargement initial : purge des widgets/layouts obsoletes, injection des tailles.
+  const validIdsKey = [...validIds].sort().join('|');
+  const catalogKey = widgetsCatalogKey(widgetsSource);
+
+  // Réconciliation localStorage : uniquement quand rôle, liste d'id autorisés ou catalogue (contenu) changent.
+  // Pas de dépendance directe à la référence de `validIds` / `widgetsSource` pour éviter des re-exécutions inutiles.
   useEffect(() => {
     const parsed = safeReadConfig(role);
 
-    parsed.widgets = (parsed.widgets || []).filter((w) => validIds.includes(w.id));
+    parsed.widgets = reconcileWidgetsWithSource(parsed.widgets || [], widgetsSource, validIds);
     parsed.layout.lg = (parsed.layout.lg || []).filter((l) => validIds.includes(l.i));
 
     if (parsed.widgetSizes) {
@@ -84,8 +121,8 @@ export function useShellState(options: UseShellStateOptions) {
     persist(role, parsed);
     setConfig(parsed);
     setLayout(parsed.layout ?? { lg: [] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- widgetsSource / validIds : voir validIdsKey & catalogKey
+  }, [role, validIdsKey, catalogKey]);
 
   const onLayoutChange = useCallback(
     (newLayout: ShellLayoutItem[]) => {

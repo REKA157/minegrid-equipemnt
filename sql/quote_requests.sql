@@ -59,3 +59,13 @@ create policy "auth can update quote requests"
   to authenticated
   using (true)
   with check (true);
+
+-- Droits PostgREST : le front utilise la clé anon pour insérer un lead public.
+-- Pas de SELECT pour anon : l’app utilise insert sans .select() (voir submitQuoteRequest).
+grant usage on schema public to anon, authenticated;
+grant insert on table public.quote_requests to anon, authenticated;
+grant select, update on table public.quote_requests to authenticated;
+
+-- Si vous aviez ajouté une policy "anon can read" pour contourner .select() après insert,
+-- vous pouvez la retirer une fois le front à jour :
+-- drop policy if exists "anon can read quote requests" on public.quote_requests;

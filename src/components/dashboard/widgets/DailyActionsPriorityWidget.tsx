@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   AlertTriangle, Clock, DollarSign, Phone, Mail, Calendar, 
   ChevronRight, ChevronDown, Zap, Target, Users, TrendingUp,
@@ -6,6 +6,19 @@ import {
 } from 'lucide-react';
 import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
 import { getMessages, getOffers, getDashboardStats } from '../../../utils/api';
+import type { DashboardStats } from '../../../utils/api/types';
+import { buildCorrelatedDailyActions } from '../../../utils/correlateLeadActions';
+import { RealPipelineService } from '../../../services/realPipelineService';
+
+const EMPTY_DASHBOARD_STATS: DashboardStats = {
+  totalViews: 0,
+  totalMessages: 0,
+  totalOffers: 0,
+  weeklyViews: 0,
+  monthlyViews: 0,
+  weeklyGrowth: 0,
+  monthlyGrowth: 0,
+};
 
 interface DailyAction {
   id: string;
@@ -24,13 +37,46 @@ interface DailyAction {
   status: 'pending' | 'in-progress' | 'completed';
   aiRecommendation?: string;
   estimatedDuration: number; // en minutes
+  /** Alignement avec `public.leads` / Kanban */
+  relatedLeadId?: string;
+  sourceKind?: 'pipeline' | 'message' | 'offer' | 'stats';
+  sourceId?: string;
 }
 
 interface Props {
-  data?: DailyAction[];
-  widgetSize?: 'small' | 'medium' | 'large';
+  /** Données legacy optionnelles (fallback si aucune donnée Supabase) — forme libre. */
+  data?: unknown[];
+  widgetSize?: 'small' | 'medium' | 'large' | 'normal';
   onAction?: (action: string, data: any) => void;
 }
+
+function legacyPropsToActions(raw: unknown[]): DailyAction[] {
+  return raw.slice(0, 12).map((row: any, i: number) => ({
+    id: String(row?.id ?? `legacy-${i}`),
+    title: String(row?.title ?? 'Action'),
+    description: String(row?.description ?? ''),
+    priority:
+      row?.priority === 'high' || row?.priority === 'low' || row?.priority === 'medium'
+        ? row.priority
+        : 'medium',
+    category: (row?.category as DailyAction['category']) || 'follow-up',
+    dueTime: String(row?.dueTime ?? '10:00'),
+    contact: row?.contact,
+    value: Number(row?.value) || 0,
+    status: row?.status === 'in-progress' || row?.status === 'completed' ? row.status : 'pending',
+    aiRecommendation: row?.aiRecommendation,
+    estimatedDuration: Number(row?.estimatedDuration) || 20,
+  }));
+}
+
+type DialerMode = 'direct' | 'api';
+type DialerProvider = 'twilio' | 'aircall' | 'ringover' | 'whatsapp' | 'custom';
+type DialerConfig = {
+  mode: DialerMode;
+  provider: DialerProvider;
+  apiBaseUrl: string;
+  defaultCountryCode: string;
+};
 
 const DailyActionsPriorityWidget: React.FC<Props> = ({ 
   data = [], 
@@ -45,212 +91,93 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const [realActions, setRealActions] = useState<DailyAction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDialerSettings, setShowDialerSettings] = useState(false);
+  const [dialerConfig, setDialerConfig] = useState<DialerConfig>({
+    mode: 'direct',
+    provider: 'twilio',
+    apiBaseUrl: '',
+    defaultCountryCode: '+33',
+  });
 
-  // Fonction pour charger les vraies données depuis Supabase
-  const loadRealData = async () => {
+  /** Après un contact réel, aligner `last_contact` du lead Kanban (cohérence multi-widgets). */
+  const syncLeadAfterTouch = (action: DailyAction) => {
+    if (!action.relatedLeadId) return;
+    void RealPipelineService.updateLead(action.relatedLeadId, {
+      last_contact: new Date().toISOString(),
+    }).then((row) => {
+      if (row) window.dispatchEvent(new Event('pipeline:refresh'));
+    });
+  };
+
+  const loadRealData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      console.log("🔄 Chargement des actions prioritaires depuis Supabase...");
-      
-      // Récupérer les messages et offres
-      const messages = await getMessages();
-      const offers = await getOffers();
-      const dashboardStats = await getDashboardStats();
-      
-      console.log("✅ Données réelles des actions chargées:", { messages: messages?.length, offers: offers?.length });
-      
-      // Créer des actions à partir des vraies données
-      const actions: DailyAction[] = [];
-      
-      // Actions basées sur les messages non répondu
-      messages?.slice(0, 3).forEach((msg, index) => {
-        actions.push({
-          id: `action-msg-${index}`,
-          title: `Répondre à ${msg.sender?.firstName || 'prospect'}`,
-          description: `Message reçu: ${msg.content?.substring(0, 50)}...`,
-          priority: 'high' as const,
-          category: 'email' as const,
-          dueTime: '09:00',
-          contact: {
-            name: `${msg.sender?.firstName || 'Prospect'} ${msg.sender?.lastName || ''}`,
-            company: 'Prospect',
-            email: msg.sender?.email
-          },
-          value: Math.floor(Math.random() * 200000) + 50000,
-          status: 'pending' as const,
-          aiRecommendation: 'Prospect chaud, répondre rapidement pour maximiser les chances',
-          estimatedDuration: 15
-        });
-      });
-      
-      // Actions basées sur les offres reçues
-      offers?.slice(0, 2).forEach((offer, index) => {
-        actions.push({
-          id: `action-offer-${index}`,
-          title: `Traiter l'offre de ${offer.buyer?.firstName || 'client'}`,
-          description: `Offre de ${offer.amount} MAD pour ${offer.machine?.name || 'équipement'}`,
-          priority: 'high' as const,
-          category: 'proposal' as const,
-          dueTime: '10:30',
-          contact: {
-            name: `${offer.buyer?.firstName || 'Client'} ${offer.buyer?.lastName || ''}`,
-            company: 'Client',
-            phone: offer.buyer?.phone
-          },
-          value: offer.amount || 100000,
-          status: 'in-progress' as const,
-          aiRecommendation: 'Offre intéressante, négocier pour optimiser le prix',
-          estimatedDuration: 30
-        });
-      });
-      
-      // Actions basées sur les statistiques du dashboard
-      if (dashboardStats && actions.length < 5) {
-        if (dashboardStats.totalViews > 0) {
-          actions.push({
-            id: 'action-views',
-            title: 'Analyser les vues récentes',
-            description: `${dashboardStats.totalViews} vues totales, identifier les prospects chauds`,
-            priority: 'medium' as const,
-            category: 'follow-up' as const,
-            dueTime: '14:00',
-            contact: {
-              name: 'Équipe Marketing',
-              company: 'Minegrid'
-            },
-            value: 0,
-            status: 'pending' as const,
-            aiRecommendation: 'Prioriser les prospects avec le plus de vues',
-            estimatedDuration: 45
-          });
-        }
-        
-        if (dashboardStats.totalMessages > 0) {
-          actions.push({
-            id: 'action-messages',
-            title: 'Relancer les prospects inactifs',
-            description: `${dashboardStats.totalMessages} messages reçus, certains nécessitent un suivi`,
-            priority: 'medium' as const,
-            category: 'call' as const,
-            dueTime: '16:00',
-            contact: {
-              name: 'Prospects inactifs',
-              company: 'À identifier'
-            },
-            value: Math.floor(Math.random() * 150000) + 30000,
-            status: 'pending' as const,
-            aiRecommendation: 'Relancer les prospects qui n\'ont pas répondu depuis 3+ jours',
-            estimatedDuration: 20
-          });
-        }
+
+      const [messagesRes, offersRes, statsRes, leadsRes] = await Promise.allSettled([
+        getMessages(),
+        getOffers(),
+        getDashboardStats(),
+        RealPipelineService.getLeads(),
+      ]);
+      const messages = messagesRes.status === 'fulfilled' ? messagesRes.value : [];
+      const offers = offersRes.status === 'fulfilled' ? offersRes.value : [];
+      const dashboardStats =
+        statsRes.status === 'fulfilled' ? statsRes.value : EMPTY_DASHBOARD_STATS;
+      const leads = leadsRes.status === 'fulfilled' ? leadsRes.value : [];
+
+      let actions = buildCorrelatedDailyActions({
+        leads,
+        messages,
+        offers,
+        dashboardStats,
+      }) as DailyAction[];
+
+      if (actions.length === 0 && data.length > 0) {
+        actions = legacyPropsToActions(data as unknown[]);
       }
-      
-      // Si pas assez d'actions, créer des actions génériques basées sur les stats
-      if (actions.length === 0 && dashboardStats) {
-        actions.push({
-          id: 'action-default',
-          title: 'Analyser vos performances',
-          description: `Basé sur ${dashboardStats.totalViews} vues et ${dashboardStats.totalMessages} messages`,
-          priority: 'medium' as const,
-          category: 'follow-up' as const,
-          dueTime: '11:00',
-          contact: {
-            name: 'Analyse IA',
-            company: 'Minegrid'
-          },
-          value: 0,
-          status: 'pending' as const,
-          aiRecommendation: 'Optimiser votre stratégie commerciale',
-          estimatedDuration: 30
-        });
-      }
-      
+
       setRealActions(actions);
-      
-    } catch (error) {
-      console.error("❌ Erreur lors du chargement des actions réelles:", error);
-      // Utiliser des données mockées en cas d'erreur
-      const mockActions: DailyAction[] = [
-        {
-          id: 'action-1',
-          title: 'Vérifier disponibilité excavatrice',
-          description: 'Client BTP Maroc demande excavatrice CAT 320 pour 5 jours',
-          priority: 'high' as const,
-          category: 'call' as const,
-          dueTime: '09:00',
-          contact: {
-            name: 'Ahmed Benali',
-            company: 'BTP Maroc',
-            phone: '+212 5 22 34 56 78'
-          },
-          value: 45000,
-          status: 'pending' as const,
-          aiRecommendation: 'Client régulier, prioriser cette demande',
-          estimatedDuration: 15
-        },
-        {
-          id: 'action-2',
-          title: 'Finaliser contrat location',
-          description: 'Contrat de location chargeur frontal pour Construction Plus',
-          priority: 'high' as const,
-          category: 'proposal' as const,
-          dueTime: '10:30',
-          contact: {
-            name: 'Fatima Zahra',
-            company: 'Construction Plus',
-            email: 'achat@construction-plus.ma'
-          },
-          value: 28000,
-          status: 'in-progress' as const,
-          aiRecommendation: 'Négocier pour optimiser les conditions',
-          estimatedDuration: 30
-        },
-        {
-          id: 'action-3',
-          title: 'Planifier maintenance préventive',
-          description: 'Maintenance préventive bouteur D6 prévue cette semaine',
-          priority: 'medium' as const,
-          category: 'follow-up' as const,
-          dueTime: '14:00',
-          contact: {
-            name: 'Équipe Maintenance',
-            company: 'Minegrid'
-          },
-          value: 0,
-          status: 'pending' as const,
-          aiRecommendation: 'Planifier pendant les périodes creuses',
-          estimatedDuration: 120
-        },
-        {
-          id: 'action-4',
-          title: 'Relancer prospect inactif',
-          description: 'Mines Atlas n\'a pas répondu depuis 3 jours',
-          priority: 'medium' as const,
-          category: 'email' as const,
-          dueTime: '16:00',
-          contact: {
-            name: 'Karim Alami',
-            company: 'Mines Atlas',
-            email: 'direction@mines-atlas.ma'
-          },
-          value: 35000,
-          status: 'pending' as const,
-          aiRecommendation: 'Envoyer un email de relance personnalisé',
-          estimatedDuration: 20
-        }
-      ];
-      setRealActions(mockActions);
-      setError(null);
+    } catch {
+      setError('Impossible de charger les actions.');
+      setRealActions(data.length > 0 ? legacyPropsToActions(data as unknown[]) : []);
     } finally {
       setLoading(false);
     }
-  };
+  }, [data]);
 
-  // Charger les données réelles au montage du composant
   useEffect(() => {
-    loadRealData();
+    void loadRealData();
+  }, [loadRealData]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void loadRealData();
+    };
+    window.addEventListener('pipeline:refresh', onRefresh as EventListener);
+    window.addEventListener('focus', onRefresh);
+    const intervalId = window.setInterval(onRefresh, 60_000);
+    return () => {
+      window.removeEventListener('pipeline:refresh', onRefresh as EventListener);
+      window.removeEventListener('focus', onRefresh);
+      window.clearInterval(intervalId);
+    };
+  }, [loadRealData]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dailyActionsDialerConfig');
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as Partial<DialerConfig>;
+      setDialerConfig((prev) => ({ ...prev, ...parsed }));
+    } catch {
+      // Ignore invalid payload.
+    }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('dailyActionsDialerConfig', JSON.stringify(dialerConfig));
+  }, [dialerConfig]);
 
   // Utiliser les actions réelles au lieu des données simulées
   const displayActions = realActions;
@@ -340,6 +267,17 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
     }).format(amount);
   };
 
+  const normalizePhone = (phone?: string) => {
+    if (!phone) return '';
+    const cleaned = phone.trim();
+    if (cleaned.startsWith('+')) return cleaned;
+    if (cleaned.startsWith('00')) return `+${cleaned.slice(2)}`;
+    if (cleaned.startsWith('0')) return `${dialerConfig.defaultCountryCode}${cleaned.slice(1)}`;
+    return `${dialerConfig.defaultCountryCode}${cleaned}`;
+  };
+
+  const toDigits = (phone: string) => phone.replace(/[^\d]/g, '');
+
   const handleActionClick = (action: DailyAction, actionType: string, e?: React.MouseEvent) => {
     const button = e?.currentTarget as HTMLButtonElement | undefined;
     if (button) {
@@ -412,21 +350,57 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
 
   const handleContactAction = (action: DailyAction) => {
     try {
-      // Action immédiate - contact
-      showNotification('success', `Contact établi avec ${action.contact?.name || 'le contact'}`);
-      
-      // Appel API en arrière-plan (sans await)
+      const phone = normalizePhone(action.contact?.phone);
+      if (!phone) {
+        showNotification('warning', 'Aucun numéro disponible pour cette action');
+        return;
+      }
+
+      if (dialerConfig.mode === 'direct') {
+        try {
+          window.location.href = `tel:${phone}`;
+          showNotification('success', `Dialer direct ouvert vers ${phone}`);
+          syncLeadAfterTouch(action);
+        } catch {
+          void navigator.clipboard?.writeText(phone).catch(() => undefined);
+          showNotification('warning', `Impossible d'ouvrir le dialer. Numéro copié: ${phone}`);
+        }
+        return;
+      }
+
+      if (!dialerConfig.apiBaseUrl) {
+        try {
+          window.location.href = `tel:${phone}`;
+          showNotification('warning', "API non configurée: bascule en appel direct.");
+          syncLeadAfterTouch(action);
+        } catch {
+          void navigator.clipboard?.writeText(phone).catch(() => undefined);
+          showNotification('warning', "Configure l'URL API dialer pour lancer l'appel");
+        }
+        return;
+      }
+
       setTimeout(() => {
-        if (action.contact?.phone) {
-          sendMessage('SMS', action.contact.phone, `Rappel : ${action.title}`).catch(error => {
-            console.error('Erreur SMS:', error);
-          });
-        }
-        if (action.contact?.email) {
-          sendMessage('EMAIL', action.contact.email, `Rappel : ${action.title}`).catch(error => {
-            console.error('Erreur email:', error);
-          });
-        }
+        fetch(`${dialerConfig.apiBaseUrl.replace(/\/$/, '')}/calls`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: dialerConfig.provider,
+            to: phone,
+            action_id: action.id,
+            label: action.title,
+            region_hint: 'africa_europe',
+          }),
+        }).then((response) => {
+          if (!response.ok) {
+            throw new Error(`Dialer API error: ${response.status}`);
+          }
+          showNotification('success', `Appel lancé via API (${dialerConfig.provider})`);
+          syncLeadAfterTouch(action);
+        }).catch(error => {
+          console.error('Erreur API appel:', error);
+          showNotification('error', "Impossible de lancer l'appel API");
+        });
       }, 50);
       
     } catch (error) {
@@ -435,54 +409,131 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
     }
   };
 
+  const handleWhatsAppAction = (action: DailyAction) => {
+    try {
+      const phone = normalizePhone(action.contact?.phone);
+      if (!phone) {
+        showNotification('warning', 'Aucun numéro disponible pour WhatsApp');
+        return;
+      }
+      const message = encodeURIComponent(`Bonjour ${action.contact?.name || ''}, suivi: ${action.title}`);
+      const digits = toDigits(phone);
+      const waUrl = `https://wa.me/${digits}?text=${message}`;
+      const waWebUrl = `https://web.whatsapp.com/send?phone=${digits}&text=${message}`;
+
+      if (dialerConfig.mode === 'direct' || dialerConfig.provider === 'whatsapp') {
+        const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
+        if (!popup) {
+          window.open(waWebUrl, '_blank', 'noopener,noreferrer');
+        }
+        showNotification('success', 'Conversation WhatsApp ouverte');
+        syncLeadAfterTouch(action);
+        return;
+      }
+
+      if (!dialerConfig.apiBaseUrl) {
+        const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
+        if (!popup) {
+          window.open(waWebUrl, '_blank', 'noopener,noreferrer');
+        }
+        showNotification('warning', "API non configurée: ouverture WhatsApp Web.");
+        syncLeadAfterTouch(action);
+        return;
+      }
+
+      fetch(`${dialerConfig.apiBaseUrl.replace(/\/$/, '')}/messages/whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: dialerConfig.provider,
+          to: phone,
+          action_id: action.id,
+          template: 'daily_action_followup',
+        }),
+      }).then((response) => {
+        if (!response.ok) {
+          throw new Error(`WhatsApp API error: ${response.status}`);
+        }
+        showNotification('success', `WhatsApp envoyé via API (${dialerConfig.provider})`);
+        syncLeadAfterTouch(action);
+      }).catch((error) => {
+        console.error('Erreur API WhatsApp:', error);
+        showNotification('error', "Impossible d'envoyer le message WhatsApp");
+      });
+    } catch (error) {
+      console.error('Erreur WhatsApp:', error);
+      showNotification('error', 'Action WhatsApp impossible');
+    }
+  };
+
   const handleCompleteAction = (action: DailyAction) => {
     try {
-      // Action immédiate - mise à jour du statut
-      setRealActions(prev => prev.map(a => 
-        a.id === action.id 
-          ? { ...a, status: 'completed' as const }
-          : a
-      ));
-      
+      setRealActions((prev) =>
+        prev.map((a) => (a.id === action.id ? { ...a, status: 'completed' as const } : a)),
+      );
+
       showNotification('success', `Action "${action.title}" terminée`);
-      
-      // Appel API en arrière-plan (sans await)
+
+      if (action.relatedLeadId) {
+        void (async () => {
+          const updated = await RealPipelineService.updateLead(action.relatedLeadId!, {
+            last_contact: new Date().toISOString(),
+          });
+          if (updated) {
+            window.dispatchEvent(new Event('pipeline:refresh'));
+          }
+        })();
+      }
+
       setTimeout(() => {
-        apiCall('POST', '/api/actions/complete', { actionId: action.id }).catch(error => {
-          console.error('Erreur API complétion:', error);
+        apiCall('POST', '/api/actions/complete', { actionId: action.id }).catch((err) => {
+          console.error('Erreur API complétion:', err);
         });
       }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la complétion:', error);
+    } catch (err) {
+      console.error('Erreur lors de la complétion:', err);
       showNotification('error', 'Impossible de terminer l\'action');
     }
   };
 
   const handleRescheduleAction = (action: DailyAction) => {
     try {
-      // Action immédiate - reprogrammation
-      const newTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // +24h
-      setRealActions(prev => prev.map(a => 
-        a.id === action.id 
-          ? { ...a, dueTime: newTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
-          : a
-      ));
-      
+      const newTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      setRealActions((prev) =>
+        prev.map((a) =>
+          a.id === action.id
+            ? {
+                ...a,
+                dueTime: newTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+              }
+            : a,
+        ),
+      );
+
       showNotification('success', `Action "${action.title}" reprogrammée`);
-      
-      // Appel API en arrière-plan (sans await)
+
+      if (action.relatedLeadId) {
+        void (async () => {
+          const updated = await RealPipelineService.updateLead(action.relatedLeadId!, {
+            last_contact: newTime.toISOString(),
+            next_action: `Reprogrammé : ${action.title}`,
+          });
+          if (updated) {
+            window.dispatchEvent(new Event('pipeline:refresh'));
+          }
+        })();
+      }
+
       setTimeout(() => {
-        apiCall('POST', '/api/actions/reschedule', { 
+        apiCall('POST', '/api/actions/reschedule', {
           actionId: action.id,
-          newTime: newTime.toISOString()
-        }).catch(error => {
-          console.error('Erreur API reprogrammation:', error);
+          newTime: newTime.toISOString(),
+        }).catch((err) => {
+          console.error('Erreur API reprogrammation:', err);
         });
       }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la reprogrammation:', error);
+    } catch (err) {
+      console.error('Erreur lors de la reprogrammation:', err);
       showNotification('error', 'Impossible de reprogrammer l\'action');
     }
   };
@@ -735,7 +786,11 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Actions Commerciales Prioritaires</h3>
             <p className="text-sm text-gray-600">
-              {loading ? 'Chargement des données réelles...' : error ? 'Erreur de connexion' : 'Données en temps réel'}
+              {loading
+                ? 'Chargement des données réelles...'
+                : error
+                  ? 'Erreur de connexion'
+                  : 'Leads du Kanban, messages et offres — même source que le pipeline commercial'}
             </p>
           </div>
         </div>
@@ -751,8 +806,64 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
           <span className="text-sm text-gray-500">
             {filteredActions.filter(a => a.status === 'pending').length} en attente
           </span>
+          <button
+            onClick={() => setShowDialerSettings((v) => !v)}
+            className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded hover:bg-orange-200 transition-colors"
+          >
+            Dialer
+          </button>
         </div>
       </div>
+
+      {showDialerSettings && (
+        <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <label className="text-xs text-orange-800">
+              Mode
+              <select
+                value={dialerConfig.mode}
+                onChange={(e) => setDialerConfig((prev) => ({ ...prev, mode: e.target.value as DialerMode }))}
+                className="mt-1 w-full border border-orange-200 rounded px-2 py-1 text-sm"
+              >
+                <option value="direct">Dialer direct</option>
+                <option value="api">API dialer</option>
+              </select>
+            </label>
+            <label className="text-xs text-orange-800">
+              Provider
+              <select
+                value={dialerConfig.provider}
+                onChange={(e) => setDialerConfig((prev) => ({ ...prev, provider: e.target.value as DialerProvider }))}
+                className="mt-1 w-full border border-orange-200 rounded px-2 py-1 text-sm"
+              >
+                <option value="twilio">Twilio</option>
+                <option value="aircall">Aircall</option>
+                <option value="ringover">Ringover</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="custom">Custom SIP/API</option>
+              </select>
+            </label>
+            <label className="text-xs text-orange-800">
+              Indicatif
+              <input
+                value={dialerConfig.defaultCountryCode}
+                onChange={(e) => setDialerConfig((prev) => ({ ...prev, defaultCountryCode: e.target.value }))}
+                className="mt-1 w-full border border-orange-200 rounded px-2 py-1 text-sm"
+                placeholder="+33 / +212 / +225"
+              />
+            </label>
+            <label className="text-xs text-orange-800">
+              URL API
+              <input
+                value={dialerConfig.apiBaseUrl}
+                onChange={(e) => setDialerConfig((prev) => ({ ...prev, apiBaseUrl: e.target.value }))}
+                className="mt-1 w-full border border-orange-200 rounded px-2 py-1 text-sm"
+                placeholder="https://dialer-api.example.com"
+              />
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Filtres */}
       <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -833,8 +944,13 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
                     {getStatusIcon(action.status)}
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h4 className="font-semibold text-gray-900">{action.title}</h4>
+                      {action.sourceKind === 'pipeline' && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                          Kanban
+                        </span>
+                      )}
                       <span className={`px-2 py-1 rounded-full text-xs border ${getPriorityColor(action.priority)}`}>
                         {action.priority === 'high' ? 'Haute' : action.priority === 'medium' ? 'Moyenne' : 'Basse'}
                       </span>
@@ -919,6 +1035,12 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
                         className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors"
                       >
                         Contacter
+                      </button>
+                      <button
+                        onClick={() => handleWhatsAppAction(action)}
+                        className="text-xs bg-green-100 text-green-800 border border-green-300 px-3 py-1 rounded-lg hover:bg-green-200 transition-colors"
+                      >
+                        WhatsApp
                       </button>
                     </>
                   )}

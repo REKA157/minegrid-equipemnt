@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCurrencyStore } from '../stores/currencyStore';
 import type { Currency } from '../types';
+import supabase from '../utils/supabaseClient';
 
 // Note : on utilise console.info / console.warn directement (et pas le logger
 // centralise qui est silent en prod) pour que la detection de devise reste
@@ -163,27 +164,29 @@ export function useExchangeRates() {
     queryKey: ['exchangeRates'],
     queryFn: async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/exchange_rates`, {
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          }
-        });
-        
-        if (!response.ok) {
-          console.warn('⚠️ Erreur 401 sur exchange_rates, utilisation des taux fixes');
-          // En cas d'erreur, utiliser les taux fixes
+        const { data, error } = await supabase.rpc('exchange_rates');
+
+        if (error) {
+          console.warn('⚠️ Erreur RPC exchange_rates, utilisation des taux fixes', error);
           setRates(FALLBACK_RATES);
           return FALLBACK_RATES;
         }
 
-        const ratesArray = await response.json();
+        const ratesArray = Array.isArray(data) ? data : [];
         // Convertir le format array en Record<Currency, number>
         const ratesRecord: Record<Currency, number> = {} as Record<Currency, number>;
-        ratesArray.forEach((rate: any) => {
-          if (rate.currency && rate.rate) {
-            ratesRecord[rate.currency as Currency] = rate.rate;
+        ratesArray.forEach((rate) => {
+          const currency = (rate as { currency?: string }).currency;
+          const value = (rate as { rate?: number }).rate;
+          if (currency && typeof value === 'number') {
+            ratesRecord[currency as Currency] = value;
           }
         });
+
+        if (Object.keys(ratesRecord).length === 0) {
+          setRates(FALLBACK_RATES);
+          return FALLBACK_RATES;
+        }
         
         setRates(ratesRecord);
         return ratesRecord;

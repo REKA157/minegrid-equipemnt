@@ -38,9 +38,51 @@ interface ContactFormData {
   offerAmount?: number;
 }
 
+interface MachineLegacyFields {
+  sellerid?: string | null;
+  seller_id?: string | null;
+  photos?: string[] | null;
+}
+
+interface DimensionsLike {
+  length?: string | number;
+  width?: string | number;
+  height?: string | number;
+}
+
+function getLegacySellerId(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const v = value as MachineLegacyFields;
+  return v.sellerid || v.seller_id || '';
+}
+
+function getLegacyPhotos(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const v = value as MachineLegacyFields;
+  return Array.isArray(v.photos) ? v.photos : [];
+}
+
+function getDimensionsVolume(dimensions: unknown): number | undefined {
+  if (!dimensions || typeof dimensions !== 'object') return undefined;
+  const { length, width, height } = dimensions as DimensionsLike;
+  const l = parseFloat(String(length ?? '0'));
+  const w = parseFloat(String(width ?? '0'));
+  const h = parseFloat(String(height ?? '0'));
+  if (!Number.isFinite(l) || !Number.isFinite(w) || !Number.isFinite(h)) return undefined;
+  const volume = l * w * h;
+  return volume > 0 ? volume : undefined;
+}
+
 
 
 export default function MachineDetail({ machineId }: MachineDetailProps) {
+  const isMissingTableError = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    const code = (value as { code?: string }).code;
+    const causeCode = (value as { cause?: { code?: string } }).cause?.code;
+    return code === 'PGRST205' || causeCode === 'PGRST205';
+  };
+
   const [machineData, setMachineData] = useState<MachineWithPremium | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactForm, setShowContactForm] = useState(false);
@@ -63,6 +105,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
 
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('Votre demande a bien été envoyée.');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -73,8 +116,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
   const { currentCurrency } = useCurrencyStore();
 
   useEffect(() => {
-    const id = machineId;    
-    console.log('Chargement machine avec ID:', id);
+    const id = machineId;
     
     if (id) {
       // D'abord, essayer de charger la machine sans la relation seller
@@ -90,15 +132,8 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           setError('Erreur lors du chargement de la machine. Veuillez réessayer.');
           setLoading(false);
         } else {
-          console.log('Données machine chargées:', data);
-          console.log('Seller ID de la machine:', data.sellerid);
-          console.log('🔍 DEBUG COMPLET - Toutes les propriétés de data:', Object.keys(data));
-          console.log('🔍 DEBUG COMPLET - Valeur de sellerid:', data.sellerid);
-          console.log('🔍 DEBUG COMPLET - Type de sellerid:', typeof data.sellerid);
-          
           // Ensuite, charger les données du vendeur séparément
-          if (data.sellerid) {
-            console.log('Tentative de chargement du vendeur avec ID:', data.sellerid);
+          if (data.sellerid && data.sellerid !== '00000000-0000-0000-0000-000000000001') {
             supabase
             .from('users')
             .select('id, name, email, location, phone, company_name, description')
@@ -106,24 +141,24 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             .single()
             .then(({ data: sellerData, error: sellerError }) => {
               if (!sellerError && sellerData) {
-                console.log('Données vendeur chargées avec succès:', sellerData);
                 setMachineData({
                   ...data,
                   seller: {
                     ...sellerData,
                     location:
-                      (sellerData as any)?.location ||
+                      sellerData.location ||
                       [data.city, data.region, data.country].filter(Boolean).join(', ') ||
                       'Localisation inconnue',
                   }
                 });
               } else {
-                console.error('Erreur chargement vendeur:', sellerError);
-                console.log('Vendeur non trouvé, utilisation des données de base');
+                if (!isMissingTableError(sellerError)) {
+                  console.error('Erreur chargement vendeur:', sellerError);
+                }
                 setMachineData({
                   ...data,
                   seller: {
-                    id: (data as any).sellerid || (data as any).seller_id || '',
+                    id: getLegacySellerId(data),
                     name: '',
                     rating: 0,
                     location: [data.city, data.region, data.country].filter(Boolean).join(', ') || 'Localisation inconnue',
@@ -134,11 +169,10 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               setLoading(false);
             });
           } else {
-            console.log('Aucun sellerid trouvé dans les données de la machine');
             setMachineData({
               ...data,
               seller: {
-                id: (data as any).sellerid || (data as any).seller_id || '',
+                id: getLegacySellerId(data),
                 name: '',
                 rating: 0,
                 location: [data.city, data.region, data.country].filter(Boolean).join(', ') || 'Localisation inconnue',
@@ -151,7 +185,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           const urls: string[] = [];
           const imgCandidates: string[] = [];
           if (Array.isArray(data.images)) imgCandidates.push(...data.images);
-          if (Array.isArray((data as any).photos)) imgCandidates.push(...(data as any).photos);
+          imgCandidates.push(...getLegacyPhotos(data));
           imgCandidates.forEach((img: string) => {
             const raw = String(img || '').trim();
             if (!raw) return;
@@ -179,9 +213,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           setImageUrls(sortedUrls);
 
           // 📊 Enregistrer la vue de la machine
-          recordMachineView(id).catch(err => {
-            console.error('Erreur enregistrement vue:', err);
-          });
+          recordMachineView(id).catch(() => undefined);
         }
       });
     } else {
@@ -373,15 +405,10 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
 
     setSendingEmail(true);
     setEmailError(null);
+    setSuccessMessage('Votre demande a bien été envoyée.');
 
     try {
-      let primaryLeadCaptured = false;
-      /**
-       * Le lead commercial (quote_requests) est important, mais ne doit PAS bloquer
-       * l'envoi du message principal si la table n'existe pas encore en prod
-       * ou si la policy RLS est mal configurée.
-       */
-      const sellerIdRaw = machineData?.seller?.id || (machineData as any)?.sellerid || null;
+      const sellerIdRaw = machineData?.seller?.id || getLegacySellerId(machineData) || null;
       const sellerId =
         typeof sellerIdRaw === 'string' &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sellerIdRaw)
@@ -407,121 +434,23 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           source: 'machine_detail_contact_form',
           has_budget: Boolean(contactForm.offerAmount),
         });
-        primaryLeadCaptured = true;
       } catch (quoteErr) {
-        logger.warn('[MachineDetail] quote request non bloquante', quoteErr);
-      }
-
-      // Si un montant d'offre est fourni, créer une offre
-      if (contactForm.offerAmount && contactForm.offerAmount > 0) {
-        // Récupérer l'utilisateur connecté ou créer un profil temporaire
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        let buyerId = user?.id;
-        
-        // Si pas d'utilisateur connecté, créer un profil temporaire
-        if (!user) {
-          const { data: tempProfile, error: profileError } = await supabase
-            .from('profiles')
-            .upsert({
-              email: contactForm.email,
-              firstname: contactForm.name.split(' ')[0] || contactForm.name,
-              lastname: contactForm.name.split(' ').slice(1).join(' ') || '',
-              phone: contactForm.phone || null
-            })
-            .select()
-            .single();
-
-          if (profileError || !tempProfile?.id) {
-            logger.warn('[MachineDetail] profil temporaire non créé (offre ignorée)', profileError);
-            buyerId = null;
-          } else {
-            buyerId = tempProfile.id;
-          }
-        }
-
-        if (buyerId) {
-          // Créer l'offre dans la base de données (non bloquant pour le lead)
-          const { data: offer, error: offerError } = await supabase
-            .from('offers')
-            .insert({
-              machine_id: machineId,
-              buyer_id: buyerId,
-              seller_id: (machineData as any)?.sellerid,
-              amount: contactForm.offerAmount,
-              message: contactForm.message,
-              status: 'pending'
-            })
-            .select()
-            .single();
-
-          if (offerError) {
-            logger.warn('[MachineDetail] création offre échouée (lead conservé)', offerError);
-          } else {
-            logger.info('[MachineDetail] offre créée', { offerId: offer?.id });
-          }
-        }
-      }
-
-      // 1. Sauvegarder le message dans la base de données
-      const { data: messageData, error: messageError } = await supabase
-        .from('messages')
-        .insert([
-          {
-            sender_name: contactForm.name,
-            sender_email: contactForm.email,
-            sender_phone: contactForm.phone || null,
-            message: contactForm.message,
-            machine_id: machineId,
-            sellerid: machineData?.seller?.id || (machineData as any)?.sellerid,
-            status: 'new',
-            created_at: new Date().toISOString()
-          }
-        ])
-        .select()
-        .single();
-
-      if (messageError) {
-        logger.warn('[MachineDetail] sauvegarde message échouée', messageError);
-        if (!primaryLeadCaptured) {
-          throw new Error('Erreur lors de la sauvegarde du message');
-        }
-      }
-
-      logger.info('[MachineDetail] message vendeur sauvegardé', { messageId: messageData?.id });
-
-      // 2. Récupérer l'email du vendeur depuis la base de données
-      let sellerEmail = 'contact@minegrid-equipment.com'; // Email par défaut
-      if (machineData?.seller?.id || (machineData as any)?.sellerid) {
-        const sellerId = machineData?.seller?.id || (machineData as any)?.sellerid;
-        
-        // D'abord essayer de récupérer depuis la table machines
-        const { data: machineInfo } = await supabase
-          .from('machines')
-          .select('seller_email')
-          .eq('id', machineId)
-          .single();
-        
-        if (machineInfo?.seller_email) {
-          sellerEmail = machineInfo.seller_email;
+        logger.warn('[MachineDetail] quote request échouée', quoteErr);
+        if (isMissingTableError(quoteErr)) {
+          setEmailError('Le service devis n\'est pas encore activé. Contactez l\'administrateur.');
         } else {
-          // Sinon essayer depuis la table profiles
-          const { data: sellerData } = await supabase
-            .from('profiles')
-            .select('email')
-            .eq('id', sellerId)
-            .single();
-          
-          if (sellerData?.email) {
-            sellerEmail = sellerData.email;
-          }
+          setEmailError('Votre demande n\'a pas pu être enregistrée. Veuillez réessayer.');
         }
+        return;
       }
 
-      // 3. Envoyer l'email via la fonction Supabase Edge
+      // Envoi email best-effort: la demande reste valide meme si l'email echoue.
+      const receiverEmail =
+        (import.meta.env.VITE_CONTACT_RECEIVER_EMAIL as string | undefined)?.trim() ||
+        'contact@minegrid-equipment.com';
       const { data: emailData, error: emailError } = await supabase.functions.invoke('send-contact-email', {
         body: {
-          to: sellerEmail,
+          to: receiverEmail,
           from: contactForm.email,
           subject: `Demande d'information - ${machineData?.name}`,
           html: `
@@ -534,39 +463,19 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             <p>${contactForm.message.replace(/\n/g, '<br>')}</p>
           `,
           machineId: machineId,
-          messageId: messageData?.id || null
+          messageId: null
         }
       });
 
       if (emailError) {
-        console.error('Erreur envoi email:', emailError);
-        // Même si l'email échoue, le message est sauvegardé
-        logger.warn('[MachineDetail] message sauvegardé, email non envoyé');
-        
-        // Afficher quand même un message de succès car le message est sauvegardé
-        setEmailSent(true);
-        setContactForm({
-          name: '',
-          email: '',
-          phone: '',
-          country: '',
-          needByDate: '',
-          message: '',
-          offerAmount: undefined
-        });
-        
-        // Fermer le formulaire après 3 secondes
-        setTimeout(() => {
-          setShowContactForm(false);
-          setEmailSent(false);
-        }, 3000);
-        
-        return; // Sortir de la fonction ici
+        logger.warn('[MachineDetail] devis enregistré, email non envoyé', emailError);
+        setSuccessMessage('Demande enregistrée. Notification email temporairement indisponible.');
       } else {
         logger.info('[MachineDetail] email vendeur envoyé', { ok: Boolean(emailData) });
+        setSuccessMessage('Demande enregistrée et envoyée au vendeur.');
       }
 
-      // 4. Succès
+      // Succès
       setEmailSent(true);
       setContactForm({
         name: '',
@@ -578,7 +487,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
         offerAmount: undefined
       });
 
-      // 5. Fermer le formulaire après 3 secondes
+      // Fermer le formulaire après 3 secondes
       setTimeout(() => {
         setShowContactForm(false);
         setEmailSent(false);
@@ -736,13 +645,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             <LogisticsSimulator 
               key={`logistics-${currentCurrency}`}
               machineWeight={machineData.specifications.weight ? machineData.specifications.weight / 1000 : undefined}
-              machineVolume={
-                machineData.specifications.dimensions && typeof machineData.specifications.dimensions === 'object' 
-                  ? (parseFloat((machineData.specifications.dimensions as any).length || '0') * 
-                     parseFloat((machineData.specifications.dimensions as any).width || '0') * 
-                     parseFloat((machineData.specifications.dimensions as any).height || '0'))
-                  : undefined
-              }
+              machineVolume={getDimensionsVolume(machineData.specifications.dimensions)}
               machineValue={machineData.price || undefined}
               isPremium={!!machineData.premium}
             />
@@ -846,10 +749,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               ) : (
                 <button 
                   onClick={() => {
-                    console.log('Debug - machineData:', machineData);
-                    console.log('Debug - seller:', machineData.seller);
-                    console.log('Debug - seller_id from raw data:', (machineData as any).seller_id);
-                    toast(`Informations du vendeur non disponibles.\n\nDebug:\n- Seller ID: ${(machineData as any).sellerid || 'null'}\n- Seller data: ${machineData.seller ? 'présent' : 'absent'}`);
+                    toast('Informations du vendeur non disponibles pour cette annonce.');
                   }}
                   className="w-full border border-gray-300 text-gray-500 px-6 py-3 rounded-md hover:bg-gray-50 flex items-center justify-center cursor-not-allowed"
                   disabled
@@ -885,8 +785,8 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               {emailSent ? (
                 <div className="text-center py-8">
                   <div className="text-green-600 text-6xl mb-4">✓</div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Message envoyé !</h3>
-                  <p className="text-gray-600">Votre message a été envoyé au vendeur. Il vous répondra dans les plus brefs délais.</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Demande envoyée !</h3>
+                  <p className="text-gray-600">{successMessage}</p>
                 </div>
               ) : (
                 <form onSubmit={handleSendContactEmail} className="space-y-4">
@@ -1038,13 +938,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           {/* Carte de transport rapide */}
           <TransportCard 
             machineWeight={machineData.specifications.weight ? machineData.specifications.weight / 1000 : undefined}
-            machineVolume={
-              machineData.specifications.dimensions && typeof machineData.specifications.dimensions === 'object' 
-                ? (parseFloat((machineData.specifications.dimensions as any).length || '0') * 
-                   parseFloat((machineData.specifications.dimensions as any).width || '0') * 
-                   parseFloat((machineData.specifications.dimensions as any).height || '0'))
-                : undefined
-            }
+            machineVolume={getDimensionsVolume(machineData.specifications.dimensions)}
           />
 
           {/* Simulateur de financement */}

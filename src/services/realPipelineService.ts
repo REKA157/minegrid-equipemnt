@@ -1,4 +1,5 @@
 import { supabaseClient } from '../utils/supabaseClient';
+import type { PostgrestError } from '@supabase/supabase-js';
 import {
   MESSAGE_LEAD_SEED_COLUMNS,
   OFFER_LEAD_SEED_COLUMNS,
@@ -80,6 +81,12 @@ export interface RealPipelineReport {
 
 // Service principal pour le pipeline commercial réel
 export class RealPipelineService {
+  private static isMissingTableError(error: unknown): boolean {
+    const e = error as { code?: string; message?: string } | null;
+    const msg = (e?.message || '').toLowerCase();
+    return e?.code === 'PGRST205' || msg.includes("could not find the table 'public.");
+  }
+
   private static async getCurrentUserId(): Promise<string | null> {
     try {
       const { data: { user } } = await supabaseClient.auth.getUser();
@@ -89,6 +96,34 @@ export class RealPipelineService {
     }
   }
   
+  static async createLeadWithStatus(
+    leadData: Partial<RealLead>,
+  ): Promise<{ lead: RealLead | null; error: PostgrestError | null }> {
+    try {
+      const userId = await this.getCurrentUserId();
+      if (!userId) {
+        return { lead: null, error: { message: 'Utilisateur non authentifié' } as PostgrestError };
+      }
+
+      const payload = { ...leadData, seller_id: leadData.seller_id || userId };
+      const { error } = await supabaseClient
+        .from('leads')
+        .insert([payload]);
+
+      if (error) {
+        return { lead: null, error };
+      }
+
+      // Insert OK: on renvoie un objet minimal suffisant pour les appels UI.
+      return { lead: payload as RealLead, error: null };
+    } catch (error) {
+      const fallback = {
+        message: error instanceof Error ? error.message : 'Erreur inconnue lors de la création du lead',
+      } as PostgrestError;
+      return { lead: null, error: fallback };
+    }
+  }
+
   // ===== LEADS =====
   
   /**
@@ -108,7 +143,9 @@ export class RealPipelineService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Erreur récupération leads:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur récupération leads:', error);
+      }
       return [];
     }
   }
@@ -117,22 +154,12 @@ export class RealPipelineService {
    * Créer un nouveau lead
    */
   static async createLead(leadData: Partial<RealLead>): Promise<RealLead | null> {
-    try {
-      const userId = await this.getCurrentUserId();
-      if (!userId) return null;
-
-      const { data, error } = await supabaseClient
-        .from('leads')
-        .insert([{ ...leadData, seller_id: leadData.seller_id || userId }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
+    const { lead, error } = await this.createLeadWithStatus(leadData);
+    if (error) {
       console.error('Erreur création lead:', error);
       return null;
     }
+    return lead;
   }
 
   /**
@@ -190,11 +217,17 @@ export class RealPipelineService {
       if (!userId) return 0;
 
       // Récupérer les messages non traités
-      const { data: messages } = await supabaseClient
+      const { data: messages, error: messagesError } = await supabaseClient
         .from('messages')
         .select(MESSAGE_LEAD_SEED_COLUMNS)
         .eq('receiver_id', userId)
         .is('processed_for_lead', null);
+      if (messagesError) {
+        if (!this.isMissingTableError(messagesError)) {
+          console.error('Erreur lecture messages pour leads auto:', messagesError);
+        }
+        return 0;
+      }
 
       if (!messages || messages.length === 0) return 0;
 
@@ -256,11 +289,17 @@ export class RealPipelineService {
       if (!userId) return 0;
 
       // Récupérer les offres non traitées
-      const { data: offers } = await supabaseClient
+      const { data: offers, error: offersError } = await supabaseClient
         .from('offers')
         .select(OFFER_LEAD_SEED_COLUMNS)
         .eq('seller_id', userId)
         .is('processed_for_lead', null);
+      if (offersError) {
+        if (!this.isMissingTableError(offersError)) {
+          console.error('Erreur lecture offres pour leads auto:', offersError);
+        }
+        return 0;
+      }
 
       if (!offers || offers.length === 0) return 0;
 
@@ -331,7 +370,9 @@ export class RealPipelineService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Erreur récupération actions:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur récupération actions:', error);
+      }
       return [];
     }
   }
@@ -443,7 +484,9 @@ export class RealPipelineService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Erreur récupération insights:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur récupération insights:', error);
+      }
       return [];
     }
   }

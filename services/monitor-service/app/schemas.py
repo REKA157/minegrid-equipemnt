@@ -46,6 +46,21 @@ class EntityOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ContactOut(BaseModel):
+    id: UUID
+    organization: str | None
+    person_name: str | None
+    role: str | None
+    email: str | None
+    phone: str | None
+    website: str | None
+    address: str | None
+    confidence: Decimal | None
+    rationale: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
 class EquipmentNeedOut(BaseModel):
     id: UUID
     category: str | None
@@ -68,6 +83,7 @@ class ProjectOut(ProjectBase):
 class ProjectDetailOut(ProjectOut):
     documents: list[DocumentOut] = []
     entities: list[EntityOut] = []
+    contacts: list[ContactOut] = []
     equipment_needs: list[EquipmentNeedOut] = []
 
 

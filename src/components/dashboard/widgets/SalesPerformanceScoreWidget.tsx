@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MouseEvent } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { getSalesPerformanceData } from '../../../utils/api';
@@ -67,20 +67,48 @@ function mapAIRecommendationsToRows(
   }));
 }
 
-// Composant Score de Performance Commerciale avec toutes les fonctionnalités (copié depuis EnterpriseDashboard)
-const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
-  console.log("✅ Composant SalesPerformanceScoreWidget monté");
-  console.log("📊 Données reçues:", data);
-
+// Score convergent : catalogue + pipeline + couverture annonces (voir getSalesPerformanceData)
+// Toujours chargé via l’API — pas de données mock via props.
+const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
   const [realData, setRealData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [aiRecommendationRows, setAiRecommendationRows] = useState<PerformanceRecommendationRow[]>([]);
   const [aiRecsLoading, setAiRecsLoading] = useState(false);
 
-  // Recommandations IA : même service que les autres widgets (GET /ai/widgets/recommendations ou fallback local).
+  const loadRealData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(false);
+      const performanceData = await getSalesPerformanceData();
+      setRealData(performanceData);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données de performance:', error);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRealData();
+  }, [loadRealData]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void loadRealData();
+    };
+    window.addEventListener('pipeline:refresh', onRefresh);
+    window.addEventListener('focus', onRefresh);
+    return () => {
+      window.removeEventListener('pipeline:refresh', onRefresh);
+      window.removeEventListener('focus', onRefresh);
+    };
+  }, [loadRealData]);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const { data: auth } = await supabaseClient.auth.getSession();
         const userId = auth.session?.user?.id;
@@ -99,76 +127,6 @@ const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
       cancelled = true;
     };
   }, []);
-
-  // Fonction pour charger les vraies données depuis Supabase
-  const loadRealData = async () => {
-    try {
-      setLoading(true);
-      console.log("🔄 Chargement des données réelles depuis Supabase...");
-      
-      const performanceData = await getSalesPerformanceData();
-      console.log("✅ Données réelles chargées:", performanceData);
-      
-      setRealData(performanceData);
-    } catch (error) {
-      console.error("❌ Erreur lors du chargement des données réelles:", error);
-      // En cas d'erreur, on garde les données simulées
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Charger les données réelles au montage du composant
-  useEffect(() => {
-    loadRealData();
-  }, []);
-
-  // Utiliser les données réelles si disponibles, sinon les données simulées
-  const displayData = realData || data;
-
-  // Protection contre les données null/undefined
-  if (!displayData) {
-    console.log("⚠️ Données manquantes, utilisation des valeurs par défaut");
-    data = {
-      score: 0,
-      target: 85,
-      rank: 1,
-      totalVendors: 1,
-      sales: 0,
-      salesTarget: 3000000,
-      growth: 0,
-      growthTarget: 15,
-      prospects: 0,
-      activeProspects: 0,
-      responseTime: 2.5,
-      responseTarget: 1.5,
-      activityLevel: 'modéré',
-      activityRecommendation: 'Analyser les opportunités d\'amélioration',
-      recommendations: [
-        {
-          action: 'Commencer à collecter des données',
-          impact: 'Ajoutez vos premières ventes et prospects pour obtenir des recommandations personnalisées',
-          priority: 'high' as const
-        },
-        {
-          action: 'Définir vos objectifs',
-          impact: 'Configurez vos objectifs de vente pour mesurer votre progression',
-          priority: 'medium' as const
-        },
-        {
-          action: 'Optimiser votre processus',
-          impact: 'Améliorez votre temps de réponse aux prospects',
-          priority: 'low' as const
-        }
-      ],
-      trends: {
-        sales: 'stable',
-        growth: 'stable',
-        prospects: 'stable',
-        responseTime: 'stable'
-      }
-    };
-  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('fr-MA', {
@@ -258,17 +216,54 @@ const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
 
   const [showQuickActions, setShowQuickActions] = useState(true);
 
-  const staticRecommendationRows: PerformanceRecommendationRow[] = (displayData.recommendations || []).map(
-    (rec: { type?: string; action: string; impact: string; priority: 'high' | 'medium' | 'low' }) => ({
-      type: rec.type,
-      action: rec.action,
-      impact: rec.impact,
-      priority: rec.priority,
-    })
+  const staticRecommendationRows: PerformanceRecommendationRow[] = useMemo(
+    () =>
+      (realData?.recommendations || []).map(
+        (rec: { type?: string; action: string; impact: string; priority: 'high' | 'medium' | 'low' }) => ({
+          type: rec.type,
+          action: rec.action,
+          impact: rec.impact,
+          priority: rec.priority,
+        }),
+      ),
+    [realData],
   );
 
-  const recommendationRows: PerformanceRecommendationRow[] =
-    aiRecommendationRows.length > 0 ? aiRecommendationRows : staticRecommendationRows;
+  const recommendationRows: PerformanceRecommendationRow[] = useMemo(() => {
+    if (!aiRecommendationRows.length) return staticRecommendationRows;
+    const tail = staticRecommendationRows.filter(
+      (s) => !aiRecommendationRows.some((a) => a.action === s.action),
+    );
+    return [...aiRecommendationRows, ...tail].slice(0, 12);
+  }, [aiRecommendationRows, staticRecommendationRows]);
+
+  if (loadError && !realData) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 text-center">
+        <p className="text-red-700 text-sm mb-3">
+          Impossible de charger le score commercial. Vérifiez votre connexion.
+        </p>
+        <button
+          type="button"
+          onClick={() => void loadRealData()}
+          className="text-sm font-medium text-orange-700 hover:text-orange-900 underline"
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
+
+  if (!realData) {
+    return (
+      <div className="flex items-center justify-center p-8 bg-white rounded-lg border border-gray-200">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600" />
+        <span className="ml-2 text-gray-600">Chargement du score convergent…</span>
+      </div>
+    );
+  }
+
+  const displayData = realData;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -278,7 +273,9 @@ const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Score de Performance Commerciale</h3>
           <p className="text-sm text-gray-600">
-            {loading ? 'Chargement des données réelles...' : realData ? 'Données en temps réel' : 'Données simulées'}
+            {loading
+              ? 'Actualisation des indicateurs…'
+              : 'Indice convergent : catalogue, pipeline (leads) et couverture annonces — mis à jour avec le Kanban'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -286,10 +283,51 @@ const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
           )}
           <div className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreBgColor(displayData.score)} ${getScoreColor(displayData.score)}`}>
-            Rang {displayData.rank}/{displayData.totalVendors}
+            {displayData.totalVendors <= 1
+              ? 'Votre compte'
+              : `Rang ${displayData.rank}/${displayData.totalVendors}`}
           </div>
         </div>
       </div>
+
+      {displayData.convergent && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5 text-left">
+          <div className="rounded-lg border border-orange-100 bg-orange-50/70 p-3">
+            <div className="text-xs font-semibold text-orange-900">Visibilité & contacts</div>
+            <div className={`text-xl font-bold ${getScoreColor(Math.min(100, displayData.convergent.engagementScore * 2))}`}>
+              {displayData.convergent.engagementScore}
+              <span className="text-sm font-normal text-gray-500">/50</span>
+            </div>
+            <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
+              Vues, messages et offres par rapport au nombre d&apos;annonces — même logique que l&apos;activité catalogue.
+            </p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-3">
+            <div className="text-xs font-semibold text-amber-900">Pipeline commercial</div>
+            <div className={`text-xl font-bold ${getScoreColor(Math.min(100, displayData.convergent.pipelineScore * 3))}`}>
+              {displayData.convergent.pipelineScore}
+              <span className="text-sm font-normal text-gray-500">/30</span>
+            </div>
+            <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
+              {displayData.convergent.pipelineOpen} ouvert(s) · {displayData.convergent.pipelineWon} conclu(s) ·{' '}
+              {displayData.convergent.staleOpenLeads > 0
+                ? `${displayData.convergent.staleOpenLeads} sans contact 14j`
+                : 'aucun relâchement détecté'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs font-semibold text-slate-800">Couverture stock</div>
+            <div className={`text-xl font-bold ${getScoreColor(Math.min(100, displayData.convergent.stockCoverageScore * 5))}`}>
+              {displayData.convergent.stockCoverageScore}
+              <span className="text-sm font-normal text-gray-500">/20</span>
+            </div>
+            <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
+              Densité du catalogue vendeur — cohérent avec le widget Plan d&apos;action stock. Global Monitor :{' '}
+              {displayData.convergent.monitorLinkedLeads} lead(s) lié(s) à un projet.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Score Principal */}
       <div className="text-center mb-6">
@@ -362,11 +400,11 @@ const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
 
         <div className="bg-gray-50 p-3 rounded-lg">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Prospects</span>
+            <span className="text-sm text-gray-600">Pipeline</span>
             <span className={`text-sm font-medium ${getTrendColor(displayData.trends.prospects)}`}>{getTrendIcon(displayData.trends.prospects)}</span>
           </div>
           <div className="text-lg font-semibold text-gray-900">{displayData.activeProspects}/{displayData.prospects}</div>
-          <div className="text-xs text-gray-500">Actifs</div>
+          <div className="text-xs text-gray-500">Ouverts / total leads (Kanban)</div>
         </div>
 
         <div className="bg-gray-50 p-3 rounded-lg">
@@ -384,7 +422,7 @@ const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
             <span className="w-2 h-2 bg-orange-500 rounded-full shrink-0"></span>
-            <span>Recommandations IA pour améliorer votre score</span>
+            <span>Recommandations — IA en tête, puis actions pipeline & catalogue</span>
             {aiRecsLoading && (
               <span className="text-xs font-normal text-gray-500">Chargement IA…</span>
             )}

@@ -1,4 +1,3 @@
-// @ts-ignore
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -8,7 +7,42 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
+type GenericRow = Record<string, Json>;
+type GenericInsert = Record<string, Json | undefined>;
+type GenericUpdate = Record<string, Json | undefined>;
+
+export type Database = {
+  public: {
+    Tables: Record<
+      string,
+      {
+        Row: GenericRow;
+        Insert: GenericInsert;
+        Update: GenericUpdate;
+        Relationships: [];
+      }
+    >;
+    Views: Record<
+      string,
+      {
+        Row: GenericRow;
+      }
+    >;
+    Functions: Record<
+      string,
+      {
+        Args: Record<string, Json | undefined>;
+        Returns: Json;
+      }
+    >;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};
+
+export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -21,21 +55,6 @@ export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
     }
   }
 });
-
-// Types pour éviter les erreurs de typage
-export type Database = {
-  public: {
-    Tables: {
-      [key: string]: any
-    }
-    Views: {
-      [key: string]: any
-    }
-    Functions: {
-      [key: string]: any
-    }
-  }
-}
 
 // Export par défaut pour la compatibilité
 export default supabaseClient;

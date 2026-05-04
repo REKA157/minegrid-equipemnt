@@ -34,6 +34,16 @@ export default function LeadsInbox() {
       const data = await getQuoteRequests(status);
       setRows(data);
     } catch (err) {
+      const isMissingTable =
+        typeof err === 'object' &&
+        err !== null &&
+        ((err as { cause?: { code?: string } }).cause?.code === 'PGRST205' ||
+          (err as { code?: string }).code === 'PGRST205');
+      if (isMissingTable) {
+        setRows([]);
+        setError("Le module Leads n'est pas encore activé sur votre base. Exécutez le script `sql/quote_requests.sql`.");
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
       setIsRefreshing(false);

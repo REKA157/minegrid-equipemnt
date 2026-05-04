@@ -29,9 +29,7 @@
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.8",
     "react-grid-layout": "^1.5.1",
-    "react-router-dom": "^7.5.3",
     "recharts": "^2.15.3",
-    "supabase": "^2.22.6",
     "zustand": "^4.5.2"
   },
   "devDependencies": {

@@ -73,6 +73,9 @@ const plans: Plan[] = [
   }
 ];
 
+const PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
+const PROMO_ENABLED = PROMO_CODE.length > 0;
+
 export default function ProSubscription() {
   const [selectedPlan, setSelectedPlan] = useState<string>('premium');
   const [isLoading, setIsLoading] = useState(false);
@@ -483,7 +486,11 @@ export default function ProSubscription() {
                       <button
                         onClick={() => {
                           const code = (document.getElementById('promoCode') as HTMLInputElement).value;
-                          if (code === 'minegrid2026') {
+                          if (!PROMO_ENABLED) {
+                            toast('Les codes promo sont désactivés sur cet environnement.');
+                            return;
+                          }
+                          if (code === PROMO_CODE) {
                             toast('✅ Code promo valide ! Accès temporaire de 30 jours.');
                             // Activer l'abonnement avec code promo
                             activateSubscriptionWithPromo();
@@ -537,7 +544,11 @@ export default function ProSubscription() {
                   const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked') as HTMLInputElement;
                   if (paymentMethod?.value === 'promo') {
                     const code = (document.getElementById('promoCode') as HTMLInputElement).value;
-                    if (code === 'minegrid2026') {
+                    if (!PROMO_ENABLED) {
+                      toast('Les codes promo sont désactivés sur cet environnement.');
+                      return;
+                    }
+                    if (code === PROMO_CODE) {
                       activateSubscriptionWithPromo();
                     } else {
                       toast('Veuillez entrer un code promo valide');
@@ -584,7 +595,7 @@ export default function ProSubscription() {
           subscription_start: new Date().toISOString().split('T')[0],
           subscription_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 jours
           max_users: plans.find(p => p.id === selectedPlan)?.maxUsers || 5,
-          promo_code_used: 'minegrid2026',
+          promo_code_used: PROMO_CODE,
           payment_method: 'promo_code'
         });
 

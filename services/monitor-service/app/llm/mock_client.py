@@ -7,7 +7,8 @@ from app.llm.client import BaseLLMClient, LLMResponse
 class MockLLMClient(BaseLLMClient):
     async def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
         # Detect which task is being requested from the system prompt
-        if "equipment" in system_prompt.lower():
+        # Prompt FR « équipements » ne contient pas « equipment » ; repère sur une clé unique du prompt.
+        if "wheel_excavator" in system_prompt or "equipment" in system_prompt.lower():
             return LLMResponse(
                 text=json.dumps({
                     "equipment_needs": [

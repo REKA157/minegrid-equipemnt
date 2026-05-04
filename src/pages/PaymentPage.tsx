@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CreditCard, Lock, Check, X, ArrowLeft, Gift } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
 import { toast } from '../utils/toast';
+import StripePaymentForm from '../components/StripePaymentForm';
 interface PaymentPageProps {
   subscription: {
     id: string;
@@ -26,17 +27,16 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
   const [promoValid, setPromoValid] = useState(false);
   const [promoError, setPromoError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [cardData, setCardData] = useState({
-    number: '',
-    expiry: '',
-    cvc: '',
-    name: ''
-  });
 
-  // Code promo valide
-  const VALID_PROMO_CODE = 'minegrid2026';
+  const VALID_PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
+  const promoEnabled = VALID_PROMO_CODE.length > 0;
 
   const handlePromoCodeValidation = async () => {
+    if (!promoEnabled) {
+      setPromoError('Les codes promo sont désactivés sur cet environnement');
+      setPromoValid(false);
+      return;
+    }
     if (!promoCode.trim()) {
       setPromoError('Veuillez saisir un code promo');
       return;
@@ -59,15 +59,17 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
   };
 
   const handlePayment = async () => {
+    if (paymentMethod !== 'promo') {
+      toast('Utilisez le formulaire Stripe pour le paiement par carte.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (paymentMethod === 'promo' && promoValid) {
         // Accès direct avec code promo
         await activateSubscriptionWithPromo();
-      } else if (paymentMethod === 'card') {
-        // Paiement par carte (simulation)
-        await processCardPayment();
       }
     } catch (error) {
       console.error('Erreur lors du paiement:', error);
@@ -123,74 +125,12 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
     }
   };
 
-  const processCardPayment = async () => {
-    // Simulation de paiement par carte
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    try {
-      // Obtenir l'utilisateur actuel
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        // Flux inscription: l'utilisateur n'est pas encore connecté.
-        // On conserve l'activation localement; Register finalisera l'inscription.
-        localStorage.setItem('selectedSubscription', subscription.id);
-        localStorage.setItem('subscriptionActivated', 'true');
-        onSuccess();
-        return;
-      }
-
-      // Créer l'abonnement avec paiement
-      const { error: subscriptionError } = await supabase
-        .from('pro_clients')
-        .insert({
-          user_id: user.id,
-          company_name: `${userData.firstName} ${userData.lastName}`,
-          subscription_type: subscription.id,
-          subscription_status: 'active',
-          subscription_start: new Date().toISOString().split('T')[0],
-          max_users: subscription.id === 'enterprise' ? 10 : 5,
-          payment_method: 'card',
-          payment_amount: subscription.priceValue
-        });
-
-      if (subscriptionError) {
-        throw subscriptionError;
-      }
-
-      // Sauvegarder dans localStorage
-      localStorage.setItem('selectedSubscription', subscription.id);
-      localStorage.setItem('subscriptionActivated', 'true');
-
-      toast('✅ Paiement traité avec succès ! Votre abonnement est maintenant actif.');
-      onSuccess();
-    } catch (error) {
-      console.error('Erreur paiement carte:', error);
-      throw error;
-    }
-  };
-
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = matches && matches[0] || '';
-    const parts = [];
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return v;
-    }
-  };
-
-  const formatExpiry = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return v.substring(0, 2) + '/' + v.substring(2, 4);
-    }
-    return v;
-  };
+  const stripePlanType: 'premium' | 'pro' | 'enterprise' =
+    subscription.id === 'enterprise'
+      ? 'enterprise'
+      : subscription.id === 'premium'
+      ? 'premium'
+      : 'pro';
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -255,64 +195,18 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
           {/* Formulaire de paiement */}
           <div className="p-6">
             {paymentMethod === 'card' ? (
-              /* Formulaire carte bancaire */
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Numéro de carte
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="1234 5678 9012 3456"
-                    value={cardData.number}
-                    onChange={(e) => setCardData({...cardData, number: formatCardNumber(e.target.value)})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    maxLength={19}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Date d'expiration
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="MM/AA"
-                      value={cardData.expiry}
-                      onChange={(e) => setCardData({...cardData, expiry: formatExpiry(e.target.value)})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      maxLength={5}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      CVC
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="123"
-                      value={cardData.cvc}
-                      onChange={(e) => setCardData({...cardData, cvc: e.target.value.replace(/\D/g, '')})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      maxLength={4}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nom sur la carte
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Jean Dupont"
-                    value={cardData.name}
-                    onChange={(e) => setCardData({...cardData, name: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-              </div>
+              <StripePaymentForm
+                planType={stripePlanType}
+                amount={subscription.priceValue}
+                onSuccess={() => {
+                  toast('✅ Paiement confirmé. Abonnement activé.');
+                  onSuccess();
+                }}
+                onError={(message) => {
+                  toast(message || 'Erreur lors du paiement Stripe');
+                }}
+                onCancel={onBack}
+              />
             ) : (
               /* Formulaire code promo */
               <div className="space-y-4">
@@ -368,47 +262,50 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
               </div>
             )}
 
-            {/* Résumé de la commande */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-medium text-gray-900 mb-3">Résumé de votre commande</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Abonnement {subscription.name}</span>
-                  <span className="font-medium">{subscription.price}/mois</span>
-                </div>
-                {paymentMethod === 'promo' && promoValid && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Code promo appliqué</span>
-                    <span>-{subscription.price}</span>
+            {paymentMethod === 'promo' && (
+              <>
+                {/* Résumé de la commande */}
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-medium text-gray-900 mb-3">Résumé de votre commande</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Abonnement {subscription.name}</span>
+                      <span className="font-medium">{subscription.price}/mois</span>
+                    </div>
+                    {promoValid && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Code promo appliqué</span>
+                        <span>-{subscription.price}</span>
+                      </div>
+                    )}
+                    <div className="border-t pt-2">
+                      <div className="flex justify-between font-semibold">
+                        <span>Total</span>
+                        <span>{promoValid ? '0 USD' : subscription.price}</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-                <div className="border-t pt-2">
-                  <div className="flex justify-between font-semibold">
-                    <span>Total</span>
-                    <span>{paymentMethod === 'promo' && promoValid ? '0 USD' : subscription.price}</span>
-                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Bouton de paiement */}
-            <button
-              onClick={handlePayment}
-              disabled={loading || (paymentMethod === 'promo' && !promoValid)}
-              className="w-full mt-6 bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Traitement en cours...
-                </>
-              ) : (
-                <>
-                  <Lock className="h-5 w-5 mr-2" />
-                  {paymentMethod === 'promo' ? 'Activer avec code promo' : `Payer ${subscription.price}`}
-                </>
-              )}
-            </button>
+                <button
+                  onClick={handlePayment}
+                  disabled={loading || !promoValid}
+                  className="w-full mt-6 bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Traitement en cours...
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-5 w-5 mr-2" />
+                      Activer avec code promo
+                    </>
+                  )}
+                </button>
+              </>
+            )}
 
             <p className="text-xs text-gray-500 text-center mt-4">
               Vos informations de paiement sont sécurisées et cryptées.

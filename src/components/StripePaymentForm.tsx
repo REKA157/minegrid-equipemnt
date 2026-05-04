@@ -44,11 +44,9 @@ const PaymentForm: React.FC<StripePaymentFormProps> = ({
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+      const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
-          planType,
-          customerEmail: user.email,
-          customerName: user.user_metadata?.full_name || user.email
+          planId: planType,
         }
       });
 

@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Loader2, Lock, Globe } from 'lucide-react';
 
-// Code d'accès partagé pour Global Monitor, démo Login/Register et promo ProSubscription.
-// Unifié à 'minegrid2026' (voir aussi src/pages/Login.tsx, Register.tsx, PaymentPage.tsx, ProSubscription.tsx).
-const TEMP_ACCESS_CODE = 'minegrid2026';
+const TEMP_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
+const TEMP_ACCESS_ENABLED = TEMP_ACCESS_CODE.length > 0;
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,7 +13,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
   const [codeInput, setCodeInput] = useState('');
   const [tempGranted, setTempGranted] = useState(() =>
-    sessionStorage.getItem('monitor_temp_access') === 'granted'
+    TEMP_ACCESS_ENABLED && sessionStorage.getItem('monitor_temp_access') === 'granted'
   );
   const [error, setError] = useState(false);
 
@@ -26,12 +25,16 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (user || tempGranted) {
+  if (user || (TEMP_ACCESS_ENABLED && tempGranted)) {
     return <>{children}</>;
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!TEMP_ACCESS_ENABLED) {
+      setError(true);
+      return;
+    }
     if (codeInput.trim() === TEMP_ACCESS_CODE) {
       sessionStorage.setItem('monitor_temp_access', 'granted');
       setTempGranted(true);
@@ -50,38 +53,45 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
           </div>
           <h2 className="text-lg font-bold text-gray-900">Global Monitor</h2>
           <p className="text-sm text-gray-500 mt-1 text-center">
-            Accès réservé. Entrez le code d'accès ou connectez-vous.
+            {TEMP_ACCESS_ENABLED
+              ? "Accès réservé. Entrez le code d'accès temporaire ou connectez-vous."
+              : 'Accès réservé. Connectez-vous avec un compte autorisé.'}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="password"
-                value={codeInput}
-                onChange={(e) => { setCodeInput(e.target.value); setError(false); }}
-                placeholder="Code d'accès"
-                className={`w-full pl-10 pr-4 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2
+        {TEMP_ACCESS_ENABLED && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="password"
+                  value={codeInput}
+                  onChange={(e) => {
+                    setCodeInput(e.target.value);
+                    setError(false);
+                  }}
+                  placeholder="Code d'accès"
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2
                   ${error
                     ? 'border-red-300 focus:ring-red-500'
                     : 'border-gray-300 focus:ring-primary-500'}`}
-                autoFocus
-              />
+                  autoFocus
+                />
+              </div>
+              {error && (
+                <p className="text-xs text-red-600 mt-1.5">Code incorrect. Réessayez.</p>
+              )}
             </div>
-            {error && (
-              <p className="text-xs text-red-600 mt-1.5">Code incorrect. Réessayez.</p>
-            )}
-          </div>
 
-          <button
-            type="submit"
-            className="w-full py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition-colors"
-          >
-            Accéder
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="w-full py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition-colors"
+            >
+              Accéder
+            </button>
+          </form>
+        )}
 
         <div className="mt-4 pt-4 border-t border-gray-100 text-center">
           <a

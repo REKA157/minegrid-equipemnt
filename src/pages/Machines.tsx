@@ -53,7 +53,28 @@ categories.forEach((group) => {
   });
 });
 
-function mapSupabaseRowToMachine(m: any): Machine {
+type MachineRow = {
+  sellerid?: string | null;
+  seller_id?: string | null;
+  created_at?: string | null;
+  year?: number | string | null;
+  specifications?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+type MachineWithCatalogMeta = Machine & {
+  __jobSector?: string;
+  __machineGroup?: string;
+  __subcategoryId?: string;
+  created_at?: string;
+  year?: number | string;
+  specifications?: {
+    year?: number | string;
+    [key: string]: unknown;
+  };
+};
+
+function mapSupabaseRowToMachine(m: MachineRow): Machine {
   const specs = m.specifications || {};
   const fallbackLocation = [m.city, m.region, m.country].filter(Boolean).join(', ') || 'Localisation inconnue';
   const rawCategoryId = String(m.category || '').toLowerCase();
@@ -204,7 +225,7 @@ useEffect(() => {
       if (cancelled) return;
 
       if (!error && data) {
-        const mapped = data.map((m: any) => mapSupabaseRowToMachine(m));
+        const mapped = data.map((m) => mapSupabaseRowToMachine(m as MachineRow));
         setMachines(mapped as Machine[]);
         setCatalogOffset(data.length);
         setHasMoreCatalog(
@@ -245,7 +266,7 @@ useEffect(() => {
         .range(catalogOffset, end);
 
       if (!error && data?.length) {
-        const mapped = data.map((m: any) => mapSupabaseRowToMachine(m));
+        const mapped = data.map((m) => mapSupabaseRowToMachine(m as MachineRow));
         setMachines((prev) => [...prev, ...mapped]);
         const next = catalogOffset + data.length;
         setCatalogOffset(next);
@@ -289,20 +310,20 @@ useEffect(() => {
       // Filtrage secteur métier : tolérant (match sur __jobSector OU category brute).
       const matchCategory =
         selectedJobCategory && selectedJobCategory !== 'Tous secteurs'
-          ? ((machine as any).__jobSector || '').includes(selectedJobCategory.toLowerCase()) ||
+          ? ((machine as MachineWithCatalogMeta).__jobSector || '').includes(selectedJobCategory.toLowerCase()) ||
             (machine.category || '').toLowerCase().includes(selectedJobCategory.toLowerCase())
           : true;
 
       // Filtrage groupe machine : tolérant (match sur __machineGroup OU type/category).
       const matchMachineCategory = selectedMachineCategory
-        ? ((machine as any).__machineGroup || '').includes(selectedMachineCategory.toLowerCase()) ||
+        ? ((machine as MachineWithCatalogMeta).__machineGroup || '').includes(selectedMachineCategory.toLowerCase()) ||
           (machine.type || '').toLowerCase().includes(selectedMachineCategory.toLowerCase()) ||
           (machine.category || '').toLowerCase().includes(selectedMachineCategory.toLowerCase())
         : true;
 
       // Filtrage sous-type : tolérant — id exact OU label OU name/description.
       const matchType = selectedType
-        ? String((machine as any).__subcategoryId || '').toLowerCase() === selectedType.toLowerCase() ||
+        ? String((machine as MachineWithCatalogMeta).__subcategoryId || '').toLowerCase() === selectedType.toLowerCase() ||
           String(machine.type || '').toLowerCase().includes(selectedType.toLowerCase()) ||
           String(machine.category || '').toLowerCase().includes(selectedType.toLowerCase()) ||
           String(machine.name || '').toLowerCase().includes(selectedType.toLowerCase())
@@ -320,7 +341,9 @@ useEffect(() => {
         (!priceMax || machine.price <= parseFloat(priceMax));
 
       const machineYear = Number(
-        (machine as any).year ?? (machine as any).specifications?.year ?? 0
+        (machine as MachineWithCatalogMeta).year ??
+          (machine as MachineWithCatalogMeta).specifications?.year ??
+          0
       );
       const matchYear =
         (!yearMin || (machineYear && machineYear >= parseInt(yearMin, 10))) &&
@@ -369,8 +392,8 @@ useEffect(() => {
     return [...filteredMachines].sort((a, b) => {
       if (sortBy === 'price') return (a.price || 0) - (b.price || 0);
       if (sortBy === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-      const ta = new Date((a as any).created_at || 0).getTime();
-      const tb = new Date((b as any).created_at || 0).getTime();
+      const ta = new Date((a as MachineWithCatalogMeta).created_at || 0).getTime();
+      const tb = new Date((b as MachineWithCatalogMeta).created_at || 0).getTime();
       return tb - ta;
     });
   }, [filteredMachines, sortBy]);

@@ -50,7 +50,12 @@ export interface StockInsight {
 
 // Service pour le stock réel
 export class RealStockService {
-  
+  private static isMissingTableError(error: unknown): boolean {
+    const e = error as { code?: string; message?: string } | null;
+    const msg = (e?.message || '').toLowerCase();
+    return e?.code === 'PGRST205' || msg.includes("could not find the table 'public.");
+  }
+
   // ===== ÉQUIPEMENTS =====
   
   /**
@@ -97,7 +102,9 @@ export class RealStockService {
 
       return equipmentsWithMetrics;
     } catch (error) {
-      console.error('Erreur récupération équipements:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur récupération équipements:', error);
+      }
       return [];
     }
   }
@@ -160,7 +167,9 @@ export class RealStockService {
         visibilityScore: Math.round(visibilityScore)
       };
     } catch (error) {
-      console.error('Erreur calcul métriques:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur calcul métriques:', error);
+      }
       return {
         daysInStock: 0,
         viewsCount: 0,
@@ -210,7 +219,9 @@ export class RealStockService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Erreur récupération promotions:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur récupération promotions:', error);
+      }
       return [];
     }
   }
@@ -256,7 +267,9 @@ export class RealStockService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Erreur récupération insights:', error);
+      if (!this.isMissingTableError(error)) {
+        console.error('Erreur récupération insights:', error);
+      }
       return [];
     }
   }

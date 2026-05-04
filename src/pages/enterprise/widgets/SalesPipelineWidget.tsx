@@ -4,6 +4,7 @@ import {
   Brain,
   ChevronDown,
   ChevronUp,
+  Download,
   FileText,
   Info,
   Plus,
@@ -12,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from '../../../utils/toast';
+import { RealPipelineService } from '../../../services/realPipelineService';
 export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'value' | 'probability' | 'lastContact'>('value');
@@ -32,6 +34,74 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
   React.useEffect(() => {
     setLeadsData(data);
   }, [data]);
+
+  const normalizeStage = (stage?: string) => {
+    switch ((stage || '').toLowerCase()) {
+      case 'prospection':
+        return 'Prospection';
+      case 'qualification':
+      case 'devis':
+        return 'Devis';
+      case 'proposition':
+      case 'négociation':
+      case 'negociation':
+        return 'Négociation';
+      case 'conclu':
+        return 'Conclu';
+      case 'perdu':
+        return 'Perdu';
+      default:
+        return 'Prospection';
+    }
+  };
+
+  const loadRealLeads = React.useCallback(async () => {
+    const rows = await RealPipelineService.getLeads();
+    if (!rows) return;
+
+    const mapped = rows.map((r: any) => ({
+      id: r.id,
+      title: r.title || r.contact_company || r.contact_name || 'Prospect',
+      name: r.contact_name || r.contact_company || r.title || 'Prospect',
+      company: r.contact_company || r.contact_name || 'Organisation',
+      stage: normalizeStage(r.stage),
+      probability: Number(r.probability || 0),
+      value: Number(r.value || 0),
+      lastContact: r.last_contact || r.updated_at || r.created_at || new Date().toISOString(),
+      nextAction: r.next_action || 'Prendre contact',
+      assignedTo: r.assigned_to || 'Vendeur',
+      equipment: r.title || 'AO',
+      visits: 0,
+      priority: (r.priority || 'medium').toLowerCase(),
+      notes: r.notes || '',
+      source: r.source || 'manual',
+      email: r.contact_email || undefined,
+      phone: r.contact_phone || undefined,
+    }));
+    setLeadsData(mapped);
+  }, []);
+
+  // Priorité aux leads réels (DB), avec refresh automatique après transfert.
+  React.useEffect(() => {
+    void loadRealLeads();
+
+    const onRefresh = () => {
+      void loadRealLeads();
+    };
+    const onFocus = () => {
+      void loadRealLeads();
+    };
+
+    window.addEventListener('pipeline:refresh', onRefresh as EventListener);
+    window.addEventListener('focus', onFocus);
+    const intervalId = window.setInterval(onRefresh, 15000);
+
+    return () => {
+      window.removeEventListener('pipeline:refresh', onRefresh as EventListener);
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [loadRealLeads]);
 
   // Fonction utilitaire pour calculer les jours depuis le dernier contact
   function getDaysSinceLastContact(dateString: string) {
@@ -188,6 +258,12 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
     return colors[stage as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
 
+  const formatStageLabel = (stage: string) => {
+    if (stage === 'Conclu') return 'Gagné';
+    if (stage === 'Perdu') return 'Non retenu';
+    return stage;
+  };
+
   const getPriorityColor = (priority: string) => {
     const colors = {
       'high': 'bg-red-100 text-red-800',
@@ -219,64 +295,108 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
     setShowLeadDetails(true);
   };
 
+  const applyLeadLocalUpdate = (leadId: string, updates: Record<string, unknown>) => {
+    setLeadsData((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...updates } : l)));
+    setSelectedLead((prev: any) => (prev && prev.id === leadId ? { ...prev, ...updates } : prev));
+  };
+
+  const persistLeadUpdate = async (
+    leadId: string,
+    updates: Partial<{
+      stage: string;
+      priority: string;
+      value: number;
+      probability: number;
+      nextAction: string;
+      assignedTo: string;
+      notes: string;
+      title: string;
+      lastContact: string;
+    }>,
+  ) => {
+    const dbUpdates: Partial<any> = {};
+    if (updates.stage != null) dbUpdates.stage = updates.stage;
+    if (updates.priority != null) dbUpdates.priority = updates.priority;
+    if (updates.value != null) dbUpdates.value = updates.value;
+    if (updates.probability != null) dbUpdates.probability = updates.probability;
+    if (updates.nextAction != null) dbUpdates.next_action = updates.nextAction;
+    if (updates.assignedTo != null) dbUpdates.assigned_to = updates.assignedTo;
+    if (updates.notes != null) dbUpdates.notes = updates.notes;
+    if (updates.title != null) dbUpdates.title = updates.title;
+    if (updates.lastContact != null) dbUpdates.last_contact = updates.lastContact;
+    const saved = await RealPipelineService.updateLead(leadId, dbUpdates);
+    if (!saved) {
+      toast.error("Échec de sauvegarde du lead dans la base.");
+      return;
+    }
+    window.dispatchEvent(new Event('pipeline:refresh'));
+  };
+
+  const handleSetStage = (
+    lead: any,
+    targetStage: 'Prospection' | 'Devis' | 'Négociation' | 'Conclu' | 'Perdu',
+    customAction?: string,
+  ) => {
+    const nextProbability = targetStage === 'Perdu'
+      ? Math.min(lead.probability || 0, 30)
+      : targetStage === 'Conclu'
+        ? 100
+        : Math.min((lead.probability || 0) + 20, 100);
+    const nextAction = customAction || getNextActionForStage(targetStage);
+    const lastContact = new Date().toISOString();
+
+    applyLeadLocalUpdate(lead.id, {
+      stage: targetStage,
+      lastContact,
+      probability: nextProbability,
+      nextAction,
+    });
+    void persistLeadUpdate(lead.id, {
+      stage: targetStage,
+      lastContact,
+      probability: nextProbability,
+      nextAction,
+    });
+  };
+
+  const getPrimaryActionLabel = (stage: string) => {
+    if (stage === 'Prospection') return 'Passer en devis';
+    if (stage === 'Devis') return 'Passer en négociation';
+    if (stage === 'Négociation') return 'Marquer gagné';
+    if (stage === 'Perdu') return 'Réactiver';
+    return 'Finalisé';
+  };
+
   const handleNextStage = (lead: any) => {
-    const stages = ['Prospection', 'Devis', 'Négociation', 'Conclu', 'Perdu'];
+    const stages = ['Prospection', 'Devis', 'Négociation', 'Conclu'];
     const currentIndex = stages.indexOf(lead.stage);
 
     if (currentIndex < stages.length - 1) {
       const nextStage = stages[currentIndex + 1];
-
-      // Mettre à jour les données localement
-      const updatedLeads = leadsData.map(l => {
-        if (l.id === lead.id) {
-          return {
-            ...l,
-            stage: nextStage,
-            lastContact: new Date().toISOString().split('T')[0], // Mise à jour de la date de contact
-            probability: Math.min(l.probability + 20, 100), // Augmentation de la probabilité
-            nextAction: getNextActionForStage(nextStage)
-          };
-        }
-        return l;
-      });
-
-      setLeadsData(updatedLeads);
-
-      // Mettre à jour le lead sélectionné si c'est le même
-      if (selectedLead && selectedLead.id === lead.id) {
-        setSelectedLead({
-          ...selectedLead,
-          stage: nextStage,
-          lastContact: new Date().toISOString().split('T')[0],
-          probability: Math.min(selectedLead.probability + 20, 100),
-          nextAction: getNextActionForStage(nextStage)
-        });
-      }
+      handleSetStage(lead, nextStage as 'Prospection' | 'Devis' | 'Négociation' | 'Conclu');
 
       // Notification de succès
       const stageNames = {
         'Devis': 'Devis',
         'Négociation': 'Négociation',
         'Conclu': 'Vente conclue',
-        'Perdu': 'Vente perdue'
+        'Perdu': 'Non retenu'
       };
 
       toast(`✅ Lead "${lead.title}" passé avec succès à l'étape: ${stageNames[nextStage as keyof typeof stageNames]}`);
 
-      // Ici on pourrait appeler une API pour sauvegarder en base de données
-      console.log(`[API] Mise à jour du lead ${lead.id}: ${lead.stage} → ${nextStage}`);
-
     } else {
-      toast('🎉 Ce lead est déjà à la dernière étape !');
+      toast('🎉 Ce lead est déjà à la dernière étape commerciale !');
     }
   };
 
   const getNextActionForStage = (stage: string) => {
     const actions = {
+      'Prospection': 'Qualifier le besoin et identifier les décideurs',
       'Devis': 'Préparer et envoyer le devis',
       'Négociation': 'Programmer une réunion de négociation',
-      'Conclu': 'Finaliser la documentation et facturation',
-      'Perdu': 'Analyser les raisons et améliorer le processus'
+      'Conclu': 'Déclencher la commande et préparer la livraison',
+      'Perdu': 'Analyser les motifs de non-retention et relancer au bon moment'
     };
     return actions[stage as keyof typeof actions] || 'Définir la prochaine action';
   };
@@ -297,61 +417,25 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
   };
 
   const handleSaveEdit = () => {
-    // Mettre à jour les données localement
-    const updatedLeads = leadsData.map(l => {
-      if (l.id === editForm.id) {
-        return {
-          ...l,
-          ...editForm,
-          lastContact: new Date().toISOString().split('T')[0] // Mise à jour de la date de contact
-        };
-      }
-      return l;
-    });
-
-    setLeadsData(updatedLeads);
-
-    // Mettre à jour le lead sélectionné si c'est le même
-    if (selectedLead && selectedLead.id === editForm.id) {
-      setSelectedLead({
-        ...selectedLead,
-        ...editForm,
-        lastContact: new Date().toISOString().split('T')[0]
-      });
-    }
+    const lastContact = new Date().toISOString();
+    applyLeadLocalUpdate(editForm.id, { ...editForm, lastContact });
 
     toast('✅ Modifications sauvegardées avec succès');
+    void persistLeadUpdate(editForm.id, { ...editForm, lastContact });
     setShowEditForm(false);
     setEditForm({});
-
-    // Ici on pourrait appeler une API pour sauvegarder en base de données
-    console.log('[API] Sauvegarde des modifications:', editForm);
   };
 
   const handleAddNote = () => {
     const note = prompt('Ajouter une note:');
     if (note && selectedLead) {
-      // Ajouter la note au lead
-      const updatedLeads = leadsData.map(l => {
-        if (l.id === selectedLead.id) {
-          return {
-            ...l,
-            notes: l.notes ? `${l.notes}\n${new Date().toLocaleString('fr-FR')}: ${note}` : `${new Date().toLocaleString('fr-FR')}: ${note}`
-          };
-        }
-        return l;
-      });
-
-      setLeadsData(updatedLeads);
-
-      // Mettre à jour le lead sélectionné
-      setSelectedLead({
-        ...selectedLead,
-        notes: selectedLead.notes ? `${selectedLead.notes}\n${new Date().toLocaleString('fr-FR')}: ${note}` : `${new Date().toLocaleString('fr-FR')}: ${note}`
-      });
+      const nextNotes = selectedLead.notes
+        ? `${selectedLead.notes}\n${new Date().toLocaleString('fr-FR')}: ${note}`
+        : `${new Date().toLocaleString('fr-FR')}: ${note}`;
+      applyLeadLocalUpdate(selectedLead.id, { notes: nextNotes });
+      void persistLeadUpdate(selectedLead.id, { notes: nextNotes, lastContact: new Date().toISOString() });
 
       toast('✅ Note ajoutée avec succès');
-      console.log(`[API] Note ajoutée au lead ${selectedLead.id}:`, note);
     }
   };
 
@@ -359,51 +443,53 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
     const date = prompt('Date du rendez-vous (YYYY-MM-DD):');
     const time = prompt('Heure du rendez-vous (HH:MM):');
     if (date && time && selectedLead) {
-      // Ajouter le rendez-vous au lead
       const appointment = `Rendez-vous programmé: ${date} à ${time}`;
-      const updatedLeads = leadsData.map(l => {
-        if (l.id === selectedLead.id) {
-          return {
-            ...l,
-            nextAction: appointment,
-            lastContact: date
-          };
-        }
-        return l;
-      });
-
-      setLeadsData(updatedLeads);
-
-      // Mettre à jour le lead sélectionné
-      setSelectedLead({
-        ...selectedLead,
-        nextAction: appointment,
-        lastContact: date
-      });
+      const scheduledIso = new Date(`${date}T${time}:00`).toISOString();
+      applyLeadLocalUpdate(selectedLead.id, { nextAction: appointment, lastContact: scheduledIso });
+      void persistLeadUpdate(selectedLead.id, { nextAction: appointment, lastContact: scheduledIso });
 
       toast('✅ Rendez-vous programmé avec succès');
-      console.log(`[API] Rendez-vous programmé pour le lead ${selectedLead.id}: ${date} à ${time}`);
     }
   };
 
   const handleAddNewLead = () => {
-    const newLead = {
-      id: `lead-${Date.now()}`,
-      title: prompt('Nom du prospect:') || 'Nouveau prospect',
-      stage: 'Prospection',
-      priority: 'medium',
-      value: parseInt(prompt('Valeur estimée (MAD):') || '0'),
-      probability: 10,
-      nextAction: 'Premier contact',
-      assignedTo: prompt('Assigné à:') || 'Commercial',
-      lastContact: new Date().toISOString().split('T')[0],
-      notes: ''
-    };
+    const title = prompt('Nom du prospect:') || 'Nouveau prospect';
+    const value = parseInt(prompt('Valeur estimée (MAD):') || '0');
+    const assignedTo = prompt('Assigné à:') || 'Commercial';
 
-    if (newLead.title !== 'Nouveau prospect') {
-      setLeadsData([...leadsData, newLead]);
+    if (title !== 'Nouveau prospect') {
+      const newLead = {
+        id: `lead-${Date.now()}`,
+        title,
+        stage: 'Prospection',
+        priority: 'medium',
+        value,
+        probability: 10,
+        nextAction: 'Premier contact',
+        assignedTo,
+        lastContact: new Date().toISOString(),
+        notes: ''
+      };
+      setLeadsData((prev) => [newLead, ...prev]);
       toast('✅ Nouveau lead ajouté avec succès');
-      console.log('[API] Nouveau lead créé:', newLead);
+      void RealPipelineService.createLead({
+        title,
+        stage: 'Prospection',
+        priority: 'medium',
+        value,
+        probability: 10,
+        next_action: 'Premier contact',
+        assigned_to: assignedTo,
+        last_contact: new Date().toISOString(),
+        notes: '',
+        source: 'manual',
+      }).then((created) => {
+        if (!created) {
+          toast.error("Le lead local a été ajouté, mais l'enregistrement en base a échoué.");
+          return;
+        }
+        window.dispatchEvent(new Event('pipeline:refresh'));
+      });
     }
   };
 
@@ -435,6 +521,48 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
 
   const handleViewList = () => {
     setViewMode('list');
+  };
+
+  const handleDownloadKanban = () => {
+    try {
+      const rows = leadsData.map((lead) => ({
+        id: lead.id ?? '',
+        prospect: lead.name || lead.contact?.name || lead.title || '',
+        entreprise: lead.company || lead.contact?.company || '',
+        stage: lead.stage || '',
+        valeur_mad: lead.value || 0,
+        probabilite_pct: lead.probability || 0,
+        derniere_interaction: lead.lastContact || '',
+        prochaine_action: lead.nextAction || '',
+        email: lead.email || lead.contact?.email || '',
+        telephone: lead.phone || lead.contact?.phone || '',
+        source: lead.source || '',
+      }));
+
+      const headers = Object.keys(rows[0] || {});
+      if (headers.length === 0) {
+        toast.warning('Aucune donnée à exporter dans le Kanban.');
+        return;
+      }
+      const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+      const csv = [
+        headers.join(','),
+        ...rows.map((r) => headers.map((h) => escape((r as Record<string, unknown>)[h])).join(',')),
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kanban-prospects-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Export Kanban téléchargé.');
+    } catch {
+      toast.error("Impossible d'exporter le Kanban.");
+    }
   };
 
   const getInsightIcon = (type: string) => {
@@ -503,6 +631,14 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
           >
             <Plus className="h-4 w-4" />
             Nouveau Lead
+          </button>
+          <button
+            onClick={handleDownloadKanban}
+            className="px-4 py-2 bg-white text-orange-700 border border-orange-300 rounded-lg hover:bg-orange-50 text-sm flex items-center gap-2"
+            title="Télécharger le Kanban en CSV"
+          >
+            <Download className="h-4 w-4" />
+            Télécharger
           </button>
         </div>
       </div>
@@ -632,8 +768,8 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
           <option value="Prospection">Prospection</option>
           <option value="Devis">Devis</option>
           <option value="Négociation">Négociation</option>
-          <option value="Conclu">Conclu</option>
-          <option value="Perdu">Perdu</option>
+          <option value="Conclu">Gagné</option>
+          <option value="Perdu">Non retenu</option>
         </select>
 
         <select
@@ -659,7 +795,7 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                     <h5 className="font-semibold text-gray-900">{lead.title}</h5>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-xs px-2 py-1 rounded-full ${getStageColor(lead.stage)}`}>
-                        {lead.stage}
+                        {formatStageLabel(lead.stage)}
                       </span>
                       <span className={`text-xs px-2 py-1 rounded-full ${getPriorityColor(lead.priority)}`}>
                         {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}
@@ -682,6 +818,18 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                     <div className="font-medium text-gray-900">{lead.assignedTo}</div>
                   </div>
                 </div>
+                <div className="mt-2 text-xs text-gray-600">
+                  <span className="font-medium">{lead.name || 'Prospect'}</span>
+                  {lead.company ? ` · ${lead.company}` : ''}
+                  {lead.email ? ` · ${lead.email}` : ''}
+                  {lead.phone ? ` · ${lead.phone}` : ''}
+                  {lead.source ? ` · source: ${lead.source}` : ''}
+                </div>
+                {lead.notes && (
+                  <div className="mt-1 text-xs text-gray-500 line-clamp-2">
+                    {lead.notes}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-orange-100">
                   <div className="text-xs text-orange-600">
@@ -705,9 +853,20 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                           ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                           : 'bg-green-100 text-green-700 hover:bg-green-200'
                       }`}
-                      title={lead.stage === 'Conclu' || lead.stage === 'Perdu' ? 'Lead finalisé' : 'Passer à l\'étape suivante'}
+                      title={lead.stage === 'Conclu' ? 'Lead gagné' : lead.stage === 'Perdu' ? 'Lead non retenu' : 'Passer à l\'étape suivante'}
                     >
-                      {lead.stage === 'Conclu' || lead.stage === 'Perdu' ? 'Finalisé' : 'Suivant'}
+                      {lead.stage === 'Conclu' || lead.stage === 'Perdu' ? 'Finalisé' : getPrimaryActionLabel(lead.stage)}
+                    </button>
+                    <button
+                      onClick={() => handleSetStage(lead, lead.stage === 'Perdu' ? 'Prospection' : 'Perdu', lead.stage === 'Perdu' ? 'Relance commerciale planifiée' : 'Lead classé non retenu - analyse en cours')}
+                      className={`text-xs px-2 py-1 rounded ${
+                        lead.stage === 'Perdu'
+                          ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                          : 'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}
+                      title={lead.stage === 'Perdu' ? 'Réactiver ce lead' : 'Marquer ce lead non retenu'}
+                    >
+                      {lead.stage === 'Perdu' ? 'Réactiver' : 'Non retenu'}
                     </button>
                   </div>
                 </div>
@@ -732,7 +891,7 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
               <div key={stage} className="bg-orange-50 rounded-lg p-3 border border-orange-200">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className={`text-sm font-semibold px-2 py-1 rounded-full ${getStageColor(stage)}`}>
-                    {stage}
+                    {formatStageLabel(stage)}
                   </h4>
                   <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded-full">
                     {stageLeads.length}
@@ -782,7 +941,7 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                         <h5 className="font-semibold text-gray-900">{lead.title}</h5>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`text-xs px-2 py-1 rounded-full ${getStageColor(lead.stage)}`}>
-                            {lead.stage}
+                            {formatStageLabel(lead.stage)}
                           </span>
                           <span className={`text-xs px-2 py-1 rounded-full ${getPriorityColor(lead.priority)}`}>
                             {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}
@@ -834,7 +993,7 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <span className={`px-3 py-1 rounded-full text-sm ${getStageColor(selectedLead.stage)}`}>
-                        {selectedLead.stage}
+                        {formatStageLabel(selectedLead.stage)}
                       </span>
                       <span className={`px-3 py-1 rounded-full text-sm ${getPriorityColor(selectedLead.priority)}`}>
                         {selectedLead.priority === 'high' ? 'Haute' : selectedLead.priority === 'medium' ? 'Moyenne' : 'Basse'} priorité
@@ -904,14 +1063,28 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                   </button>
                   <button
                     onClick={() => handleNextStage(selectedLead)}
-                    disabled={selectedLead.stage === 'Clôturé'}
+                    disabled={selectedLead.stage === 'Conclu' || selectedLead.stage === 'Perdu'}
                     className={`px-4 py-2 rounded-lg text-sm ${
-                      selectedLead.stage === 'Clôturé'
+                      selectedLead.stage === 'Conclu' || selectedLead.stage === 'Perdu'
                         ? 'bg-gray-400 text-white cursor-not-allowed'
                         : 'bg-orange-600 text-white hover:bg-orange-700'
                     }`}
                   >
-                    {selectedLead.stage === 'Clôturé' ? 'Déjà clôturé' : 'Passer à l\'étape suivante'}
+                    {selectedLead.stage === 'Conclu' || selectedLead.stage === 'Perdu' ? 'Finalisé' : getPrimaryActionLabel(selectedLead.stage)}
+                  </button>
+                  <button
+                    onClick={() => handleSetStage(
+                      selectedLead,
+                      selectedLead.stage === 'Perdu' ? 'Prospection' : 'Perdu',
+                      selectedLead.stage === 'Perdu' ? 'Relance commerciale planifiée' : 'Lead classé non retenu - analyse en cours',
+                    )}
+                    className={`px-4 py-2 rounded-lg text-sm ${
+                      selectedLead.stage === 'Perdu'
+                        ? 'bg-amber-600 text-white hover:bg-amber-700'
+                        : 'bg-red-600 text-white hover:bg-red-700'
+                    }`}
+                  >
+                    {selectedLead.stage === 'Perdu' ? 'Réactiver ce lead' : 'Marquer non retenu'}
                   </button>
                 </div>
               </div>
@@ -986,8 +1159,8 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                   <option value="Prospection">Prospection</option>
                   <option value="Devis">Devis</option>
                   <option value="Négociation">Négociation</option>
-                  <option value="Conclu">Conclu</option>
-                  <option value="Perdu">Perdu</option>
+                  <option value="Conclu">Gagné</option>
+                  <option value="Perdu">Non retenu</option>
                 </select>
                     </div>
 

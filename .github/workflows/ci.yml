@@ -32,9 +32,8 @@ jobs:
       - name: Type check (tsc --noEmit)
         run: npx tsc --noEmit
 
-      - name: Lint (non-blocking for now)
+      - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Unit tests (Vitest)
         run: npm test

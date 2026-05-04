@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import type { AuthChangeEvent, Session, User } from '@supabase/auth-js';
 import supabaseClient from '../utils/supabaseClient';
 
 /**
@@ -23,7 +24,7 @@ import supabaseClient from '../utils/supabaseClient';
  */
 
 interface AuthContextValue {
-  user: any;
+  user: User | null;
   loading: boolean;
 }
 
@@ -33,7 +34,7 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
 
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabaseClient.auth
       .getSession()
-      .then(({ data }: { data: any }) => {
+      .then(({ data }: { data: { session: Session | null } }) => {
         if (mountedRef.current) {
           setUser(data.session?.user ?? null);
           setLoading(false);
@@ -53,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
     const { data: listener } = supabaseClient.auth.onAuthStateChange(
-      (_event: any, session: any) => {
+      (_event: AuthChangeEvent, session: Session | null) => {
         if (mountedRef.current) {
           setUser(session?.user ?? null);
         }

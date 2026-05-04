@@ -4,15 +4,28 @@ import { Crown, Star, Building, Check, Lock } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
 import PaymentPage from './PaymentPage';
 import { toast } from '../utils/toast';
-// Code d'accès démo partagé (même valeur que Global Monitor et Login).
-const TEMP_ACCESS_CODE = 'minegrid2026';
+const TEMP_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
 
 interface RegisterProps {
   /** Pré-sélection depuis l'URL (#inscription?type=seller). */
   initialType?: 'client' | 'seller' | null;
 }
 
+type SubscriptionId = 'gratuit' | 'premium' | 'pro' | 'enterprise';
+type SubscriptionPlan = {
+  id: SubscriptionId;
+  name: string;
+  icon: React.ReactNode;
+  price: string;
+  priceValue: number;
+  features: string[];
+  color: string;
+};
+
 function TempAccessPanel() {
+  if (!TEMP_ACCESS_CODE) {
+    return null;
+  }
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
@@ -114,6 +127,11 @@ export default function Register({ initialType }: RegisterProps) {
   const [loading, setLoading] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
+  const getErrorMessage = (err: unknown): string => {
+    if (err instanceof Error && err.message) return err.message;
+    return 'Erreur inconnue';
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -161,13 +179,43 @@ export default function Register({ initialType }: RegisterProps) {
     return true;
   };
 
-  const handleSubscriptionSelect = (subscription: 'gratuit' | 'premium' | 'pro' | 'enterprise') => {
+  const preparePaidCheckout = async (): Promise<boolean> => {
+    try {
+      setLoading(true);
+      const response = await registerUser({
+        ...formData,
+        accountType: formData.accountType as 'client' | 'seller',
+      });
+      const hasSession = Boolean(response?.session);
+      localStorage.setItem('selectedSubscription', formData.subscription);
+      if (response?.user) {
+        localStorage.setItem('user', JSON.stringify(response.user));
+      }
+
+      if (!hasSession) {
+        toast(
+          "Compte créé. Confirmez votre email puis connectez-vous pour finaliser le paiement."
+        );
+        window.location.hash = '#connexion';
+        return false;
+      }
+      return true;
+    } catch (err: unknown) {
+      toast("Erreur lors de la création du compte : " + getErrorMessage(err));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubscriptionSelect = async (subscription: SubscriptionId) => {
     setFormData(prev => ({ ...prev, subscription }));
     if (subscription !== 'gratuit') {
       // Les formules payantes redirigent vers le paiement dès la sélection,
       // après validation des informations obligatoires.
       if (validateBeforePayment()) {
-        setShowPayment(true);
+        const ready = await preparePaidCheckout();
+        if (ready) setShowPayment(true);
       }
     }
   };
@@ -186,13 +234,14 @@ export default function Register({ initialType }: RegisterProps) {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('selectedSubscription', formData.subscription);
         window.location.hash = '#dashboard';
-      } catch (err: any) {
-        toast('Erreur lors de l\'inscription : ' + err.message);
+      } catch (err: unknown) {
+        toast('Erreur lors de l\'inscription : ' + getErrorMessage(err));
       } finally {
         setLoading(false);
       }
     } else {
-      setShowPayment(true);
+      const ready = await preparePaidCheckout();
+      if (ready) setShowPayment(true);
     }
   };
 
@@ -221,31 +270,15 @@ export default function Register({ initialType }: RegisterProps) {
 
   const finalizePaidRegistration = async () => {
     try {
-      setLoading(true);
-      const response = await registerUser({
-        ...formData,
-        accountType: formData.accountType as 'client' | 'seller',
-      });
-
-      const hasSession = !!response?.session;
       localStorage.setItem('selectedSubscription', formData.subscription);
       localStorage.setItem('subscriptionActivated', 'true');
-
-      if (hasSession) {
-        window.location.hash = '#dashboard';
-      } else {
-        toast("Compte créé. Un email de confirmation vient d'être envoyé. Confirmez votre email puis connectez-vous pour accéder au service.");
-        window.location.hash = '#connexion';
-      }
-    } catch (err: any) {
-      toast("Erreur lors de la création du compte : " + (err?.message || 'Erreur inconnue'));
+      window.location.hash = '#dashboard';
     } finally {
-      setLoading(false);
       setShowPayment(false);
     }
   };
 
-  const subscriptionPlans = [
+  const subscriptionPlans: SubscriptionPlan[] = [
     {
       id: 'gratuit',
       name: 'Gratuit',
@@ -542,7 +575,7 @@ export default function Register({ initialType }: RegisterProps) {
                       ? `${plan.color} border-2 border-primary-500`
                       : 'border-gray-200 hover:border-gray-300'
                   } ${plan.id !== 'gratuit' ? 'hover:border-orange-400 hover:shadow-lg' : ''}`}
-                  onClick={() => handleSubscriptionSelect(plan.id as any)}
+                  onClick={() => void handleSubscriptionSelect(plan.id)}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -578,7 +611,7 @@ export default function Register({ initialType }: RegisterProps) {
               onClick={(e) => {
                 console.log('🔘 Bouton cliqué');
                 console.log('📊 Abonnement actuel:', formData.subscription);
-                handleSubmit(e);
+                void handleSubmit(e);
               }}
               className="w-full mt-6 bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 font-semibold"
             >

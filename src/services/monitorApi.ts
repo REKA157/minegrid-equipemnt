@@ -9,6 +9,8 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_MONITOR_API_URL || 'http://localhost:8000';
 const ADMIN_TOKEN = import.meta.env.VITE_MONITOR_ADMIN_TOKEN || 'changeme-admin-token-2026';
+const hasConfiguredAdminToken =
+  Boolean(ADMIN_TOKEN) && ADMIN_TOKEN !== 'changeme-admin-token-2026';
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data } = await supabaseClient.auth.getSession();
@@ -17,7 +19,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}),
+    ...(hasConfiguredAdminToken ? { 'X-Admin-Token': ADMIN_TOKEN } : {}),
   };
   return headers;
 }
@@ -59,11 +61,64 @@ export async function fetchProjects(
   return apiFetch(`/projects?${params}`);
 }
 
-export async function fetchProjectDetail(id: string, withAi = true): Promise<MonitorProjectDetail> {
+export async function fetchProjectDetail(
+  id: string,
+  withAi = true,
+  /** Recalcul LLM même si des besoins existent déjà (query `force_ai` côté API). */
+  forceAi = false,
+): Promise<MonitorProjectDetail> {
   const params = new URLSearchParams();
   if (withAi) params.set('ai', 'true');
+  if (forceAi) params.set('force_ai', 'true');
   const suffix = params.toString() ? `?${params.toString()}` : '';
   return apiFetch(`/projects/${id}${suffix}`);
+}
+
+export interface AnalysisCompareNeed {
+  category: string;
+  qty_min: number;
+  qty_max: number;
+  confidence: number;
+  rationale: string;
+}
+
+export interface ProjectAnalysisCompare {
+  project_id: string;
+  deterministic_count: number;
+  llm_count: number;
+  agreement: {
+    intersection_count: number;
+    intersection_categories: string[];
+    only_deterministic: string[];
+    only_llm: string[];
+  };
+  spread: {
+    deterministic_qty_span_sum: number;
+    llm_qty_span_sum: number;
+  };
+  llm_meta: {
+    called: boolean;
+    model?: string;
+    tokens?: number;
+  };
+  deterministic_preview: AnalysisCompareNeed[];
+  llm_preview: AnalysisCompareNeed[];
+}
+
+export async function fetchProjectAnalysisCompare(id: string): Promise<ProjectAnalysisCompare> {
+  try {
+    return await apiFetch(`/projects/${id}/analysis-compare`, { timeoutMs: 45_000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    // Compatibilité backend: anciens serveurs n'ont que la route admin.
+    if (message.includes('API 404')) {
+      return apiFetch(`/admin/projects/${id}/analysis-compare`, {
+        headers: adminHeaders(),
+        timeoutMs: 45_000,
+      });
+    }
+    throw error;
+  }
 }
 
 export async function subscribeAlert(rule: Record<string, unknown>): Promise<{ id: string; rule: Record<string, unknown>; created_at: string }> {
@@ -93,7 +148,7 @@ export async function fetchAlertEvents(limit = 50): Promise<{
 // ---------- Admin Sources ----------
 
 function adminHeaders(): Record<string, string> {
-  return { 'X-Admin-Token': ADMIN_TOKEN };
+  return hasConfiguredAdminToken ? { 'X-Admin-Token': ADMIN_TOKEN } : {};
 }
 
 export async function fetchSources(): Promise<DataSource[]> {

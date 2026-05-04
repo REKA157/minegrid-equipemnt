@@ -6,6 +6,31 @@ import { supabaseCall } from '../supabaseCall';
 // APIs POUR LES WIDGETS MECANICIEN
 // =====================================================
 
+type InterventionRow = {
+  id: string;
+  description: string;
+  intervention_date: string;
+  priority: 'Basse' | 'Moyenne' | 'Haute' | 'Urgente';
+  status: string;
+  estimated_duration?: number | null;
+  equipment_id?: string | null;
+  technician_id?: string | null;
+  created_at?: string | null;
+};
+
+type EquipmentRow = {
+  id: string;
+  name?: string | null;
+  brand?: string | null;
+  model?: string | null;
+};
+
+type TechnicianRow = {
+  id: string;
+  name?: string | null;
+  specialization?: string | null;
+};
+
 // WIDGET "INTERVENTIONS DU JOUR"
 export async function getDailyInterventions() {
   const today = new Date();
@@ -100,7 +125,7 @@ export const getUrgentInterventions = async () => {
 
 // WIDGET "MAINTENANCE PREVENTIVE"
 export async function getPreventiveMaintenance() {
-  const interventions = await supabaseCall<Array<Record<string, any>>>(
+  const interventions = await supabaseCall<InterventionRow[]>(
     () =>
       supabase
         .from('interventions')
@@ -119,13 +144,13 @@ export async function getPreventiveMaintenance() {
 
   const [equipmentList, technicianList] = await Promise.all([
     equipmentIds.length > 0
-      ? supabaseCall<Array<Record<string, any>>>(
+      ? supabaseCall<EquipmentRow[]>(
           () => supabase.from('machines').select('id, name, brand, model').in('id', equipmentIds),
           { label: 'getPreventiveMaintenance.equipment', fallback: [] },
         )
-      : Promise.resolve<Array<Record<string, any>>>([]),
+      : Promise.resolve<EquipmentRow[]>([]),
     technicianIds.length > 0
-      ? supabaseCall<Array<Record<string, any>>>(
+      ? supabaseCall<TechnicianRow[]>(
           () =>
             supabase
               .from('technicians')
@@ -133,14 +158,14 @@ export async function getPreventiveMaintenance() {
               .in('id', technicianIds),
           { label: 'getPreventiveMaintenance.technicians', fallback: [] },
         )
-      : Promise.resolve<Array<Record<string, any>>>([]),
+      : Promise.resolve<TechnicianRow[]>([]),
   ]);
 
-  const equipmentData: Record<string, any> = {};
+  const equipmentData: Record<string, EquipmentRow> = {};
   equipmentList.forEach((eq) => {
     equipmentData[eq.id] = eq;
   });
-  const technicianData: Record<string, any> = {};
+  const technicianData: Record<string, TechnicianRow> = {};
   technicianList.forEach((t) => {
     technicianData[t.id] = t;
   });

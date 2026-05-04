@@ -15,7 +15,7 @@ export type CategoryCounts = Record<string, number>;
 async function fetchCategoryCounts(): Promise<CategoryCounts> {
   const { data, error } = await supabase
     .from('machines')
-    .select('category, type, specifications')
+    .select('category, specifications')
     .limit(5000);
 
   if (error) {
@@ -28,7 +28,7 @@ async function fetchCategoryCounts(): Promise<CategoryCounts> {
   for (const row of data as Array<Record<string, unknown>>) {
     const sector = resolveMachineSector({
       category: row.category as string | null,
-      type: row.type as string | null,
+      type: null,
       specifications: (row.specifications as { category_name?: string | null } | null) ?? null,
     });
     counts[sector] = (counts[sector] || 0) + 1;

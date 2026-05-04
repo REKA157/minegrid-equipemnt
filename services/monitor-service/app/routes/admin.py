@@ -14,7 +14,7 @@ from app.schemas import IngestResult
 from app.ingestion.asset import ProjectAsset
 from app.ingestion.upsert import upsert_assets
 from app.ingestion.registry import run_all
-from app.llm.enrichment import enrich_projects_batch, analyze_project_debug
+from app.llm.enrichment import enrich_projects_batch, analyze_project_debug, compare_project_methods
 from app.alerts.generator import generate_alert_events
 from app.models import Project
 from sqlalchemy import select
@@ -181,3 +181,18 @@ async def project_analysis_debug(
     if not project:
         return {"error": "project_not_found", "project_id": str(project_id)}
     return await analyze_project_debug(project)
+
+
+@router.get("/projects/{project_id}/analysis-compare")
+async def project_analysis_compare(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin QA: compare deterministic extraction vs LLM (no DB write).
+    Helps measure how much AI adds beyond tender text extraction.
+    """
+    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+    if not project:
+        return {"error": "project_not_found", "project_id": str(project_id)}
+    return await compare_project_methods(project)

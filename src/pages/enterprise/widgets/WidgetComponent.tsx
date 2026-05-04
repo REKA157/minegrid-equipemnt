@@ -1,7 +1,5 @@
 import { Widget } from '../types';
 import React, { useEffect, useState } from 'react';
-import { getSalesPerformanceScoreData } from './getSalesPerformanceScoreData';
-import { getPerformanceScoreData } from './getPerformanceScoreData';
 import {
   getDailyInterventions,
   getEquipmentAvailability,
@@ -37,8 +35,7 @@ import { getMapData } from './getMapData';
 import { getEquipmentAvailabilityData } from './getEquipmentAvailabilityData';
 import { PreventiveMaintenanceWidget } from './PreventiveMaintenanceWidget';
 import { getMaintenanceData } from './getMaintenanceData';
-import { SalesPerformanceScoreWidget } from './SalesPerformanceScoreWidget';
-import { PerformanceScoreWidget } from './PerformanceScoreWidget';
+import DashboardSalesPerformanceScoreWidget from '../../../components/dashboard/widgets/SalesPerformanceScoreWidget';
 import { DailyActionsPriorityWidget } from '../../DailyActionsWidgetFixed';
 
 export const WidgetComponent = ({
@@ -229,16 +226,8 @@ export const WidgetComponent = ({
       try {
         let result: any;
 
-        // Gestion spéciale pour les widgets de performance
         if (widget.type === 'performance') {
-          if (widget.id === 'sales-metrics') {
-            result = getSalesPerformanceScoreData();
-            console.log('[DEBUG] Données reçues de getSalesPerformanceScoreData():', JSON.stringify(result, null, 2));
-          } else {
-            result = getPerformanceScoreData();
-            console.log('[DEBUG] Données reçues de getPerformanceScoreData():', JSON.stringify(result, null, 2));
-          }
-          setData(result);
+          setIsLoading(false);
           return;
         }
 
@@ -284,15 +273,6 @@ export const WidgetComponent = ({
             result = await getPreventiveMaintenance();
             setData(result);
             break;
-          case 'performance':
-            if (widget.id === 'sales-metrics') {
-              result = await getSalesPerformanceScoreData();
-              console.log('[DEBUG] Données reçues de getSalesPerformanceScoreData():', JSON.stringify(result, null, 2));
-            } else {
-              result = getPerformanceScoreData();
-            }
-            setData(result);
-            break;
           default:
             result = (mockData as any)[widget.dataSource] || null;
             setData(result);
@@ -306,7 +286,7 @@ export const WidgetComponent = ({
     };
 
     loadData();
-  }, [widget.dataSource, dataVersion]);
+  }, [widget.dataSource, dataVersion, widget.type]);
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${isExpanded ? 'col-span-2' : ''}`}>
@@ -368,7 +348,10 @@ export const WidgetComponent = ({
       {/* Contenu du widget */}
        <div className={`transition-all duration-200 flex-grow ${isCollapsed ? 'max-h-0 overflow-hidden' : ''}`}>
         <div className={`${getAdaptivePadding()} h-full`}>
-          {(() => {
+        {(() => {
+            if (widget.type === 'performance') {
+              return <DashboardSalesPerformanceScoreWidget />;
+            }
             if (isLoading) {
               return (
                 <div className="text-center text-gray-500 dark:text-gray-400 py-3">
@@ -445,12 +428,6 @@ export const WidgetComponent = ({
               case 'maintenance':
                 console.log('[DEBUG] Rendu du widget maintenance pour:', widget.id);
                 return <PreventiveMaintenanceWidget data={getMaintenanceData(widget.id)} />;
-              case 'performance':
-                console.log('[DEBUG] Rendu du widget performance pour:', widget.id);
-                if (widget.id === 'sales-metrics') {
-                  return <SalesPerformanceScoreWidget data={data} />;
-                }
-                return <PerformanceScoreWidget data={data} />;
               case 'daily-actions':
                 console.log('[DEBUG] Rendu du widget daily-actions pour:', widget.id);
                 return <DailyActionsPriorityWidget data={data} widgetSize={widgetSize} />;

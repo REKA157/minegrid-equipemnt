@@ -46,13 +46,16 @@ export async function submitContactMessage(
     service: payload.service?.trim() || null,
   };
 
-  return supabaseCall<SubmittedContactMessage>(
-    () =>
-      supabase
-        .from('contact_messages')
-        .insert(cleaned)
-        .select()
-        .single(),
+  await supabaseCall(
+    () => supabase.from('contact_messages').insert(cleaned),
     { label: 'submitContactMessage' },
   );
+
+  // On evite .select() apres insert pour ne pas exiger une policy SELECT
+  // cote anon/public. Le front n'a besoin que d'un accusé de reception.
+  return {
+    ...cleaned,
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+  };
 }

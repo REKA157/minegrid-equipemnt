@@ -36,6 +36,7 @@ class Project(Base):
 
     documents = relationship("ProjectDocument", back_populates="project", cascade="all, delete-orphan")
     entities = relationship("ProjectEntity", back_populates="project", cascade="all, delete-orphan")
+    contacts = relationship("ProjectContact", back_populates="project", cascade="all, delete-orphan")
     equipment_needs = relationship("EquipmentNeed", back_populates="project", cascade="all, delete-orphan")
 
     __table_args__ = (
@@ -68,6 +69,25 @@ class ProjectEntity(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="entities")
+
+
+class ProjectContact(Base):
+    __tablename__ = "project_contacts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization = Column(String(300))
+    person_name = Column(String(200))
+    role = Column(String(100))  # buyer | winner | operator | partner | unknown
+    email = Column(String(255))
+    phone = Column(String(80))
+    website = Column(Text)
+    address = Column(Text)
+    confidence = Column(Numeric(3, 2), default=0.5)
+    rationale = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="contacts")
 
 
 class EquipmentNeed(Base):

@@ -40,11 +40,34 @@ export interface EquipmentNeed {
   confidence: number | null;
   rationale: string | null;
   created_at: string;
+  /** Aligné sur `categories.ts` : nom de secteur pour `#machines?machine=…` (identique au menu Machines). */
+  marketplace_category_name?: string | null;
+  /** Sous-type catalogue (`sub.id`, ex. `pelle-chenilles`). */
+  marketplace_subcategory_id?: string | null;
+  /** Libellé catalogue affiché à la place du slug monitor. */
+  marketplace_label?: string | null;
+}
+
+export interface ProjectContact {
+  id: string;
+  /** Rattachement projet monitor (flux interne, ex. fallback Kanban) */
+  project_id?: string;
+  organization: string | null;
+  person_name: string | null;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  confidence: number | null;
+  rationale: string | null;
+  created_at: string;
 }
 
 export interface MonitorProjectDetail extends MonitorProject {
   documents: ProjectDocument[];
   entities: ProjectEntity[];
+  contacts: ProjectContact[];
   equipment_needs: EquipmentNeed[];
 }
 

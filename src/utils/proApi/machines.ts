@@ -20,10 +20,23 @@ interface ProEquipmentDetail {
   notes?: string | null;
 }
 
+type MachineWithProDetails = Record<string, unknown> & {
+  id: string;
+  name?: string;
+  total_hours?: number;
+  fuel_consumption?: number;
+  serial_number?: string;
+  purchase_date?: string | null;
+  warranty_end?: string | null;
+  last_maintenance?: string | null;
+  next_maintenance?: string | null;
+  notes?: string | null;
+};
+
 function mergeMachinesWithProDetails(
-  machines: Array<Record<string, any>>,
+  machines: MachineWithProDetails[],
   proDetails: ProEquipmentDetail[],
-): Array<Record<string, any>> {
+): MachineWithProDetails[] {
   const proDetailsMap = new Map<string, ProEquipmentDetail>();
   proDetails.forEach((detail) => {
     if (detail?.machine_id) proDetailsMap.set(detail.machine_id, detail);
@@ -46,13 +59,13 @@ function mergeMachinesWithProDetails(
 }
 
 // Récupérer les annonces d'équipements de l'utilisateur (avec détails Pro)
-export async function getUserMachines(): Promise<any[]> {
+export async function getUserMachines(): Promise<MachineWithProDetails[]> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Utilisateur non connecté');
 
-  const machines = await supabaseCall(
+  const machines = await supabaseCall<MachineWithProDetails[]>(
     () =>
       supabase
         .from('machines')
@@ -65,7 +78,7 @@ export async function getUserMachines(): Promise<any[]> {
 
   if (!machines.length) return [];
 
-  const machineIds = machines.map((m: Record<string, any>) => m.id);
+  const machineIds = machines.map((m) => m.id);
   const proDetails = await supabaseCall<ProEquipmentDetail[]>(
     () =>
       supabase
@@ -85,8 +98,8 @@ export async function getUserMachines(): Promise<any[]> {
 // =====================================================
 
 // Récupérer toutes les machines avec leurs détails Pro
-export async function getAllMachinesWithDetails(): Promise<any[]> {
-  const machines = await supabaseCall(
+export async function getAllMachinesWithDetails(): Promise<MachineWithProDetails[]> {
+  const machines = await supabaseCall<MachineWithProDetails[]>(
     () =>
       supabase
         .from('machines')

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useDeferredValue } from 'react';
 import { useMachineSearchSuggest } from '../hooks/queries/useMachineSearchSuggest';
+import { useAuth } from '../hooks/useAuth';
 import { trackEvent } from '../utils/analytics';
 import {
   Search,
@@ -35,13 +36,6 @@ const servicesMenu = [
   { label: 'Support Technique', section: 'support', icon: Wrench },
 ];
 
-interface Session {
-  user: {
-    id: string;
-    email: string;
-  };
-}
-
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMachinesMenuOpen, setIsMachinesMenuOpen] = useState(false);
@@ -65,8 +59,41 @@ const Header = () => {
   const machinesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const servicesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+  const [showMyDashboardTab, setShowMyDashboardTab] = useState(false);
+
+  useEffect(() => {
+    const computeDashboardEligibility = () => {
+      const userServices = (localStorage.getItem('userServices') || '').toLowerCase();
+      const userSubscription = (localStorage.getItem('userSubscription') || '').toLowerCase();
+      const hasEnterprisePlan =
+        userServices.includes('enterprise') ||
+        userSubscription === 'enterprise' ||
+        localStorage.getItem('enterpriseService') === 'true';
+
+      const configuredFlag = localStorage.getItem('enterpriseDashboardConfigured') === 'true';
+      const hasLegacyConfig = Boolean(localStorage.getItem('enterpriseDashboardConfig'));
+      const hasRoleConfig = Object.keys(localStorage).some((key) => key.startsWith('enterpriseDashboardConfig_'));
+      const hasDashboardConfig = configuredFlag || hasLegacyConfig || hasRoleConfig;
+
+      // UX: afficher l'entree des qu'un compte entreprise est actif.
+      // Si la config n'existe pas encore, la page cible gerera la suite (setup/display).
+      setShowMyDashboardTab(hasEnterprisePlan || hasDashboardConfig);
+    };
+
+    computeDashboardEligibility();
+    window.addEventListener('storage', computeDashboardEligibility);
+    window.addEventListener('focus', computeDashboardEligibility);
+    window.addEventListener('enterpriseSubscriptionActivated', computeDashboardEligibility as EventListener);
+    window.addEventListener('subscriptionCancelled', computeDashboardEligibility as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', computeDashboardEligibility);
+      window.removeEventListener('focus', computeDashboardEligibility);
+      window.removeEventListener('enterpriseSubscriptionActivated', computeDashboardEligibility as EventListener);
+      window.removeEventListener('subscriptionCancelled', computeDashboardEligibility as EventListener);
+    };
+  }, []);
 
   const handleMachinesMenuEnter = () => {
     if (machinesTimeoutRef.current) {
@@ -98,23 +125,7 @@ const Header = () => {
   };
 
   useEffect(() => {
-    let mounted = true;
-    supabaseClient.auth.getSession()
-      .then(({ data }: { data: any }) => {
-        if (mounted) {
-          setUser(data.session?.user ?? null);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => { if (mounted) setIsLoading(false); });
-
-    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event: any, session: any) => {
-      if (mounted) setUser(session?.user ?? null);
-    });
-
     return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
       if (machinesTimeoutRef.current) clearTimeout(machinesTimeoutRef.current);
       if (servicesTimeoutRef.current) clearTimeout(servicesTimeoutRef.current);
       if (searchBlurTimer.current) clearTimeout(searchBlurTimer.current);
@@ -348,6 +359,15 @@ const Header = () => {
                       <User className="h-4 w-4 mr-2" />
                       Mon espace
                     </a>
+                    {showMyDashboardTab && (
+                      <a
+                        href="#dashboard-entreprise-display"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                      >
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Mon dashboard
+                      </a>
+                    )}
                     <a
                       href="#global-monitor"
                       className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"

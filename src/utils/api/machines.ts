@@ -66,7 +66,12 @@ export async function getSellerMachines() {
 // -------------------- STATISTIQUES --------------------
 
 export async function recordMachineView(machineId: string) {
-  const user = await getCurrentUser();
+  let user = null;
+  try {
+    user = await getCurrentUser();
+  } catch {
+    // Visiteur non connecte: on continue sans viewer_id.
+  }
   
   const viewData = {
     machine_id: machineId,
@@ -80,7 +85,17 @@ export async function recordMachineView(machineId: string) {
     .from('machine_views')
     .insert([viewData]);
 
-  if (error) {
+  // Certaines instances n'ont pas encore la table machine_views.
+  // Dans ce cas (404/PGRST205/42P01), on ne bloque jamais l'UX.
+  const isMissingMachineViewsTable =
+    Boolean(error) &&
+    (
+      error.code === 'PGRST205' ||
+      error.code === '42P01' ||
+      (typeof error.message === 'string' && error.message.toLowerCase().includes('machine_views'))
+    );
+
+  if (error && !isMissingMachineViewsTable) {
     console.error('Erreur enregistrement vue:', error);
   }
 }

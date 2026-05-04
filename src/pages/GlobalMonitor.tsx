@@ -6,14 +6,23 @@ import ProjectDetails from '../components/global-monitor/ProjectDetails';
 import ProjectFiltersPanel from '../components/global-monitor/ProjectFilters';
 import AlertsPanel from '../components/global-monitor/AlertsPanel';
 import type { LayerKey } from '../components/global-monitor/LayersToggle';
-import type { MonitorProject, MonitorProjectDetail, ProjectFilters } from '../types/monitor';
-import { fetchProjects, fetchProjectDetail } from '../services/monitorApi';
+import type { MonitorProject, MonitorProjectDetail, ProjectFilters, ProjectContact } from '../types/monitor';
+import { RealPipelineService } from '../services/realPipelineService';
+import { toast } from '../utils/toast';
+import { supabaseClient } from '../utils/supabaseClient';
+import {
+  fetchProjects,
+  fetchProjectDetail,
+  fetchProjectAnalysisCompare,
+  type ProjectAnalysisCompare,
+} from '../services/monitorApi';
 import {
   normalizeBudget as normalizeBudgetUtil,
   ensureCountryCoverage as ensureCountryCoverageUtil,
   ensureLayerCoverageByCountry as ensureLayerCoverageByCountryUtil,
   enrichForDisplay as enrichForDisplayUtil,
 } from '../utils/globalMonitorCoverage';
+import { equipmentNeedsToNotesBlock } from '../utils/globalMonitorEquipmentNeedsText';
 
 const DEMO_PROJECTS: MonitorProject[] = [
   { id: '1', title: "Mine d'or de Kédougou", type: 'mine', phase: 'construction', country: 'Senegal', region: 'Kédougou', lat: 12.56, lon: -12.18, budget_usd: 350_000_000, start_date: '2025-06-01', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd1', confidence: 0.8, updated_at: '2026-03-01' },
@@ -28,10 +37,15 @@ export default function GlobalMonitor() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<MonitorProjectDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [analysisCompare, setAnalysisCompare] = useState<ProjectAnalysisCompare | null>(null);
+  const [analysisCompareLoading, setAnalysisCompareLoading] = useState(false);
+  const [analysisCompareError, setAnalysisCompareError] = useState<string | null>(null);
+  const [createLeadsLoading, setCreateLeadsLoading] = useState(false);
   const [rightPanel, setRightPanel] = useState<'details' | 'alerts'>('details');
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set(['mine', 'infrastructure', 'energy', 'btp', 'tender']));
 
@@ -72,8 +86,11 @@ export default function GlobalMonitor() {
       setPage(1);
       setHasMore(false);
       setIsLive(true);
+      setLiveError(null);
       hadLiveSuccessRef.current = true;
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur API Monitor';
+      setLiveError(message);
       if (!hadLiveSuccessRef.current) {
         setProjects(DEMO_PROJECTS.map(normalizeBudgetUtil));
         setTotal(DEMO_PROJECTS.length);
@@ -93,15 +110,22 @@ export default function GlobalMonitor() {
   }, [loadProjects]);
 
   useEffect(() => {
-    if (!selectedId) { setSelectedDetail(null); return; }
+    if (!selectedId) {
+      setSelectedDetail(null);
+      setAnalysisCompare(null);
+      setAnalysisCompareError(null);
+      return;
+    }
     let cancelled = false;
     setDetailLoading(true);
+    setAnalysisCompare(null);
+    setAnalysisCompareError(null);
     fetchProjectDetail(selectedId)
       .then((d) => { if (!cancelled) setSelectedDetail(d); })
       .catch(() => {
         if (cancelled) return;
         const base = projects.find((p) => p.id === selectedId);
-        setSelectedDetail(base ? { ...base, documents: [], entities: [], equipment_needs: [] } : null);
+        setSelectedDetail(base ? { ...base, documents: [], entities: [], contacts: [], equipment_needs: [] } : null);
       })
       .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
@@ -111,6 +135,190 @@ export default function GlobalMonitor() {
     setRefreshing(true);
     loadProjects();
   }, [loadProjects]);
+
+  const handleCompareAnalysis = useCallback(async () => {
+    if (!selectedId) return;
+    setAnalysisCompareLoading(true);
+    setAnalysisCompareError(null);
+    try {
+      const data = await fetchProjectAnalysisCompare(selectedId);
+      setAnalysisCompare(data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      setAnalysisCompareError(message);
+      setAnalysisCompare(null);
+    } finally {
+      setAnalysisCompareLoading(false);
+    }
+  }, [selectedId]);
+
+  const handleCreateLeadFromContact = useCallback(async (contact: ProjectContact) => {
+    if (!selectedDetail) return;
+    const { data: authData } = await supabaseClient.auth.getUser();
+    if (!authData?.user) {
+      toast.error("Session expirée. Reconnectez-vous puis réessayez l'envoi vers Kanban.");
+      return;
+    }
+    const gmNeedsNote = equipmentNeedsToNotesBlock(selectedDetail.equipment_needs ?? []);
+
+    const { lead, error } = await RealPipelineService.createLeadWithStatus({
+      title: `Prospect AO - ${selectedDetail.title}`,
+      stage: 'Prospection',
+      priority: (contact.confidence ?? 0.6) >= 0.75 ? 'high' : 'medium',
+      value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
+      probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
+      next_action: 'Prendre contact et qualifier le besoin',
+      assigned_to: 'Vendeur',
+      last_contact: new Date().toISOString(),
+      notes: [
+        `Source AO: ${selectedDetail.source || 'inconnue'}`,
+        `Organisation: ${contact.organization || 'n/a'}`,
+        contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
+        gmNeedsNote,
+      ].filter(Boolean).join('\n'),
+      contact_name: contact.person_name || undefined,
+      contact_company: contact.organization || undefined,
+      contact_phone: contact.phone || undefined,
+      contact_email: contact.email || undefined,
+      source: 'manual',
+      source_id: selectedDetail.id,
+    });
+    if (lead) {
+      toast.success('Prospect envoyé dans le pipeline (Kanban).');
+      window.dispatchEvent(new Event('pipeline:refresh'));
+      return;
+    }
+    toast.error(`Insertion Kanban refusée: ${error?.message || "raison inconnue"}`);
+  }, [selectedDetail]);
+
+  const handleCreateLeadsFromProject = useCallback(async () => {
+    if (!selectedDetail) return;
+    const { data: authData } = await supabaseClient.auth.getUser();
+    if (!authData?.user) {
+      toast.error("Session expirée. Reconnectez-vous puis réessayez l'envoi vers Kanban.");
+      return;
+    }
+    const contacts = selectedDetail.contacts ?? [];
+    const buyerOrWinner =
+      selectedDetail.entities?.find((ent) =>
+        ['client', 'buyer', 'acheteur', 'adjudicateur', 'winner', 'attributaire', 'contractor'].some((k) =>
+          (ent.role || '').toLowerCase().includes(k),
+        ),
+      ) || null;
+    const fallbackProspect: ProjectContact | null = contacts.length === 0
+      ? {
+          id: `fallback-${selectedDetail.id}`,
+          project_id: selectedDetail.id,
+          organization: buyerOrWinner?.name || selectedDetail.title || 'Prospect projet',
+          person_name: null,
+          role: buyerOrWinner?.role || 'prospect projet',
+          email: null,
+          phone: null,
+          website: null,
+          address: [selectedDetail.country, selectedDetail.region].filter(Boolean).join(', ') || null,
+          confidence: selectedDetail.confidence ?? 0.45,
+          rationale: 'Fallback validation flux Global Monitor -> Kanban (aucun contact AO explicite)',
+          created_at: new Date().toISOString(),
+        }
+      : null;
+    const contactsToTransfer = contacts.length > 0 ? contacts : [fallbackProspect as ProjectContact];
+
+    setCreateLeadsLoading(true);
+    const gmNeedsNote = equipmentNeedsToNotesBlock(selectedDetail.equipment_needs ?? []);
+
+    try {
+      const contactKey = (contact: ProjectContact) => {
+        const email = (contact.email || '').trim().toLowerCase();
+        const company = (contact.organization || '').trim().toLowerCase();
+        const person = (contact.person_name || '').trim().toLowerCase();
+        const stableIdentity = email || company || person || contact.id || 'unknown';
+        return `${selectedDetail.id}|${stableIdentity}`;
+      };
+
+      const existingLeads = await RealPipelineService.getLeads();
+      const existingKeys = new Set(
+        existingLeads.map((lead) => {
+          const email = (lead.contact_email || '').trim().toLowerCase();
+          const company = (lead.contact_company || '').trim().toLowerCase();
+          const person = '';
+          const stableIdentity = email || company || person || lead.id || 'unknown';
+          return `${lead.source_id || ''}|${stableIdentity}`;
+        }),
+      );
+
+      let created = 0;
+      let skipped = 0;
+      let failed = 0;
+      let lastInsertErrorMessage: string | null = null;
+
+      for (const contact of contactsToTransfer) {
+        const dedupeKey = contactKey(contact);
+
+        if (existingKeys.has(dedupeKey)) {
+          skipped += 1;
+          continue;
+        }
+
+        const { lead, error } = await RealPipelineService.createLeadWithStatus({
+          title: `Prospect AO - ${selectedDetail.title}`,
+          stage: 'Prospection',
+          priority: (contact.confidence ?? 0.6) >= 0.75 ? 'high' : 'medium',
+          value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
+          probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
+          next_action: 'Prendre contact et qualifier le besoin',
+          assigned_to: 'Vendeur',
+          last_contact: new Date().toISOString(),
+          notes: [
+            `Source AO: ${selectedDetail.source || 'inconnue'}`,
+            `Organisation: ${contact.organization || 'n/a'}`,
+            selectedDetail.phase ? `Phase: ${selectedDetail.phase}` : null,
+            selectedDetail.type ? `Type projet: ${selectedDetail.type}` : null,
+            contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
+            gmNeedsNote,
+          ].filter(Boolean).join('\n'),
+          contact_name: contact.person_name || undefined,
+          contact_company: contact.organization || undefined,
+          contact_phone: contact.phone || undefined,
+          contact_email: contact.email || undefined,
+          source: 'manual',
+          source_id: selectedDetail.id,
+        });
+
+        if (lead) {
+          created += 1;
+          existingKeys.add(dedupeKey);
+        } else {
+          failed += 1;
+          if (error?.message) {
+            lastInsertErrorMessage = error.message;
+            console.error('Insertion lead refusée (GlobalMonitor):', error.message);
+          }
+        }
+      }
+
+      if (created > 0) {
+        const fallbackNote = contacts.length === 0 ? ' (mode validation sans contact explicite)' : '';
+        toast.success(
+          `${created} prospect(s) envoyé(s) vers le Kanban` +
+          `${skipped > 0 ? ` · ${skipped} déjà présent(s)` : ''}` +
+          `${failed > 0 ? ` · ${failed} échec(s)` : ''}` +
+          `${fallbackNote}.`,
+        );
+        window.dispatchEvent(new Event('pipeline:refresh'));
+      } else {
+        if (failed > 0) {
+          toast.error(
+            `Échec d'insertion Supabase: ${failed} prospect(s) non ajouté(s).` +
+            `${lastInsertErrorMessage ? ` Détail: ${lastInsertErrorMessage}` : ''}`,
+          );
+        } else {
+          toast.error("Aucun nouveau prospect ajouté: déjà transférés.");
+        }
+      }
+    } finally {
+      setCreateLeadsLoading(false);
+    }
+  }, [selectedDetail]);
 
   const stats = useMemo(() => {
     const totalBudget = projects.reduce((sum, p) => sum + (p.budget_usd || 0), 0);
@@ -135,6 +343,11 @@ export default function GlobalMonitor() {
               {isLive ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
               {isLive ? 'Live' : 'Démo'}
             </span>
+            {!isLive && liveError && (
+              <span className="text-[11px] text-orange-700 max-w-[18rem] truncate" title={liveError}>
+                {liveError}
+              </span>
+            )}
             <button onClick={handleRefresh} disabled={refreshing} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -173,7 +386,19 @@ export default function GlobalMonitor() {
             </div>
             <div className="flex-1 overflow-hidden">
               {rightPanel === 'details'
-                ? <ProjectDetails project={selectedDetail} loading={detailLoading} />
+                ? (
+                  <ProjectDetails
+                    project={selectedDetail}
+                    loading={detailLoading}
+                    analysisCompare={analysisCompare}
+                    analysisCompareLoading={analysisCompareLoading}
+                    analysisCompareError={analysisCompareError}
+                    onCompareAnalysis={handleCompareAnalysis}
+                    onCreateLeadFromContact={handleCreateLeadFromContact}
+                    onCreateLeadsFromProject={handleCreateLeadsFromProject}
+                    createLeadsFromProjectLoading={createLeadsLoading}
+                  />
+                )
                 : <AlertsPanel />}
             </div>
           </div>

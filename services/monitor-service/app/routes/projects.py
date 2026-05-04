@@ -11,7 +11,7 @@ from app.auth import require_user_or_admin
 from app.models import Project
 from app.schemas import ProjectOut, ProjectDetailOut, ProjectListOut, EquipmentNeedOut
 from app.rules.engine import compute_equipment_needs
-from app.llm.enrichment import enrich_project
+from app.llm.enrichment import enrich_project, compare_project_methods
 from app.config import get_settings
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -89,6 +89,7 @@ async def get_project(
         .options(
             selectinload(Project.documents),
             selectinload(Project.entities),
+            selectinload(Project.contacts),
             selectinload(Project.equipment_needs),
         )
     )
@@ -99,9 +100,11 @@ async def get_project(
 
     settings = get_settings()
     if ai and settings.llm_provider.lower() != "none":
-        # On recalcule à chaque demande détaillée avec `ai=true` pour éviter
-        # de conserver d'anciens besoins non pertinents.
-        should_enrich = True
+        # Par défaut : enrichir seulement si aucun besoin en base (évite d'écraser
+        # une analyse déjà stockée à chaque ouverture du détail). `force_ai=true`
+        # force un recalcul LLM (admin / bouton explicite).
+        has_equipment = bool(project.equipment_needs)
+        should_enrich = force_ai or not has_equipment
         if should_enrich:
             try:
                 await enrich_project(db, project)
@@ -139,3 +142,30 @@ async def get_project(
         ]
 
     return detail
+
+
+@router.get("/{project_id}/analysis-compare")
+async def get_project_analysis_compare(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _user_ok: bool = Depends(require_user_or_admin),
+):
+    """
+    Compare extraction déterministe AO vs estimation LLM pour un projet.
+    Endpoint lecture seule (aucune écriture DB), accessible aux utilisateurs authentifiés.
+    """
+    query = (
+        select(Project)
+        .where(Project.id == project_id)
+        .options(
+            selectinload(Project.documents),
+            selectinload(Project.entities),
+            selectinload(Project.contacts),
+            selectinload(Project.equipment_needs),
+        )
+    )
+    result = await db.execute(query)
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet non trouvé")
+    return await compare_project_methods(project)

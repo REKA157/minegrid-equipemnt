@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Star, Zap, Shield, Copy, CreditCard, Info } from 'lucide-react';
 import { BoostOptions } from '../types';
+import supabase from '../utils/supabaseClient';
+import { submitContactMessage } from '../utils/api/contact';
+import { toast } from '../utils/toast';
 
 interface PremiumServicesProps {
   machineId: string;
@@ -63,21 +66,116 @@ export default function PremiumServices({
 }: PremiumServicesProps) {
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [showCertificationForm, setShowCertificationForm] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const handleBoostPurchase = async (boostId: string) => {
-    // TODO: Intégration Stripe
-    console.log('Achat boost:', boostId);
+    const option = boostOptions.find((o) => o.id === boostId);
+    if (!option) return;
+    setBusyAction(boostId);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error('Utilisateur non connecté');
+
+      await submitContactMessage({
+        name:
+          (user.user_metadata?.full_name as string | undefined) ||
+          [user.user_metadata?.first_name, user.user_metadata?.last_name].filter(Boolean).join(' ') ||
+          'Utilisateur Minegrid',
+        email: user.email,
+        company: (user.user_metadata?.company as string | undefined) || null,
+        subject: `Demande de boost premium (${option.name})`,
+        service: 'premium_boost',
+        message: [
+          `Machine ID: ${machineId}`,
+          `Machine: ${machineName}`,
+          `Service: ${option.name}`,
+          `Prix annonce: ${currentPrice} EUR`,
+          `Prix boost: ${option.price} EUR`,
+        ].join('\n'),
+      });
+
+      toast('Demande de boost envoyée. Notre équipe vous contactera rapidement.');
+      window.location.hash = '#priority-support';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast(`Impossible d'envoyer la demande de boost: ${message}`);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const handleCertificationRequest = async () => {
-    // TODO: Envoi vers n8n
-    console.log('Demande certification pour:', machineId);
-    setShowCertificationForm(false);
+    setBusyAction('certification');
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error('Utilisateur non connecté');
+
+      await submitContactMessage({
+        name:
+          (user.user_metadata?.full_name as string | undefined) ||
+          [user.user_metadata?.first_name, user.user_metadata?.last_name].filter(Boolean).join(' ') ||
+          'Utilisateur Minegrid',
+        email: user.email,
+        company: (user.user_metadata?.company as string | undefined) || null,
+        subject: 'Demande de certification machine',
+        service: 'premium_certification',
+        message: `Machine ID: ${machineId}\nMachine: ${machineName}\nPrix annonce: ${currentPrice} EUR`,
+      });
+
+      toast('Demande de certification envoyée. Un expert vous contactera sous 24h.');
+      setShowCertificationForm(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast(`Impossible d'envoyer la demande: ${message}`);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const handleCopyMachine = async () => {
-    // TODO: Copier la machine
-    console.log('Copier machine:', machineId);
+    setBusyAction('copy');
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('Utilisateur non connecté');
+
+      const { data: source, error: sourceError } = await supabase
+        .from('machines')
+        .select('*')
+        .eq('id', machineId)
+        .single();
+      if (sourceError || !source) throw sourceError || new Error('Machine introuvable');
+
+      const duplicate = {
+        ...source,
+        id: undefined,
+        created_at: undefined,
+        updated_at: undefined,
+        deleted_at: undefined,
+        name: `${source.name || machineName} (copie)`,
+        sellerid: user.id,
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('machines')
+        .insert(duplicate)
+        .select('id')
+        .single();
+      if (insertError || !inserted) throw insertError || new Error('Duplication impossible');
+
+      toast('Annonce copiée avec succès.');
+      window.location.hash = `#machines/${inserted.id}`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast(`Impossible de copier l'annonce: ${message}`);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   if (!isOwner) {
@@ -147,12 +245,13 @@ export default function PremiumServices({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleBoostPurchase(option.id);
+                  void handleBoostPurchase(option.id);
                 }}
+                disabled={busyAction === option.id}
                 className="w-full bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 transition-colors text-sm"
               >
                 <CreditCard className="h-4 w-4 inline mr-1" />
-                Acheter
+                {busyAction === option.id ? 'Traitement...' : 'Acheter'}
               </button>
             </div>
           ))}
@@ -186,10 +285,11 @@ export default function PremiumServices({
         
         <button
           onClick={() => setShowCertificationForm(true)}
+          disabled={busyAction === 'certification'}
           className="w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 transition-colors"
         >
           <Shield className="h-4 w-4 inline mr-2" />
-          Demander une certification
+          {busyAction === 'certification' ? 'Envoi...' : 'Demander une certification'}
         </button>
       </div>
 
@@ -201,11 +301,12 @@ export default function PremiumServices({
         </h4>
         
         <button
-          onClick={handleCopyMachine}
+          onClick={() => void handleCopyMachine()}
+          disabled={busyAction === 'copy'}
           className="w-full bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 transition-colors"
         >
           <Copy className="h-4 w-4 inline mr-2" />
-          Copier cette annonce
+          {busyAction === 'copy' ? 'Copie en cours...' : 'Copier cette annonce'}
         </button>
       </div>
 
@@ -239,7 +340,7 @@ export default function PremiumServices({
                 Annuler
               </button>
               <button
-                onClick={handleCertificationRequest}
+                onClick={() => void handleCertificationRequest()}
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
               >
                 Confirmer
