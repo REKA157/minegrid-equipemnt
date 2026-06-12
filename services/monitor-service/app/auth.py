@@ -201,16 +201,7 @@ async def require_paid_user_or_admin(
     if res.status_code < 200 or res.status_code >= 300:
         body = res.text[:2000]
         logger.error("Paid check Supabase bad status %s: %s", res.status_code, body)
-        # Fallback de secours: certains environnements n'ont pas encore la table
-        # `pro_clients` créée. Dans ce cas précis, on ne bloque pas l'accès Live
-        # pour les utilisateurs authentifiés.
-        if res.status_code == 404 and "public.pro_clients" in body:
-            logger.warning(
-                "Fallback paid access enabled for user_id=%s because public.pro_clients is missing",
-                user_id,
-            )
-            _paid_cache_set(user_id, True, now + _PAID_CACHE_TTL_SEC)
-            return True
+        _paid_cache_set(user_id, False, now + _PAID_CACHE_TTL_SEC)
         raise HTTPException(status_code=403, detail="Abonnement payant requis")
 
     try:
