@@ -1,0 +1,58 @@
+name: Feature IA-ready
+description: Créer une tâche feature exploitable par un agent IA
+title: "[AI-FEATURE] "
+labels: ["ai-ready", "feature"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objectif
+      description: Décris le résultat attendu.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte
+      description: Donne les informations projet nécessaires.
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Fichiers probablement concernés
+      description: Liste les fichiers si connus.
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tâches
+      description: Liste les tâches concrètes.
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Contraintes
+      value: |
+        - Ne pas modifier l’auth.
+        - Ne pas ajouter de dépendance sans justification.
+        - Respecter l’architecture existante.
+
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: Validation attendue
+      options:
+        - label: Build passe
+        - label: Tests passent
+        - label: Lint passe
+        - label: Résumé fourni
+        - label: Risques listés

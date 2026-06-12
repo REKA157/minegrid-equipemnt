@@ -1,0 +1,48 @@
+name: Tâche Agent IA
+description: Mission spécifique pour un agent IA
+title: "[AGENT-TASK] "
+labels: ["agent-task"]
+body:
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent recommandé
+      options:
+        - Agent Analyste
+        - Agent Architecte
+        - Agent Frontend
+        - Agent Backend
+        - Agent Test
+        - Agent Reviewer
+        - Agent Sécurité
+        - Agent Documentation
+        - Agent Debug
+    validations:
+      required: true
+
+  - type: dropdown
+    id: autonomy
+    attributes:
+      label: Niveau d’autonomie
+      options:
+        - Niveau 0 - interdit
+        - Niveau 1 - assistance
+        - Niveau 2 - exécution sous revue
+        - Niveau 3 - semi-autonome contrôlé
+        - Niveau 4 - répétitif
+    validations:
+      required: true
+
+  - type: textarea
+    id: mission
+    attributes:
+      label: Mission
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Livrable attendu
+    validations:
+      required: true

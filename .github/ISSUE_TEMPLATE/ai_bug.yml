@@ -1,0 +1,42 @@
+name: Bugfix IA-ready
+description: Créer une tâche bugfix exploitable par un agent IA
+title: "[AI-BUG] "
+labels: ["ai-ready", "bug"]
+body:
+  - type: textarea
+    id: bug
+    attributes:
+      label: Bug observé
+      description: Décris précisément le problème.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Étapes pour reproduire
+      value: |
+        1. 
+        2. 
+        3. 
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Fichiers suspects
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Contraintes
+      value: |
+        - Corriger avec le minimum de changement.
+        - Ajouter un test si possible.
+        - Ne pas refactorer sans demande.

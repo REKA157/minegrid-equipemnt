@@ -1,0 +1,2 @@
+date,sprint,tickets_agent,pr_agent,pr_acceptees,pr_rejetees,taux_acceptation,temps_moyen_ticket_pr_h,temps_revue_h,bugs_post_merge,cout_ia_estime,temps_humain_economise_h,commentaires
+2026-06-12,Sprint pilote,0,0,0,0,0%,0,0,0,0,0,Initialiser

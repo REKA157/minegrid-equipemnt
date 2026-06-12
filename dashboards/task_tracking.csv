@@ -1,0 +1,2 @@
+id,titre,type,agent_recommande,niveau_autonomie,owner_humain,statut,branche,pr,build,tests,review,risques,decision
+AI-001,Exemple: corriger bug UI mineur,bugfix,Agent Frontend,2,Lead Dev,à faire,agent/frontend-correctif-ui,,n/a,n/a,n/a,faible,
