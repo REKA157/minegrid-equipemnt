@@ -8,9 +8,9 @@ import type {
 } from '../types/monitor';
 
 const BASE_URL = import.meta.env.VITE_MONITOR_API_URL || 'http://localhost:8000';
-const ADMIN_TOKEN = import.meta.env.VITE_MONITOR_ADMIN_TOKEN || 'changeme-admin-token-2026';
-const hasConfiguredAdminToken =
-  Boolean(ADMIN_TOKEN) && ADMIN_TOKEN !== 'changeme-admin-token-2026';
+/** Jamais de jeton par défaut côté client : définir `VITE_MONITOR_ADMIN_TOKEN` si les routes admin sont nécessaires. */
+const ADMIN_TOKEN = String(import.meta.env.VITE_MONITOR_ADMIN_TOKEN ?? '').trim();
+const hasConfiguredAdminToken = ADMIN_TOKEN.length > 0;
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data } = await supabaseClient.auth.getSession();

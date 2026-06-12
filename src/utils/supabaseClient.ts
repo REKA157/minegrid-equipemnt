@@ -7,54 +7,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
-
-type GenericRow = Record<string, Json>;
-type GenericInsert = Record<string, Json | undefined>;
-type GenericUpdate = Record<string, Json | undefined>;
-
-export type Database = {
-  public: {
-    Tables: Record<
-      string,
-      {
-        Row: GenericRow;
-        Insert: GenericInsert;
-        Update: GenericUpdate;
-        Relationships: [];
-      }
-    >;
-    Views: Record<
-      string,
-      {
-        Row: GenericRow;
-      }
-    >;
-    Functions: Record<
-      string,
-      {
-        Args: Record<string, Json | undefined>;
-        Returns: Json;
-      }
-    >;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-};
-
-export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+/**
+ * Sans schéma PostgREST généré, les génériques supabase-js/postgrest-js infèrent
+ * `GenericStringError` sur les chaînes de requête. Cast volontaire jusqu'à
+ * adoption de `supabase gen types`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const supabaseClient: any = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
   },
-  // Configuration pour éviter les erreurs TypeScript
   global: {
     headers: {
-      'X-Client-Info': 'supabase-js/2.x'
-    }
-  }
+      'X-Client-Info': 'supabase-js/2.x',
+    },
+  },
 });
 
-// Export par défaut pour la compatibilité
 export default supabaseClient;

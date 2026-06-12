@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TrendingUp, X } from 'lucide-react';
 import { Widget } from '../../../constants/dashboardTypes';
 import { formatCurrency, formatPercentage } from '../../../utils/dashboardUtils';
+import { useCurrencyStore } from '../../../stores/currencyStore';
 
 interface MetricWidgetProps {
   widget: Widget;
@@ -52,6 +53,7 @@ const DonutChart = ({ completed, pending }: { completed: number; pending: number
 };
 
 const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 'medium' }) => {
+  useCurrencyStore((s) => s.currentCurrency);
   const [selectedPeriod, setSelectedPeriod] = useState<'current' | 'previous' | 'forecast'>('current');
   const [showDetails, setShowDetails] = useState(false);
 
@@ -122,7 +124,7 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
     // Si c'est un objet avec des propriétés spécifiques
     if (typeof data === 'object' && data !== null) {
       // Chercher les propriétés numériques principales
-      const mainValue = data.revenue || data.count || data.value || data.occupancy || data.declarations || data.active;
+      const mainValue = data.revenue ?? data.count ?? data.value ?? data.occupancy ?? data.declarations ?? data.active;
       const secondaryValue = data.count || data.growth || data.completed || data.pending || data.in_transit || data.delivered;
       const thirdValue = data.growth || data.pending || data.available || data.approved;
 
@@ -252,7 +254,7 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
           <>
             <div className="text-2xl font-bold text-gray-900">
               {typeof mainValue === 'number' ? mainValue.toLocaleString() : mainValue}
-              {data.occupancy ? '%' : data.revenue || data.value ? ' MAD' : ''}
+              {data.occupancy ? '%' : (data.revenue !== undefined || data.value !== undefined) ? ' MAD' : ''}
             </div>
             <div className="text-xs text-gray-600">
               {widget.description}
@@ -277,12 +279,17 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
                 {data.available !== undefined && (
                   <span className="text-gray-600">{data.available}% disponible</span>
                 )}
+                {data.count !== undefined && data.revenue !== undefined && (
+                  <span className="text-orange-600">{data.count} location{data.count > 1 ? 's' : ''} ce mois</span>
+                )}
               </div>
             )}
             {data.growth !== undefined && (
               <div className="flex items-center text-xs">
-                <TrendingUp className="h-3 w-3 text-orange-500 mr-1" />
-                <span className="text-orange-600">+{data.growth}% vs mois dernier</span>
+                <TrendingUp className={`h-3 w-3 mr-1 ${data.growth >= 0 ? 'text-orange-500' : 'text-red-500'}`} />
+                <span className={data.growth >= 0 ? 'text-orange-600' : 'text-red-600'}>
+                  {data.growth >= 0 ? '+' : ''}{data.growth}% vs mois dernier
+                </span>
               </div>
             )}
             {data.occupancy !== undefined && (

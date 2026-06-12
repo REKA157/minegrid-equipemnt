@@ -5,18 +5,30 @@ import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData
 import { supabaseClient as supabase } from '../utils/supabaseClient';
 import { logger } from '../utils/logger';
 import { toast } from '../utils/toast';
+import { useAuth } from '../hooks/useAuth';
+import {
+    getAccountItem,
+    setAccountItem,
+    removeAccountItem,
+    clearAllScopedKeysForUser,
+    SUBSCRIPTION_KEYS,
+    isWatchedAccountKey,
+} from '../utils/accountLocalStorage';
 const PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
-// Fonction utilitaire pour vérifier si une configuration valide existe
-const hasValidConfiguration = () => {
+// Fonction utilitaire pour vérifier si une configuration valide existe (clés par compte)
+const hasValidConfiguration = (userId) => {
+    if (!userId) {
+        return false;
+    }
     // Vérifier d'abord si la configuration a été explicitement validée
-    const isConfigured = localStorage.getItem('enterpriseDashboardConfigured');
+    const isConfigured = getAccountItem(userId, 'enterpriseDashboardConfigured');
     if (isConfigured !== 'true') {
         logger.info('🔍 Configuration non validée explicitement');
         return false;
     }
     
-    const vendeurConfig = localStorage.getItem('enterpriseDashboardConfig_vendeur');
-    const generalConfig = localStorage.getItem('enterpriseDashboardConfig');
+    const vendeurConfig = getAccountItem(userId, 'enterpriseDashboardConfig_vendeur');
+    const generalConfig = getAccountItem(userId, 'enterpriseDashboardConfig');
     
     // Vérifier d'abord la configuration vendeur
     if (vendeurConfig && vendeurConfig !== 'null' && vendeurConfig !== 'undefined' && vendeurConfig !== '' && vendeurConfig !== '{}') {
@@ -58,6 +70,9 @@ const hasValidConfiguration = () => {
 };
 
 export default function Dashboard({ section = 'overview' }) {
+    const { user } = useAuth();
+    const accountId = user?.id ?? null;
+
     const [machines, setMachines] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userName, setUserName] = useState('');
@@ -76,33 +91,7 @@ export default function Dashboard({ section = 'overview' }) {
     const [paymentMethod, setPaymentMethod] = useState('card');
     const [promoCode, setPromoCode] = useState('');
     const [hasEnterpriseSubscription, setHasEnterpriseSubscription] = useState(false);
-    const [hasActiveSubscription, setHasActiveSubscription] = useState(() => {
-        // Vérifier si l'abonnement a été explicitement résilié
-        const subscriptionCancelled = localStorage.getItem('subscriptionCancelled');
-        if (subscriptionCancelled === 'true') {
-            return false;
-        }
-        
-        // Vérifier s'il y a un abonnement temporaire dans localStorage
-        const tempHasActive = localStorage.getItem('tempHasActiveSubscription');
-        const tempSubscription = localStorage.getItem('tempSubscription');
-        
-        if (tempHasActive === 'true' && tempSubscription) {
-            return true;
-        }
-        
-        // Vérifier si l'utilisateur a déjà un abonnement enregistré
-        const userSubscription = localStorage.getItem('userSubscription');
-        if (userSubscription) {
-            return true;
-        }
-        
-        // Utiliser la fonction utilitaire pour vérifier la configuration
-        const hasRealConfiguration = hasValidConfiguration();
-        
-        // Si l'utilisateur a une configuration réelle, il a un abonnement actif
-        return hasRealConfiguration;
-    });
+    const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
     
     // Normalise la valeur d'abonnement pour l'UI : 'enterprise' (anglais, stocke
     // historiquement en localStorage) <=> 'entreprise' (francais, utilise dans
@@ -113,30 +102,9 @@ export default function Dashboard({ section = 'overview' }) {
         return value;
     };
 
-    const [subscriptionType, setSubscriptionType] = useState(() => {
-        const subscriptionCancelled = localStorage.getItem('subscriptionCancelled');
-        if (subscriptionCancelled === 'true') {
-            return 'aucun';
-        }
+    const [subscriptionType, setSubscriptionType] = useState('aucun');
 
-        const tempSubscription = localStorage.getItem('tempSubscription');
-        if (tempSubscription) {
-            return normalizeSubscriptionType(tempSubscription);
-        }
-
-        const userSubscription = localStorage.getItem('userSubscription');
-        if (userSubscription) {
-            return normalizeSubscriptionType(userSubscription);
-        }
-
-        const hasRealConfiguration = hasValidConfiguration();
-        return hasRealConfiguration ? 'entreprise' : 'aucun';
-    });
-
-    const [isFirstTimeEnterpriseDashboard, setIsFirstTimeEnterpriseDashboard] = useState(() => {
-        // Vérifier si c'est la première fois qu'on accède au tableau de bord entreprise
-        return !localStorage.getItem('enterpriseDashboardConfigured');
-    });
+    const [isFirstTimeEnterpriseDashboard, setIsFirstTimeEnterpriseDashboard] = useState(true);
 
     const [navigation, setNavigation] = useState([
         { name: 'Vue d\'ensemble', href: '#dashboard/overview', icon: Eye },
@@ -148,6 +116,63 @@ export default function Dashboard({ section = 'overview' }) {
     ]);
 
     const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+    useEffect(() => {
+        const syncFromStorage = () => {
+            if (!accountId) {
+                setHasActiveSubscription(false);
+                setSubscriptionType('aucun');
+                setHasEnterpriseSubscription(false);
+                setIsFirstTimeEnterpriseDashboard(true);
+                return;
+            }
+            const subscriptionCancelled = getAccountItem(accountId, 'subscriptionCancelled');
+            if (subscriptionCancelled === 'true') {
+                setHasActiveSubscription(false);
+                setSubscriptionType('aucun');
+                setHasEnterpriseSubscription(false);
+                return;
+            }
+
+            const tempHasActive = getAccountItem(accountId, 'tempHasActiveSubscription');
+            const tempSubscription = getAccountItem(accountId, 'tempSubscription');
+            const userSubscription = getAccountItem(accountId, 'userSubscription');
+            const selectedSub = getAccountItem(accountId, 'selectedSubscription');
+
+            let active = false;
+            if (tempHasActive === 'true' && tempSubscription) active = true;
+            else if (userSubscription) active = true;
+            else if (selectedSub && selectedSub !== 'gratuit') active = true;
+            else if (hasValidConfiguration(accountId)) active = true;
+            setHasActiveSubscription(active);
+
+            let sub = 'aucun';
+            if (tempSubscription) sub = normalizeSubscriptionType(tempSubscription);
+            else if (userSubscription) sub = normalizeSubscriptionType(userSubscription);
+            else if (selectedSub && ['premium', 'pro', 'enterprise', 'gratuit'].includes(selectedSub)) {
+                sub = normalizeSubscriptionType(selectedSub);
+            } else if (
+                getAccountItem(accountId, 'enterpriseService') === 'true' &&
+                hasValidConfiguration(accountId)
+            ) {
+                sub = 'entreprise';
+            }
+            setSubscriptionType(sub);
+
+            const userServices = getAccountItem(accountId, 'userServices');
+            const enterpriseService = getAccountItem(accountId, 'enterpriseService') === 'true';
+            const hasEnt =
+                (userServices?.includes('enterprise') ||
+                    userSubscription === 'enterprise' ||
+                    userSubscription === 'entreprise' ||
+                    enterpriseService) &&
+                subscriptionCancelled !== 'true';
+            setHasEnterpriseSubscription(!!hasEnt);
+
+            setIsFirstTimeEnterpriseDashboard(!getAccountItem(accountId, 'enterpriseDashboardConfigured'));
+        };
+        syncFromStorage();
+    }, [accountId]);
 
     useEffect(() => {
         loadDashboardData();
@@ -206,10 +231,10 @@ export default function Dashboard({ section = 'overview' }) {
     // Effet pour surveiller automatiquement les changements d'abonnement
     useEffect(() => {
         const checkSubscriptionStatus = () => {
-            const userServices = localStorage.getItem('userServices');
-            const userSubscription = localStorage.getItem('userSubscription');
-            const enterpriseService = localStorage.getItem('enterpriseService');
-            const subscriptionCancelled = localStorage.getItem('subscriptionCancelled');
+            const userServices = getAccountItem(accountId, 'userServices');
+            const userSubscription = getAccountItem(accountId, 'userSubscription');
+            const enterpriseService = getAccountItem(accountId, 'enterpriseService');
+            const subscriptionCancelled = getAccountItem(accountId, 'subscriptionCancelled');
             
             // Logique de détection améliorée
             const hasEnterprise = (userServices?.includes('enterprise') || 
@@ -228,8 +253,7 @@ export default function Dashboard({ section = 'overview' }) {
 
         // Surveiller les changements de localStorage
         const handleStorageChange = (e) => {
-            if (e.key === 'userSubscription' || e.key === 'enterpriseService' || 
-                e.key === 'userServices' || e.key === 'subscriptionCancelled') {
+            if (isWatchedAccountKey(accountId, e.key, SUBSCRIPTION_KEYS)) {
                 logger.info('📊 Changement localStorage détecté:', e.key, e.newValue);
                 setTimeout(checkSubscriptionStatus, 100);
             }
@@ -244,7 +268,7 @@ export default function Dashboard({ section = 'overview' }) {
             window.removeEventListener('storage', handleStorageChange);
             clearInterval(interval);
         };
-    }, [hasEnterpriseSubscription]);
+    }, [hasEnterpriseSubscription, accountId]);
 
     // Logique automatique d'activation/désactivation des services entreprise
     // La surveillance se fait automatiquement via le useEffect ci-dessus
@@ -302,7 +326,7 @@ export default function Dashboard({ section = 'overview' }) {
 
     const loadUserData = async () => {
         try {
-            const userData = localStorage.getItem('userData');
+            const userData = getAccountItem(accountId, 'userData');
             if (userData) {
                 const user = JSON.parse(userData);
                 setUserName(user.name || user.email || 'Utilisateur');
@@ -310,10 +334,10 @@ export default function Dashboard({ section = 'overview' }) {
             
             // Vérifier l'abonnement entreprise
             const checkEnterpriseSubscription = () => {
-                const userServices = localStorage.getItem('userServices');
-                const userSubscription = localStorage.getItem('userSubscription');
-                const enterpriseService = localStorage.getItem('enterpriseService');
-                const subscriptionCancelled = localStorage.getItem('subscriptionCancelled');
+                const userServices = getAccountItem(accountId, 'userServices');
+                const userSubscription = getAccountItem(accountId, 'userSubscription');
+                const enterpriseService = getAccountItem(accountId, 'enterpriseService');
+                const subscriptionCancelled = getAccountItem(accountId, 'subscriptionCancelled');
                 
                 const hasEnterprise = (userServices?.includes('enterprise') || 
                                     userSubscription === 'enterprise' || userSubscription === 'entreprise' ||
@@ -333,10 +357,10 @@ export default function Dashboard({ section = 'overview' }) {
     // Fonction pour rafraîchir l'état de l'abonnement entreprise
     const refreshEnterpriseSubscription = () => {
         try {
-            const userServices = localStorage.getItem('userServices');
-            const userSubscription = localStorage.getItem('userSubscription');
-            const enterpriseService = localStorage.getItem('enterpriseService');
-            const subscriptionCancelled = localStorage.getItem('subscriptionCancelled');
+            const userServices = getAccountItem(accountId, 'userServices');
+            const userSubscription = getAccountItem(accountId, 'userSubscription');
+            const enterpriseService = getAccountItem(accountId, 'enterpriseService');
+            const subscriptionCancelled = getAccountItem(accountId, 'subscriptionCancelled');
             
             // Logique de détection améliorée
             const hasEnterprise = (userServices?.includes('enterprise') || 
@@ -430,16 +454,24 @@ export default function Dashboard({ section = 'overview' }) {
             setSubscriptionType('aucun');
             setHasEnterpriseSubscription(false);
             
-            // Nettoyer TOUTES les données d'abonnement du localStorage
-            localStorage.removeItem('tempSubscription');
-            localStorage.removeItem('tempHasActiveSubscription');
-            localStorage.removeItem('enterpriseDashboardConfigured');
-            localStorage.removeItem('userSubscription');
-            localStorage.removeItem('enterpriseService');
-            localStorage.removeItem('userServices');
-            
-            // Marquer explicitement l'abonnement comme résilié
-            localStorage.setItem('subscriptionCancelled', 'true');
+            if (accountId) {
+                clearAllScopedKeysForUser(accountId);
+                setAccountItem(accountId, 'subscriptionCancelled', 'true');
+            } else {
+                localStorage.removeItem('tempSubscription');
+                localStorage.removeItem('tempHasActiveSubscription');
+                localStorage.removeItem('enterpriseDashboardConfigured');
+                localStorage.removeItem('userSubscription');
+                localStorage.removeItem('enterpriseService');
+                localStorage.removeItem('userServices');
+                localStorage.removeItem('lastActiveMetier');
+                const metierKeys = Object.keys(localStorage).filter(
+                    k => k.startsWith('enterpriseDashboardConfig')
+                );
+                metierKeys.forEach(k => localStorage.removeItem(k));
+                localStorage.removeItem('enterpriseDashboardConfig');
+                localStorage.setItem('subscriptionCancelled', 'true');
+            }
             
             logger.info('🚫 Abonnement résilié - Toutes les données nettoyées');
             
@@ -454,7 +486,7 @@ export default function Dashboard({ section = 'overview' }) {
 
     const resetEnterpriseDashboard = () => {
         if (confirm('Voulez-vous réinitialiser votre tableau de bord entreprise ? Cela vous permettra de le reconfigurer.')) {
-            localStorage.removeItem('enterpriseDashboardConfigured');
+            removeAccountItem(accountId, 'enterpriseDashboardConfigured');
             setIsFirstTimeEnterpriseDashboard(true);
             toast('Tableau de bord entreprise réinitialisé. Vous pouvez maintenant le reconfigurer.');
         }
@@ -553,7 +585,7 @@ export default function Dashboard({ section = 'overview' }) {
                         <hr>
                         <p>Cordialement,<br>L'équipe Minegrid Équipement</p>
                     `,
-                    machineId: selectedMessageForReply.machine_id || 'reply',
+                    verifiedReplyToOriginalMessageId: selectedMessageForReply.id,
                     messageId: replyData.id
                 }
             });
@@ -655,16 +687,85 @@ export default function Dashboard({ section = 'overview' }) {
                 throw new Error('Utilisateur non connecté');
             }
 
-            // Activer l'abonnement temporaire
+            const plan = selectedPlanForPayment;
+            if (!plan) {
+                throw new Error('Aucun plan sélectionné');
+            }
+
+            // Aligné sur PaymentPage / ProSubscription : persistance pro_clients (portail + widgets qui résolvent le client)
+            const maxUsersByPlan = { pro: 5, premium: 15, enterprise: 50 };
+            const subscriptionEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const companyName =
+                user.user_metadata?.full_name ||
+                user.user_metadata?.company ||
+                (user.email ? user.email.split('@')[0] : '') ||
+                'Entreprise';
+
+            const proRow = {
+                user_id: user.id,
+                company_name: companyName,
+                subscription_type: plan,
+                subscription_status: 'active',
+                subscription_start: new Date().toISOString().split('T')[0],
+                subscription_end: subscriptionEnd,
+                max_users: maxUsersByPlan[plan] ?? 5,
+                payment_method: 'promo_code',
+                promo_code_used: PROMO_CODE,
+            };
+
+            const { data: existingPro } = await supabase
+                .from('pro_clients')
+                .select('id')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            const { user_id: _uid, ...updatePayload } = proRow;
+            let upsertError;
+
+            if (existingPro?.id) {
+                const { error } = await supabase
+                    .from('pro_clients')
+                    .update(updatePayload)
+                    .eq('user_id', user.id);
+                upsertError = error;
+            } else {
+                const { error } = await supabase.from('pro_clients').insert(proRow);
+                upsertError = error;
+            }
+
+            if (upsertError) {
+                logger.error('Erreur upsert pro_clients (code promo):', upsertError);
+                toast('Impossible d\'enregistrer l\'abonnement en base. Réessayez ou contactez le support.');
+                return;
+            }
+
             setHasActiveSubscription(true);
-            setSubscriptionType(normalizeSubscriptionType(selectedPlanForPayment));
-            localStorage.setItem('userSubscription', selectedPlanForPayment);
-            localStorage.setItem('tempHasActiveSubscription', 'true');
-            localStorage.setItem('tempSubscription', selectedPlanForPayment);
-            
+            setSubscriptionType(normalizeSubscriptionType(plan));
+            setAccountItem(accountId, 'userSubscription', plan);
+            setAccountItem(accountId, 'tempHasActiveSubscription', 'true');
+            setAccountItem(accountId, 'tempSubscription', plan);
+            removeAccountItem(accountId, 'subscriptionCancelled');
+
+            if (plan === 'enterprise') {
+                setHasEnterpriseSubscription(true);
+                setAccountItem(accountId, 'userSubscription', 'enterprise');
+                setAccountItem(accountId, 'enterpriseService', 'true');
+                setAccountItem(accountId, 'userServices', 'enterprise');
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('enterpriseSubscriptionActivated', {
+                        detail: { planType: 'enterprise', source: 'promo' }
+                    }));
+                }, 100);
+            }
+
             setShowPaymentPage(false);
-            toast(`✅ Abonnement ${selectedPlanForPayment} activé avec succès grâce au code promo ! Accès temporaire de 30 jours.`);
-            setActiveSection('overview');
+            toast(`✅ Abonnement ${plan} activé avec succès grâce au code promo ! Accès temporaire de 30 jours.`);
+
+            if (plan === 'enterprise') {
+                window.location.hash = '#dashboard-entreprise';
+            } else {
+                setActiveSection('overview');
+            }
         } catch (error) {
             logger.error('Erreur activation abonnement promo:', error);
             toast('Erreur lors de l\'activation de l\'abonnement');
@@ -678,11 +779,11 @@ export default function Dashboard({ section = 'overview' }) {
         // Mettre à jour l'état de l'abonnement entreprise
         if (selectedPlanForPayment === 'enterprise') {
             setHasEnterpriseSubscription(true);
-            // Sauvegarder dans localStorage
-            localStorage.setItem('userSubscription', 'enterprise');
-            localStorage.setItem('enterpriseService', 'true');
-            localStorage.setItem('userServices', 'enterprise');
-            localStorage.removeItem('subscriptionCancelled');
+            // Sauvegarder (par compte)
+            setAccountItem(accountId, 'userSubscription', 'enterprise');
+            setAccountItem(accountId, 'enterpriseService', 'true');
+            setAccountItem(accountId, 'userServices', 'enterprise');
+            removeAccountItem(accountId, 'subscriptionCancelled');
             logger.info('✅ Abonnement entreprise activé');
             
             // Déclencher l'événement d'activation
@@ -729,8 +830,8 @@ export default function Dashboard({ section = 'overview' }) {
             version: '1.0'
         };
         
-        localStorage.setItem('dashboardConfig', JSON.stringify(dashboardConfig));
-        localStorage.setItem('dashboardConfigured', 'true');
+        setAccountItem(accountId, 'dashboardConfig', JSON.stringify(dashboardConfig));
+        setAccountItem(accountId, 'dashboardConfigured', 'true');
         
         logger.info('✅ Configuration du tableau de bord sauvegardée');
         toast('✅ Configuration du tableau de bord sauvegardée avec succès !');
@@ -1053,24 +1154,26 @@ export default function Dashboard({ section = 'overview' }) {
                                                                     window.location.href = '/#pro';
                                                                     break;
                                                                 case 'entreprise':
-                                                                    // Vérifier si le tableau de bord entreprise est configuré
-                                                                    const isConfigured = localStorage.getItem('enterpriseDashboardConfigured');
-                                                                    const vendeurConfig = localStorage.getItem('enterpriseDashboardConfig_vendeur');
-                                                                    const generalConfig = localStorage.getItem('enterpriseDashboardConfig');
+                                                                    {
+                                                                    const isConfigured = getAccountItem(accountId, 'enterpriseDashboardConfigured');
+                                                                    const activeMetier = getAccountItem(accountId, 'lastActiveMetier') || 'vendeur';
+                                                                    const metierConfig = getAccountItem(accountId, `enterpriseDashboardConfig_${activeMetier}`);
+                                                                    const generalConfig = getAccountItem(accountId, 'enterpriseDashboardConfig');
                                                                     
                                                                     logger.info('🔍 Debug configuration entreprise:', {
                                                                         isConfigured,
-                                                                        vendeurConfig,
-                                                                        generalConfig
+                                                                        activeMetier,
+                                                                        metierConfig: !!metierConfig,
+                                                                        generalConfig: !!generalConfig
                                                                     });
                                                                     
-                                                                    // Si une configuration existe et est marquée comme configurée
-                                                                    if (isConfigured === 'true' && (vendeurConfig || generalConfig)) {
+                                                                    if (isConfigured === 'true' && (metierConfig || generalConfig)) {
                                                                         logger.info('✅ Tableau de bord configuré - redirection vers affichage');
                                                                         window.location.href = '/#dashboard-entreprise-display';
                                                                     } else {
                                                                         logger.info('🚀 Tableau de bord non configuré - redirection vers configuration');
                                                                         window.location.href = '/#dashboard-entreprise';
+                                                                    }
                                                                     }
                                                                     break;
                                                                 default:
@@ -1302,7 +1405,7 @@ export default function Dashboard({ section = 'overview' }) {
                                                 <div className="text-center pt-8">
                                                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Entreprise</h3>
                                                     <div className="text-3xl font-bold text-orange-600 mb-4">À partir de 200 USD<span className="text-lg text-gray-500">/mois</span></div>
-                                                    <div className="text-sm text-gray-500 mb-4">Appel conseiller</div>
+                                                    <div className="text-sm text-gray-500 mb-4">Paiement en ligne ou devis avec un conseiller</div>
                                                     <ul className="text-sm text-gray-600 space-y-2 mb-6">
                                                         <li>• Visibilité renforcée sur la page d'accueil</li>
                                                         <li>• Jusqu'à 15 images par annonce</li>
@@ -1314,12 +1417,22 @@ export default function Dashboard({ section = 'overview' }) {
                                                         <li>• Analytics complets</li>
                                                         <li>• Réseau partenarial intégré</li>
                                                     </ul>
-                                                    <button
-                                                        onClick={() => window.location.hash = '#contact'}
-                                                        className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium"
-                                                    >
-                                                        Contacter un conseiller
-                                                    </button>
+                                                    <div className="space-y-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleActivateSubscription('enterprise')}
+                                                            className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium"
+                                                        >
+                                                            Souscrire au forfait (carte ou code promo)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => (window.location.hash = '#contact')}
+                                                            className="w-full px-4 py-2 bg-white text-orange-600 border border-orange-300 rounded-lg hover:bg-orange-50 transition-all duration-200 font-medium text-sm"
+                                                        >
+                                                            Contacter un conseiller (sur mesure)
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

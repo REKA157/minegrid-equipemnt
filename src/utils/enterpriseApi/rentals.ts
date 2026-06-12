@@ -1,5 +1,21 @@
 import supabase from '../supabaseClient';
 import { supabaseCall } from '../supabaseCall';
+import { getCurrentSellerUserId, getMachineIdsForSellerUser } from './sellerScope';
+
+async function scopedRentalsFilter() {
+  const userId = await getCurrentSellerUserId();
+  if (!userId) return { userId: null as string | null, machineIds: [] as string[] };
+  const machineIds = await getMachineIdsForSellerUser(userId);
+  return { userId, machineIds };
+}
+
+/** Filtre PostgREST : locations créées par le loueur OU sur son parc machines */
+export function rentalScopeOrFilter(userId: string, machineIds: string[]): string {
+  if (machineIds.length === 0) {
+    return `created_by.eq.${userId}`;
+  }
+  return `created_by.eq.${userId},equipment_id.in.(${machineIds.join(',')})`;
+}
 
 // =====================================================
 // APIs POUR LES WIDGETS LOUEUR
@@ -13,12 +29,19 @@ export async function getRentalRevenue() {
   const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
 
+  const { userId, machineIds } = await scopedRentalsFilter();
+  if (!userId) {
+    return { revenue: 0, count: 0, growth: 0 };
+  }
+  const scopeOr = rentalScopeOrFilter(userId, machineIds);
+
   const [currentMonthData, lastMonthData] = await Promise.all([
     supabaseCall<Array<{ total_price: number }>>(
       () =>
         supabase
           .from('rentals')
           .select('total_price')
+          .or(scopeOr)
           .gte('start_date', startOfMonth.toISOString())
           .lte('start_date', endOfMonth.toISOString()),
       { label: 'getRentalRevenue.currentMonth', fallback: [] },
@@ -28,6 +51,7 @@ export async function getRentalRevenue() {
         supabase
           .from('rentals')
           .select('total_price')
+          .or(scopeOr)
           .gte('start_date', startOfLastMonth.toISOString())
           .lte('start_date', endOfLastMonth.toISOString()),
       { label: 'getRentalRevenue.lastMonth', fallback: [] },
@@ -54,6 +78,12 @@ export async function getRentalRevenue() {
 
 // WIDGET "LOCATIONS A VENIR"
 export async function getUpcomingRentals() {
+  const { userId, machineIds } = await scopedRentalsFilter();
+  if (!userId) return [];
+
+  const scopeOr = rentalScopeOrFilter(userId, machineIds);
+
+  const now = new Date().toISOString();
   const data = await supabaseCall<Array<Record<string, any>>>(
     () =>
       supabase
@@ -61,9 +91,10 @@ export async function getUpcomingRentals() {
         .select(
           `id, start_date, end_date, total_price, status, created_at, equipment_id, client_id`,
         )
-        .gte('start_date', new Date().toISOString())
+        .or(scopeOr)
+        .gte('end_date', now)
         .order('start_date', { ascending: true })
-        .limit(10),
+        .limit(50),
     { label: 'getUpcomingRentals', fallback: [] },
   );
 
@@ -84,7 +115,7 @@ export async function getUpcomingRentals() {
       ? supabaseCall<Array<Record<string, any>>>(
           () =>
             supabase
-              .from('user_profiles')
+              .from('pro_clients')
               .select('id, full_name, company_name')
               .in('id', clientIds),
           { label: 'getUpcomingRentals.clients', fallback: [] },
@@ -124,7 +155,14 @@ export async function getUpcomingRentals() {
     const client = clientData[rental.client_id];
 
     return {
-      ...rental,
+      id: rental.id as string,
+      start_date: rental.start_date as string,
+      end_date: rental.end_date as string,
+      total_price: rental.total_price as number,
+      status: rental.status as string,
+      created_at: rental.created_at as string,
+      equipment_id: rental.equipment_id as string,
+      client_id: rental.client_id as string,
       durationDays,
       daysUntilStart,
       priority,
@@ -133,6 +171,107 @@ export async function getUpcomingRentals() {
       equipmentFullName: equipment
         ? `${equipment.brand || ''} ${equipment.model || equipment.name}`.trim()
         : 'Équipement non spécifié',
+    };
+  });
+}
+
+/** Statut location → étapes pipeline (même libellés que SalesPipelineWidget). */
+export function rentalStatusToPipelineStage(status: string): string {
+  const s = (status || '').trim().toLowerCase();
+  if (s.includes('annul')) return 'Perdu';
+  if (s.includes('termin')) return 'Conclu';
+  if (s.includes('en cours')) return 'Négociation';
+  if (s.includes('prête') || s.includes('prete')) return 'Négociation';
+  if (s.includes('préparation') || s.includes('preparation')) return 'Devis';
+  if (s.includes('confirm')) return 'Devis';
+  return 'Prospection';
+}
+
+/**
+ * Pipeline de locations : contrats actifs ou en préparation (hors terminés / annulés).
+ * Format aligné sur le widget pipeline commercial.
+ */
+export async function getRentalPipelineLeads() {
+  const { userId, machineIds } = await scopedRentalsFilter();
+  if (!userId) return [];
+
+  const scopeOr = rentalScopeOrFilter(userId, machineIds);
+
+  const rows = await supabaseCall<Array<Record<string, any>>>(
+    () =>
+      supabase
+        .from('rentals')
+        .select('id, start_date, end_date, total_price, status, equipment_id, client_id, created_at')
+        .or(scopeOr)
+        .order('start_date', { ascending: true })
+        .limit(80),
+    { label: 'getRentalPipelineLeads', fallback: [] },
+  );
+
+  const active = rows.filter((r) => {
+    const st = (r.status || '').toLowerCase();
+    if (st.includes('termin') || st.includes('annul')) return false;
+    const end = r.end_date ? new Date(r.end_date).getTime() : 0;
+    if (end && end < Date.now() - 86400000) return false;
+    return true;
+  });
+
+  if (!active.length) return [];
+
+  const equipmentIds = [...new Set(active.map((r) => r.equipment_id).filter(Boolean))];
+  const clientIds = [...new Set(active.map((r) => r.client_id).filter(Boolean))];
+
+  const [equipmentList, clientList] = await Promise.all([
+    equipmentIds.length
+      ? supabaseCall<Array<Record<string, any>>>(
+          () =>
+            supabase.from('machines').select('id, name, brand, model').in('id', equipmentIds),
+          { label: 'getRentalPipelineLeads.equipment', fallback: [] },
+        )
+      : Promise.resolve([]),
+    clientIds.length
+      ? supabaseCall<Array<Record<string, any>>>(
+          () =>
+            supabase.from('pro_clients').select('id, full_name, company_name, phone').in('id', clientIds),
+          { label: 'getRentalPipelineLeads.clients', fallback: [] },
+        )
+      : Promise.resolve([]),
+  ]);
+
+  const eqMap = Object.fromEntries((equipmentList || []).map((e: any) => [e.id, e]));
+  const clMap = Object.fromEntries((clientList || []).map((c: any) => [c.id, c]));
+
+  return active.map((rental) => {
+    const equipment = eqMap[rental.equipment_id];
+    const client = clMap[rental.client_id];
+    const title = equipment
+      ? `Location — ${`${equipment.brand || ''} ${equipment.model || equipment.name}`.trim()}`
+      : 'Location — équipement';
+    const stage = rentalStatusToPipelineStage(String(rental.status || ''));
+    const value = Number(rental.total_price) || 0;
+    const start = rental.start_date ? String(rental.start_date).split('T')[0] : '';
+    const end = rental.end_date ? String(rental.end_date).split('T')[0] : '';
+
+    return {
+      id: rental.id,
+      title,
+      status: rental.status || '—',
+      stage,
+      priority: stage === 'Prospection' ? 'medium' : 'high',
+      value,
+      probability: stage === 'Conclu' ? 100 : stage === 'Perdu' ? 0 : stage === 'Négociation' ? 70 : 40,
+      nextAction: `Période ${start} → ${end}`,
+      lastContact: start || rental.created_at || new Date().toISOString().split('T')[0],
+      assignedTo: '—',
+      company: client?.company_name || client?.full_name || 'Client',
+      email: '',
+      phone: client?.phone || '',
+      contact: {
+        name: client?.full_name || 'Client',
+        company: client?.company_name || '',
+        phone: client?.phone || '',
+        email: '',
+      },
     };
   });
 }

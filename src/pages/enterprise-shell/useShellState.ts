@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from '../../utils/logger';
+import { scopedStorageKey, setAccountItem } from '../../utils/accountLocalStorage';
+import supabase from '../../utils/supabaseClient';
+import {
+  fetchEnterpriseDashboardConfig,
+  upsertEnterpriseDashboardConfig,
+} from '../../utils/enterpriseDashboardConfig';
 import type {
   ShellAddStatus,
   ShellDashboardConfig,
@@ -13,6 +19,7 @@ import type {
  * Hook centralisant toute la logique d'etat commune aux 8 dashboards
  * Enterprise (Mecanicien, Loueur, Vendeur, Transporteur, ...) :
  * - chargement / purge / persistance localStorage
+ * - synchro optionnelle Supabase (table `enterprise_dashboard_configs`, voir sql/)
  * - add / remove / cycle size / reset / restore / save
  *
  * Seules varient la cle `role` (suffixe localStorage) et la source de
@@ -26,10 +33,20 @@ export interface UseShellStateOptions {
   role: string;
   widgetsSource: ShellWidgetsSource;
   validIds: string[];
+  /** Isoler la config grille par utilisateur Supabase (évite mélange premium / enterprise sur même origin). */
+  storageUserId?: string | null;
 }
 
-const storageKey = (role: string) => `${BASE_KEY}_${role}`;
-const backupKey = (role: string) => `${BASE_KEY}_${role}${BACKUP_SUFFIX}`;
+/** Clé config shell : préfixée `mg:<uuid>:…` lorsque storageUserId est défini */
+function cfgStorageKey(userId: string | null | undefined, role: string): string {
+  const base = `${BASE_KEY}_${role}`;
+  return userId ? scopedStorageKey(userId, base) : base;
+}
+
+function backupStorageKey(userId: string | null | undefined, role: string): string {
+  const base = `${BASE_KEY}_${role}${BACKUP_SUFFIX}`;
+  return userId ? scopedStorageKey(userId, base) : `${BASE_KEY}_${role}${BACKUP_SUFFIX}`;
+}
 
 const emptyConfig = (): ShellDashboardConfig => ({
   widgets: [],
@@ -37,8 +54,36 @@ const emptyConfig = (): ShellDashboardConfig => ({
   widgetSizes: {},
 });
 
-function safeReadConfig(role: string): ShellDashboardConfig {
-  const raw = localStorage.getItem(storageKey(role));
+function migrateLegacyEnterpriseConfig(role: string, userId: string): void {
+  const legacyMain = `${BASE_KEY}_${role}`;
+  const scopedMain = scopedStorageKey(userId, legacyMain);
+  if (localStorage.getItem(scopedMain) !== null) return;
+  const leg = localStorage.getItem(legacyMain);
+  if (leg === null) return;
+  try {
+    localStorage.setItem(scopedMain, leg);
+    localStorage.removeItem(legacyMain);
+  } catch {
+    /* quota */
+  }
+  const legacyBk = `${legacyMain}${BACKUP_SUFFIX}`;
+  const scopedBk = scopedStorageKey(userId, legacyBk);
+  const bk = localStorage.getItem(legacyBk);
+  if (bk !== null) {
+    try {
+      localStorage.setItem(scopedBk, bk);
+      localStorage.removeItem(legacyBk);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function safeReadConfig(storageUserId: string | null | undefined, role: string): ShellDashboardConfig {
+  if (storageUserId) migrateLegacyEnterpriseConfig(role, storageUserId);
+  const ck = cfgStorageKey(storageUserId, role);
+  let raw = localStorage.getItem(ck);
+  if (!raw && !storageUserId) raw = localStorage.getItem(`${BASE_KEY}_${role}`);
   if (!raw) return emptyConfig();
   try {
     const parsed = JSON.parse(raw) as Partial<ShellDashboardConfig>;
@@ -51,13 +96,20 @@ function safeReadConfig(role: string): ShellDashboardConfig {
     };
   } catch {
     logger.warn(`[enterpriseDashboard:${role}] config corrompue, reset`);
-    localStorage.removeItem(storageKey(role));
+    localStorage.removeItem(ck);
     return emptyConfig();
   }
 }
 
-const persist = (role: string, config: ShellDashboardConfig) =>
-  localStorage.setItem(storageKey(role), JSON.stringify(config));
+/** Garde la version la plus récente (horodatage `lastSaved`). */
+function pickNewerDashboardConfig(
+  local: ShellDashboardConfig,
+  remote: ShellDashboardConfig,
+): ShellDashboardConfig {
+  const tl = local.lastSaved ? Date.parse(local.lastSaved) : 0;
+  const tr = remote.lastSaved ? Date.parse(remote.lastSaved) : 0;
+  return tr > tl ? remote : local;
+}
 
 /** Réaligne titre, type et champs catalogue sur la source métier (évite titres obsolètes dans localStorage). */
 function reconcileWidgetsWithSource(
@@ -92,37 +144,113 @@ function widgetsCatalogKey(source: ShellWidgetsSource): string {
     .join('\u0002');
 }
 
+function applyCatalogReconciliation(
+  base: ShellDashboardConfig,
+  source: ShellWidgetsSource,
+  ids: string[],
+): ShellDashboardConfig {
+  const parsed: ShellDashboardConfig = {
+    ...base,
+    layout: { ...base.layout, lg: [...(base.layout?.lg || [])] },
+    widgets: [...(base.widgets || [])],
+  };
+  parsed.widgets = reconcileWidgetsWithSource(parsed.widgets || [], source, ids);
+  parsed.layout.lg = (parsed.layout.lg || []).filter((l) => ids.includes(l.i));
+  if (parsed.widgetSizes) {
+    parsed.widgets = parsed.widgets.map((w) => ({
+      ...w,
+      size: (w as ShellWidget).size || parsed.widgetSizes![w.id] || '1/3',
+    }));
+  }
+  return parsed;
+}
+
 export function useShellState(options: UseShellStateOptions) {
-  const { role, widgetsSource, validIds } = options;
+  const { role, widgetsSource, validIds, storageUserId } = options;
   const [config, setConfig] = useState<ShellDashboardConfig | null>(null);
   const [layout, setLayout] = useState<{ lg: ShellLayoutItem[] }>({ lg: [] });
   const [addStatus, setAddStatus] = useState<Record<string, ShellAddStatus>>({});
   const [saveStatus, setSaveStatus] = useState<ShellSaveStatus>('idle');
   const addTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const validIdsKey = [...validIds].sort().join('|');
   const catalogKey = widgetsCatalogKey(widgetsSource);
 
-  // Réconciliation localStorage : uniquement quand rôle, liste d'id autorisés ou catalogue (contenu) changent.
-  // Pas de dépendance directe à la référence de `validIds` / `widgetsSource` pour éviter des re-exécutions inutiles.
-  useEffect(() => {
-    const parsed = safeReadConfig(role);
-
-    parsed.widgets = reconcileWidgetsWithSource(parsed.widgets || [], widgetsSource, validIds);
-    parsed.layout.lg = (parsed.layout.lg || []).filter((l) => validIds.includes(l.i));
-
-    if (parsed.widgetSizes) {
-      parsed.widgets = parsed.widgets.map((w) => ({
-        ...w,
-        size: (w as ShellWidget).size || parsed.widgetSizes[w.id] || '1/3',
-      }));
+  const persistLocalAndCloud = useCallback((r: string, cfg: ShellDashboardConfig) => {
+    try {
+      localStorage.setItem(cfgStorageKey(storageUserId, r), JSON.stringify(cfg));
+    } catch {
+      /* storage indisponible */
     }
+    if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+    cloudSaveTimer.current = setTimeout(() => {
+      cloudSaveTimer.current = null;
+      void (async () => {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const uid = sessionData?.session?.user?.id;
+          if (!uid) return;
+          const res = await upsertEnterpriseDashboardConfig(uid, r, cfg);
+          if (!res.ok && res.error) {
+            logger.warn(`[enterpriseDashboard:${r}] synchro nuage`, res.error);
+          }
+        } catch (e) {
+          logger.warn(`[enterpriseDashboard:${r}] synchro nuage`, e);
+        }
+      })();
+    }, 1500);
+  }, [storageUserId]);
 
-    persist(role, parsed);
-    setConfig(parsed);
-    setLayout(parsed.layout ?? { lg: [] });
+  useEffect(
+    () => () => {
+      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+    },
+    [],
+  );
+
+  // Réconciliation localStorage + optionnellement nuage ; quand rôle, validIds ou catalogue changent.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      let parsed = applyCatalogReconciliation(
+        safeReadConfig(storageUserId, role),
+        widgetsSource,
+        validIds,
+      );
+
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const uid = sessionData?.session?.user?.id;
+        if (uid) {
+          const remoteRaw = await fetchEnterpriseDashboardConfig(uid, role);
+          if (remoteRaw && !cancelled) {
+            const remoteParsed = applyCatalogReconciliation(remoteRaw, widgetsSource, validIds);
+            parsed = pickNewerDashboardConfig(parsed, remoteParsed);
+          }
+        }
+      } catch (e) {
+        logger.warn(`[enterpriseDashboard:${role}] lecture nuage`, e);
+      }
+
+      if (cancelled) return;
+
+      persistLocalAndCloud(role, parsed);
+      setConfig(parsed);
+      setLayout(parsed.layout ?? { lg: [] });
+      try {
+        setAccountItem(storageUserId ?? null, 'lastActiveMetier', role);
+      } catch {
+        /* storage indisponible */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- widgetsSource / validIds : voir validIdsKey & catalogKey
-  }, [role, validIdsKey, catalogKey]);
+  }, [role, storageUserId, validIdsKey, catalogKey, persistLocalAndCloud]);
 
   const onLayoutChange = useCallback(
     (newLayout: ShellLayoutItem[]) => {
@@ -130,11 +258,11 @@ export function useShellState(options: UseShellStateOptions) {
       setConfig((prev) => {
         if (!prev) return prev;
         const next = { ...prev, layout: { ...prev.layout, lg: newLayout } };
-        persist(role, next);
+        persistLocalAndCloud(role, next);
         return next;
       });
     },
-    [role],
+    [role, persistLocalAndCloud],
   );
 
   const cycleWidgetHeight = useCallback(
@@ -148,13 +276,13 @@ export function useShellState(options: UseShellStateOptions) {
         setConfig((prevConfig) => {
           if (!prevConfig) return prevConfig;
           const next = { ...prevConfig, layout: updated };
-          persist(role, next);
+          persistLocalAndCloud(role, next);
           return next;
         });
         return updated;
       });
     },
-    [role],
+    [role, persistLocalAndCloud],
   );
 
   const resetWidgetSize = useCallback(
@@ -165,35 +293,34 @@ export function useShellState(options: UseShellStateOptions) {
         setConfig((prevConfig) => {
           if (!prevConfig) return prevConfig;
           const next = { ...prevConfig, layout: updated };
-          persist(role, next);
+          persistLocalAndCloud(role, next);
           return next;
         });
         return updated;
       });
     },
-    [role],
+    [role, persistLocalAndCloud],
   );
 
   const removeWidget = useCallback(
     (widgetId: string) => {
       if (!config) return;
 
-      // Backup de la position pour restauration ulterieure
       const currentLayoutItem = layout.lg.find((l) => l.i === widgetId);
       if (currentLayoutItem) {
-        const existingBackup = localStorage.getItem(backupKey(role));
+        const existingBackup = localStorage.getItem(backupStorageKey(storageUserId, role));
         let backup: { layout: { lg: ShellLayoutItem[] } } = { layout: { lg: [] } };
         if (existingBackup) {
           try {
             backup = JSON.parse(existingBackup);
           } catch {
-            localStorage.removeItem(backupKey(role));
+            localStorage.removeItem(backupStorageKey(storageUserId, role));
           }
         }
         const idx = backup.layout.lg.findIndex((l) => l.i === widgetId);
         if (idx >= 0) backup.layout.lg[idx] = currentLayoutItem;
         else backup.layout.lg.push(currentLayoutItem);
-        localStorage.setItem(backupKey(role), JSON.stringify(backup));
+        localStorage.setItem(backupStorageKey(storageUserId, role), JSON.stringify(backup));
       }
 
       const newWidgets = config.widgets.filter((w) => w.id !== widgetId);
@@ -202,9 +329,9 @@ export function useShellState(options: UseShellStateOptions) {
       const newConfig = { ...config, widgets: newWidgets, layout: updated };
       setConfig(newConfig);
       setLayout(updated);
-      persist(role, newConfig);
+      persistLocalAndCloud(role, newConfig);
     },
-    [config, layout, role],
+    [config, layout, role, storageUserId, persistLocalAndCloud],
   );
 
   const addWidget = useCallback(
@@ -217,13 +344,13 @@ export function useShellState(options: UseShellStateOptions) {
       }
 
       let originalPosition: ShellLayoutItem | null = null;
-      const savedBackup = localStorage.getItem(backupKey(role));
+      const savedBackup = localStorage.getItem(backupStorageKey(storageUserId, role));
       if (savedBackup) {
         try {
           const backup = JSON.parse(savedBackup) as { layout?: { lg?: ShellLayoutItem[] } };
           originalPosition = backup?.layout?.lg?.find((l) => l.i === widgetId) ?? null;
         } catch {
-          localStorage.removeItem(backupKey(role));
+          localStorage.removeItem(backupStorageKey(storageUserId, role));
         }
       }
 
@@ -235,24 +362,24 @@ export function useShellState(options: UseShellStateOptions) {
       const newConfig = { ...config, widgets: newWidgets, layout: { ...config.layout, lg: newLg } };
       setConfig(newConfig);
       setLayout(newConfig.layout);
-      persist(role, newConfig);
+      persistLocalAndCloud(role, newConfig);
 
       setAddStatus((s) => ({ ...s, [widgetId]: 'added' }));
       if (addTimeouts.current[widgetId]) clearTimeout(addTimeouts.current[widgetId]);
       addTimeouts.current[widgetId] = setTimeout(() => {
         setAddStatus((s) => ({ ...s, [widgetId]: 'idle' }));
-        const existingBackup = localStorage.getItem(backupKey(role));
+        const existingBackup = localStorage.getItem(backupStorageKey(storageUserId, role));
         if (!existingBackup) return;
         try {
           const backup = JSON.parse(existingBackup) as { layout: { lg: ShellLayoutItem[] } };
           backup.layout.lg = backup.layout.lg.filter((l) => l.i !== widgetId);
-          localStorage.setItem(backupKey(role), JSON.stringify(backup));
+          localStorage.setItem(backupStorageKey(storageUserId, role), JSON.stringify(backup));
         } catch {
-          localStorage.removeItem(backupKey(role));
+          localStorage.removeItem(backupStorageKey(storageUserId, role));
         }
       }, 1500);
     },
-    [config, layout.lg, role, widgetsSource.widgets],
+    [config, layout.lg, role, storageUserId, widgetsSource.widgets, persistLocalAndCloud],
   );
 
   const restoreAllWidgets = useCallback(() => {
@@ -275,19 +402,43 @@ export function useShellState(options: UseShellStateOptions) {
     const newConfig = { ...config, widgets: newWidgets, layout: { ...config.layout, lg: newLg } };
     setConfig(newConfig);
     setLayout(newConfig.layout);
-    persist(role, newConfig);
-  }, [config, layout.lg, role, widgetsSource.widgets]);
+    persistLocalAndCloud(role, newConfig);
+  }, [config, layout.lg, role, storageUserId, widgetsSource.widgets, persistLocalAndCloud]);
 
-  const saveDashboard = useCallback(() => {
+  const saveDashboard = useCallback(async () => {
     if (!config) return;
     setSaveStatus('saving');
     const snapshot = { ...config, layout, lastSaved: new Date().toISOString() };
-    persist(role, snapshot);
-    setTimeout(() => {
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }, 1000);
-  }, [config, layout, role]);
+    try {
+      localStorage.setItem(cfgStorageKey(storageUserId, role), JSON.stringify(snapshot));
+    } catch {
+      /* ignore */
+    }
+    if (cloudSaveTimer.current) {
+      clearTimeout(cloudSaveTimer.current);
+      cloudSaveTimer.current = null;
+    }
+    setConfig(snapshot);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData?.session?.user?.id;
+      if (uid) {
+        const res = await upsertEnterpriseDashboardConfig(uid, role, snapshot);
+        if (!res.ok && res.error) {
+          logger.warn(`[enterpriseDashboard:${role}] sauvegarde nuage`, res.error);
+        }
+      }
+    } catch (e) {
+      logger.warn(`[enterpriseDashboard:${role}] sauvegarde nuage`, e);
+    }
+    try {
+      setAccountItem(storageUserId ?? null, 'lastActiveMetier', role);
+    } catch {
+      /* ignore */
+    }
+    setSaveStatus('saved');
+    setTimeout(() => setSaveStatus('idle'), 2000);
+  }, [config, layout, role, storageUserId]);
 
   return {
     config,

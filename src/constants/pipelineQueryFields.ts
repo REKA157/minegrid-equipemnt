@@ -17,6 +17,10 @@ export const PIPELINE_LEADS_COLUMNS = [
   'contact_email',
   'source',
   'source_id',
+  'machine_id',
+  'quote_request_id',
+  'buyer_user_id',
+  'transaction_case_id',
   'created_at',
   'updated_at',
 ].join(',');

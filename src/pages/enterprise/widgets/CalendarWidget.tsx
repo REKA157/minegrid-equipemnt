@@ -1,6 +1,7 @@
 import { Widget } from '../types';
 import { Calendar, Plus, User } from 'lucide-react';
 import React from 'react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const CalendarWidget = ({ widget, data, onShowRentalForm, onUpdateStatus, onShowRentalDetails, onEditRental }: {
   widget: Widget;
@@ -10,6 +11,7 @@ export const CalendarWidget = ({ widget, data, onShowRentalForm, onUpdateStatus,
   onShowRentalDetails: (rental: any) => void;
   onEditRental: (rental: any) => void;
 }) => {
+  const { formatCurrency } = useWidgetMadCurrency();
   const rentalStatuses = ['Confirmée', 'En préparation', 'Prête', 'En cours', 'Terminée', 'Annulée'];
 
   const getStatusColor = (status: string) => {
@@ -31,13 +33,6 @@ export const CalendarWidget = ({ widget, data, onShowRentalForm, onUpdateStatus,
       case 'medium': return 'bg-yellow-500';
       default: return 'bg-gray-500';
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
   };
 
   const formatDate = (dateString: string) => {

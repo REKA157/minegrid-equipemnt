@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, MapPin, User, Clock, DollarSign, ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 interface Rental {
   id: string;
@@ -15,7 +16,7 @@ interface Rental {
 }
 
 interface UpcomingRentalsWidgetProps {
-  data: Rental[];
+  data: Rental[] | null | undefined;
   widgetSize?: string;
   onAction?: (action: string, data: any) => void;
 }
@@ -75,8 +76,10 @@ function daysUntil(iso: string) {
 }
 
 export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: UpcomingRentalsWidgetProps) {
-  const rentals = data && data.length > 0 ? data : MOCK_RENTALS;
+  /** Données réelles : tableau vide affiche « aucune location » ; undefined → démo */
+  const rentals = data !== undefined && data !== null ? data : MOCK_RENTALS;
   const [selected, setSelected] = useState<string | null>(null);
+  const { formatCurrency, madToDisplay, currentCurrency } = useWidgetMadCurrency();
 
   const sortedRentals = [...rentals].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
@@ -102,9 +105,12 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
         </div>
         <div className="bg-orange-50 rounded-lg p-2 text-center">
           <div className="text-lg font-bold text-orange-700">
-            {totalRevenue >= 1e6 ? `${(totalRevenue / 1e6).toFixed(1)}M` : `${(totalRevenue / 1000).toFixed(0)}k`}
+            {(() => {
+              const d = madToDisplay(totalRevenue);
+              return d >= 1e6 ? `${(d / 1e6).toFixed(1)}M` : `${(d / 1000).toFixed(0)}k`;
+            })()}
           </div>
-          <div className="text-[10px] text-orange-600">MAD prévus</div>
+          <div className="text-[10px] text-orange-600">{currentCurrency} prévus</div>
         </div>
       </div>
 
@@ -162,7 +168,8 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
                 <div className="px-3 pb-3 pt-1 border-t border-gray-100 ml-7 space-y-2">
                   <div className="flex items-center gap-1.5 text-xs text-gray-700">
                     <DollarSign className="h-3 w-3 text-gray-400" />
-                    {rental.dailyRate.toLocaleString('fr-FR')} MAD/jour · Total: <span className="font-semibold">{(rental.dailyRate * days).toLocaleString('fr-FR')} MAD</span>
+                    {formatCurrency(rental.dailyRate)}/jour · Total:{' '}
+                    <span className="font-semibold">{formatCurrency(rental.dailyRate * days)}</span>
                   </div>
                   {rental.clientPhone && (
                     <div className="text-xs text-gray-600">

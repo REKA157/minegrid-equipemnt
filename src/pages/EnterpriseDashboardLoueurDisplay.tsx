@@ -8,6 +8,8 @@ const WIDGETS_LOUEUR_IDS = [
   'upcoming-rentals',
   'rental-pipeline',
   'daily-actions',
+  'ai-insights',
+  'ai-optimization',
 ];
 
 const EnterpriseDashboardLoueurDisplay: React.FC = () => (

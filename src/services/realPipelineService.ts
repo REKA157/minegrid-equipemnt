@@ -14,7 +14,14 @@ export interface RealLead {
   id: string;
   seller_id: string;
   title: string;
-  stage: 'Prospection' | 'Qualification' | 'Proposition' | 'Négociation' | 'Conclu' | 'Perdu';
+  stage:
+    | 'Prospection'
+    | 'Qualification'
+    | 'Devis'
+    | 'Proposition'
+    | 'Négociation'
+    | 'Conclu'
+    | 'Perdu';
   priority: 'high' | 'medium' | 'low';
   value: number;
   probability: number;
@@ -26,8 +33,12 @@ export interface RealLead {
   contact_company?: string;
   contact_phone?: string;
   contact_email?: string;
-  source?: 'message' | 'offer' | 'manual' | 'website';
+  source?: 'message' | 'offer' | 'manual' | 'website' | 'quote_request';
   source_id?: string;
+  machine_id?: string | null;
+  quote_request_id?: string | null;
+  buyer_user_id?: string | null;
+  transaction_case_id?: string | null;
   created_at: string;
   updated_at: string;
 }

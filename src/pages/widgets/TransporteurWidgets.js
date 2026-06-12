@@ -1,11 +1,25 @@
 import React from 'react';
-import { Truck, Globe, DollarSign, Calendar } from 'lucide-react';
+import { Truck, Globe, DollarSign, Calendar, MapPinned } from 'lucide-react';
 
 // Widgets pour le métier Transporteur / Logistique
 export const TransporteurWidgets = {
   metier: 'Transporteur / Logistique',
   description: 'Transport et livraison d\'équipements',
   widgets: [
+    {
+      id: 'tx-assigned-transports',
+      type: 'list',
+      title: 'Transports dossiers (assignés)',
+      description: 'Enlèvements / livraisons rattachés à vos dossiers transaction',
+      icon: MapPinned,
+      dataSource: 'transport_requests',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true
+      }
+    },
     {
       id: 'active-deliveries',
       type: 'metric',

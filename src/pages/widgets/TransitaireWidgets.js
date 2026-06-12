@@ -1,11 +1,25 @@
 import React from 'react';
-import { FileText, Globe, BarChart3, FileText as FileText2 } from 'lucide-react';
+import { FileText, Globe, BarChart3, FileText as FileText2, FolderOpen } from 'lucide-react';
 
 // Widgets pour le métier Transitaire / Freight Forwarder
 export const TransitaireWidgets = {
   metier: 'Transitaire / Freight Forwarder',
   description: 'Gestion des opérations douanières et logistiques internationales',
   widgets: [
+    {
+      id: 'transaction-cases',
+      type: 'list',
+      title: 'Dossiers transaction (douane)',
+      description: 'Dossiers engins où vous intervenez',
+      icon: FolderOpen,
+      dataSource: 'transaction_cases',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true
+      }
+    },
     {
       id: 'customs-clearance',
       type: 'metric',

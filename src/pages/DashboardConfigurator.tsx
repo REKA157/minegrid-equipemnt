@@ -10,6 +10,9 @@ import {
 import { WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+import { useAuth } from '../hooks/useAuth';
+import { scopedStorageKey, setAccountItem } from '../utils/accountLocalStorage';
+
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 // Configuration des métiers avec leurs widgets
@@ -323,6 +326,7 @@ function generateCompactLayout(selectedWidgets: string[], widgetSizes: {[key: st
 }
 
 const DashboardConfigurator: React.FC = () => {
+  const { user } = useAuth();
   const [activeStep, setActiveStep] = useState(1);
   const [selectedMetier, setSelectedMetier] = useState('');
   const [selectedWidgets, setSelectedWidgets] = useState<string[]>([]);
@@ -424,27 +428,21 @@ const DashboardConfigurator: React.FC = () => {
       createdAt: new Date().toISOString()
     };
 
-    // Sauvegarder la configuration
-    localStorage.setItem(`enterpriseDashboardConfig_${selectedMetier}`, JSON.stringify(config));
-    
-    // Rediriger vers le tableau de bord selon le métier
-    if (selectedMetier === 'loueur') {
-      window.location.hash = '#dashboard-loueur-display';
-    } else if (selectedMetier === 'mecanicien') {
-      window.location.hash = '#dashboard-mecanicien-display';
-    } else if (selectedMetier === 'transporteur') {
-      window.location.hash = '#dashboard-transporteur-display';
-    } else if (selectedMetier === 'transitaire') {
-      window.location.hash = '#dashboard-transitaire-display';
-    } else if (selectedMetier === 'logisticien') {
-      window.location.hash = '#dashboard-logisticien-display';
-    } else if (selectedMetier === 'investisseur') {
-      window.location.hash = '#dashboard-investisseur-display';
-    } else if (selectedMetier === 'courtier') {
-      window.location.hash = '#dashboard-courtier-display';
+    const uid = user?.id ?? null;
+    const metierCfgKey = `enterpriseDashboardConfig_${selectedMetier}`;
+    const cfgJson = JSON.stringify(config);
+
+    if (uid) {
+      localStorage.setItem(scopedStorageKey(uid, metierCfgKey), cfgJson);
+      setAccountItem(uid, 'enterpriseDashboardConfigured', 'true');
+      setAccountItem(uid, 'lastActiveMetier', selectedMetier);
     } else {
-      window.location.hash = '#dashboard-entreprise-display';
+      localStorage.setItem(metierCfgKey, cfgJson);
+      localStorage.setItem('enterpriseDashboardConfigured', 'true');
+      localStorage.setItem('lastActiveMetier', selectedMetier);
     }
+
+    window.location.hash = '#dashboard-entreprise-display';
   };
 
   const handleSaveConfig = () => {
@@ -466,7 +464,15 @@ const DashboardConfigurator: React.FC = () => {
       notifications: true,
       createdAt: new Date().toISOString()
     };
-    localStorage.setItem(`enterpriseDashboardConfig_${selectedMetier}`, JSON.stringify(config));
+    const uid = user?.id ?? null;
+    const metierCfgKey = `enterpriseDashboardConfig_${selectedMetier}`;
+    if (uid) {
+      localStorage.setItem(scopedStorageKey(uid, metierCfgKey), JSON.stringify(config));
+      setAccountItem(uid, 'lastActiveMetier', selectedMetier);
+    } else {
+      localStorage.setItem(metierCfgKey, JSON.stringify(config));
+      localStorage.setItem('lastActiveMetier', selectedMetier);
+    }
     setSaveMessage('Configuration sauvegardée !');
     setTimeout(() => setSaveMessage(''), 2000);
   };

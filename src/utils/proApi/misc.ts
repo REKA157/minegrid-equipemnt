@@ -71,8 +71,18 @@ export async function getPortalStats() {
     // Calculer les équipements ajoutés ce mois
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const equipmentThisMonth = equipment.filter(e => new Date(e.created_at) >= monthStart).length;
-    const machinesThisMonth = userMachines.filter(m => new Date(m.created_at) >= monthStart).length;
+    const createdAtMs = (v: unknown) => {
+      if (v == null) return NaN;
+      if (typeof v === 'string' || typeof v === 'number') return new Date(v).getTime();
+      if (v instanceof Date) return v.getTime();
+      return NaN;
+    };
+    const equipmentThisMonth = equipment.filter(
+      (e) => createdAtMs(e.created_at) >= monthStart.getTime(),
+    ).length;
+    const machinesThisMonth = userMachines.filter(
+      (m) => createdAtMs(m.created_at) >= monthStart.getTime(),
+    ).length;
     const totalThisMonth = equipmentThisMonth + machinesThisMonth;
 
     const stats = {

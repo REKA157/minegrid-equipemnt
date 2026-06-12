@@ -1,11 +1,14 @@
-// Fonction pour formater les montants en devise
+import { useCurrencyStore } from '../stores/currencyStore';
+import { formatMadMoney } from './madMoneyDisplay';
+
+/**
+ * Montants dashboard vendeur en base MAD → devise du store (détection IP / sélecteur).
+ * Pour un re-render au changement de devise, le composant doit s’abonner au store,
+ * ex. : `useCurrencyStore((s) => s.currentCurrency)`.
+ */
 export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'currency',
-    currency: 'MAD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  const { currentCurrency, rates } = useCurrencyStore.getState();
+  return formatMadMoney(amount, currentCurrency, rates);
 };
 
 // Fonction pour formater les pourcentages

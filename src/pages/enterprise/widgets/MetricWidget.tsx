@@ -4,6 +4,7 @@ import { iconMap } from './iconMap';
 import { DollarSign, TrendingUp, X } from 'lucide-react';
 import React, { useState } from 'react';
 import { DonutChart } from './DonutChart';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const MetricWidget = ({ 
   widget, 
@@ -14,6 +15,7 @@ export const MetricWidget = ({
   data: any; 
   widgetSize?: 'small' | 'normal' | 'large';
 }) => {
+  const { currentCurrency } = useWidgetMadCurrency();
   // Utiliser le hook d'adaptation
   const { getTextSize, getGridCols, formatCurrency, formatNumber } = useAdaptiveWidget(widgetSize);
 
@@ -208,7 +210,7 @@ export const MetricWidget = ({
           <>
             <div className="text-2xl font-bold text-gray-900">
               {typeof mainValue === 'number' ? mainValue.toLocaleString() : mainValue}
-              {data.occupancy ? '%' : data.revenue || data.value ? ' MAD' : ''}
+              {data.occupancy ? '%' : data.revenue || data.value ? ` ${currentCurrency}` : ''}
             </div>
             <div className="text-xs text-gray-600">
               {widget.description}

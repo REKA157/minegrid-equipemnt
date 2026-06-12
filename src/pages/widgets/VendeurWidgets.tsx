@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, TrendingUp, Package, Calendar, Target, Users, AlertTriangle, BarChart3 } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, Target, Users, AlertTriangle, BarChart3, FolderOpen } from 'lucide-react';
 
 // Interfaces TypeScript pour les widgets vendeur
 interface WidgetFeature {
@@ -101,6 +101,22 @@ export const VendeurWidgets: VendeurWidgetsConfig = {
         stockAnalytics: true,
         recommendations: true,
         quickActions: true,
+      }
+    },
+    {
+      id: 'transaction-cases',
+      type: 'list',
+      title: 'Dossiers transaction',
+      description: 'Vue unifiée des dossiers engins (demandes, financement, livraison…) selon vos droits',
+      icon: FolderOpen,
+      priority: 4,
+      category: 'transaction',
+      dataSource: 'transaction_cases',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true,
       }
     },
     {

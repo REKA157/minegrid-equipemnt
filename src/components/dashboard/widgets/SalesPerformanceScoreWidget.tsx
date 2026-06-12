@@ -6,6 +6,7 @@ import { apiCall, showNotification } from '../../../services/apiService';
 import { supabaseClient } from '../../../utils/supabaseClient';
 import { aiWidgetService } from '../../../services/aiWidgetService';
 import type { AIRecommendation } from '../../../services/aiWidgetService';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 interface SalesPerformanceScoreData {
   score: number;
@@ -70,6 +71,7 @@ function mapAIRecommendationsToRows(
 // Score convergent : catalogue + pipeline + couverture annonces (voir getSalesPerformanceData)
 // Toujours chargé via l’API — pas de données mock via props.
 const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
+  const { formatCurrency } = useWidgetMadCurrency();
   const [realData, setRealData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -127,15 +129,6 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
       cancelled = true;
     };
   }, []);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
@@ -214,7 +207,7 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
     }, 400);
   };
 
-  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [showQuickActions, setShowQuickActions] = useState(false);
 
   const staticRecommendationRows: PerformanceRecommendationRow[] = useMemo(
     () =>

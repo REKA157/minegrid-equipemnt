@@ -85,7 +85,7 @@ export function MessagesTab({ messages, onRefresh }: { messages: any[], onRefres
             <hr>
             <p>Cordialement,<br>L'équipe Minegrid Équipement</p>
           `,
-          machineId: selectedMessage.machine_id || 'reply',
+          verifiedReplyToOriginalMessageId: selectedMessage.id,
           messageId: replyData.id
         }
       });

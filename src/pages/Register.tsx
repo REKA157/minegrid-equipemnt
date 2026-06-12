@@ -4,6 +4,7 @@ import { Crown, Star, Building, Check, Lock } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
 import PaymentPage from './PaymentPage';
 import { toast } from '../utils/toast';
+import { setAccountItem, removeAccountItem } from '../utils/accountLocalStorage';
 const TEMP_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
 
 interface RegisterProps {
@@ -270,8 +271,35 @@ export default function Register({ initialType }: RegisterProps) {
 
   const finalizePaidRegistration = async () => {
     try {
-      localStorage.setItem('selectedSubscription', formData.subscription);
-      localStorage.setItem('subscriptionActivated', 'true');
+      const sub = formData.subscription;
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const uid = authUser?.id ?? null;
+
+      setAccountItem(uid, 'selectedSubscription', sub);
+      setAccountItem(uid, 'subscriptionActivated', 'true');
+
+      /** Aligne Dashboard / Header sur le plan paye (premium ≠ entreprise). */
+      if (sub === 'premium' || sub === 'pro' || sub === 'enterprise') {
+        setAccountItem(uid, 'userSubscription', sub);
+        setAccountItem(uid, 'tempHasActiveSubscription', 'true');
+        setAccountItem(uid, 'tempSubscription', sub);
+        removeAccountItem(uid, 'subscriptionCancelled');
+      }
+      if (sub !== 'enterprise') {
+        removeAccountItem(uid, 'enterpriseService');
+        removeAccountItem(uid, 'userServices');
+      }
+
+      /** Premium / Pro → espace « classique », pas la grille configurateur ENT. */
+      if (sub === 'premium') {
+        window.location.hash = '#premium-dashboard';
+        return;
+      }
+      if (sub === 'pro') {
+        window.location.hash = '#pro';
+        return;
+      }
+
       window.location.hash = '#dashboard';
     } finally {
       setShowPayment(false);

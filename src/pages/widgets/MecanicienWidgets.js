@@ -1,11 +1,25 @@
 import React from 'react';
-import { Clock, Wrench, Package, Users } from 'lucide-react';
+import { Clock, Wrench, Package, Users, ClipboardCheck } from 'lucide-react';
 
 // Widgets pour le métier Mécanicien / Atelier
 export const MecanicienWidgets = {
   metier: 'Mécanicien / Atelier',
   description: 'Maintenance et réparation d\'équipements',
   widgets: [
+    {
+      id: 'tx-assigned-inspections',
+      type: 'list',
+      title: 'Inspections dossiers transaction',
+      description: 'Contrôles engins qui vous sont assignés sur les dossiers',
+      icon: ClipboardCheck,
+      dataSource: 'inspection_requests',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true
+      }
+    },
     {
       id: 'interventions-today',
       type: 'chart',

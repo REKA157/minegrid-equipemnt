@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  Package, TrendingUp, AlertTriangle, Plus, Download,
-  Camera, Star, Send, BarChart3, DollarSign, ChevronRight, ChevronDown,
+  Package, AlertTriangle, Plus, Download,
+  Send, BarChart3, DollarSign, ChevronRight, ChevronDown,
   Users, ExternalLink, Copy, Scale,
 } from 'lucide-react';
 import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
@@ -11,6 +11,7 @@ import { MACHINE_LIST_COLUMNS, SELLER_MACHINES_MAX_ROWS } from '../../../constan
 import { logger } from '../../../utils/logger';
 import {
   buildLeadStockSuggestions,
+  isContactLabelRedundantWithLeadTitle,
   type LeadStockSuggestionRow,
   type StockMachineBrief,
 } from '../../../utils/stockLeadSuggestions';
@@ -132,6 +133,40 @@ interface MarketReferenceMachine {
   price: number;
 }
 
+/** Comparaison robuste (espaces, formes Unicode NFC) entre libellés de catégorie. */
+function categoryLabelsEqual(a: string, b: string): boolean {
+  return a.normalize('NFC').trim() === b.normalize('NFC').trim();
+}
+
+const STOCK_WIDGET_CATEGORY_OPTIONS = [
+  'Toutes',
+  'Pelle',
+  'Chargeur',
+  'Bouteur',
+  'Excavatrice',
+  'Camion',
+  'Compacteur',
+  'Tombereau',
+  'Grue',
+  'Niveleuse',
+  'Finisseur',
+  'Tracteur',
+  'Groupe électrogène',
+  'Compresseur',
+  'Bétonnière',
+  'Foreuse',
+  'Concasseur',
+  'Crible',
+  'Malaxeur',
+  'Pompe',
+  'Chariot élévateur',
+  'Nacelle',
+  'Échafaudage',
+  'Outillage',
+  'Matériel',
+  'Autre',
+] as const;
+
 function machineRowIsOwnListing(
   row: { id?: string; sellerid?: string | null; seller_id?: string | null },
   authUserId: string,
@@ -177,14 +212,13 @@ const StockStatusWidget = () => {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('Toutes');
   const [selectedAnciennete, setSelectedAnciennete] = useState('Toutes');
-  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [showQuickActions, setShowQuickActions] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
   const [leadStockRows, setLeadStockRows] = useState<LeadStockSuggestionRow[]>([]);
   const [leadAlignHint, setLeadAlignHint] = useState<string | null>(null);
-  const [showLeadAlign, setShowLeadAlign] = useState(true);
+  const [showLeadAlign, setShowLeadAlign] = useState(false);
   const [marketReferenceMachines, setMarketReferenceMachines] = useState<MarketReferenceMachine[]>([]);
-  const [showMarketSitePanel, setShowMarketSitePanel] = useState(true);
+  const [showMarketSitePanel, setShowMarketSitePanel] = useState(false);
   const equipmentsRef = useRef(equipments);
   equipmentsRef.current = equipments;
 
@@ -228,82 +262,49 @@ const StockStatusWidget = () => {
     }
   }, []);
 
-  const categories = [
-    'Toutes', 
-    'Pelle', 
-    'Chargeur', 
-    'Bouteur', 
-    'Excavatrice', 
-    'Camion',
-    'Compacteur',
-    'Tombereau',
-    'Grue',
-    'Niveleuse',
-    'Finisseur',
-    'Tracteur',
-    'Groupe électrogène',
-    'Compresseur',
-    'Bétonnière',
-    'Foreuse',
-    'Concasseur',
-    'Crible',
-    'Malaxeur',
-    'Pompe',
-    'Chariot élévateur',
-    'Nacelle',
-    'Échafaudage',
-    'Outillage',
-    'Matériel',
-    'Autre'
-  ];
+  const categories = useMemo(() => {
+    const fromData = equipments
+      .map((e) => e.category?.normalize('NFC').trim())
+      .filter((c): c is string => Boolean(c));
+    const merged = new Set<string>(
+      STOCK_WIDGET_CATEGORY_OPTIONS.filter((c) => c !== 'Toutes'),
+    );
+    for (const c of fromData) merged.add(c);
+    const rest = [...merged].sort((a, b) => a.localeCompare(b, 'fr'));
+    return ['Toutes', ...rest];
+  }, [equipments]);
+
   const anciennetes = ['Toutes', '0-30j', '30-60j', '60j+', '90j+'];
 
-  // Logique de filtrage des équipements
-  const filteredEquipments = equipments.filter(equipment => {
-    // Filtre par catégorie
-    if (selectedCategory !== 'Toutes' && equipment.category !== selectedCategory) {
-      logger.info(`❌ Équipement "${equipment.name}" filtré: catégorie="${equipment.category}" ≠ sélection="${selectedCategory}"`);
-      return false;
-    }
-    
-    // Filtre par ancienneté
-    if (selectedAnciennete !== 'Toutes') {
-      const days = equipment.daysInStock;
-      switch (selectedAnciennete) {
-        case '0-30j':
-          if (days > 30) {
-            logger.info(`❌ Équipement "${equipment.name}" filtré: ${days} jours > 30`);
-            return false;
-          }
-          break;
-        case '30-60j':
-          if (days < 30 || days > 60) {
-            logger.info(`❌ Équipement "${equipment.name}" filtré: ${days} jours hors 30-60`);
-            return false;
-          }
-          break;
-        case '60j+':
-          if (days < 60) {
-            logger.info(`❌ Équipement "${equipment.name}" filtré: ${days} jours < 60`);
-            return false;
-          }
-          break;
-        case '90j+':
-          if (days < 90) {
-            logger.info(`❌ Équipement "${equipment.name}" filtré: ${days} jours < 90`);
-            return false;
-          }
-          break;
+  const filteredEquipments = useMemo(() => {
+    return equipments.filter((equipment) => {
+      if (
+        selectedCategory !== 'Toutes' &&
+        !categoryLabelsEqual(equipment.category, selectedCategory)
+      ) {
+        return false;
       }
-    }
-    
-    logger.info(`✅ Équipement "${equipment.name}" accepté: catégorie="${equipment.category}", jours="${equipment.daysInStock}"`);
-    return true;
-  });
 
-  // Log du filtrage
-  logger.info(`🔍 Filtrage: catégorie="${selectedCategory}", ancienneté="${selectedAnciennete}"`);
-  logger.info(`📊 Résultat: ${filteredEquipments.length}/${equipments.length} équipements affichés`);
+      if (selectedAnciennete !== 'Toutes') {
+        const days = equipment.daysInStock;
+        switch (selectedAnciennete) {
+          case '0-30j':
+            if (days > 30) return false;
+            break;
+          case '30-60j':
+            if (days < 30 || days > 60) return false;
+            break;
+          case '60j+':
+            if (days < 60) return false;
+            break;
+          case '90j+':
+            if (days < 90) return false;
+            break;
+        }
+      }
+      return true;
+    });
+  }, [equipments, selectedCategory, selectedAnciennete]);
 
   const marketStatsByCategory = useMemo(() => {
     const acc = new Map<string, number[]>();
@@ -332,7 +333,9 @@ const StockStatusWidget = () => {
 
   const filteredMarketSamples = useMemo(() => {
     if (selectedCategory === 'Toutes') return marketReferenceMachines;
-    return marketReferenceMachines.filter((m) => m.category === selectedCategory);
+    return marketReferenceMachines.filter((m) =>
+      categoryLabelsEqual(m.category, selectedCategory),
+    );
   }, [marketReferenceMachines, selectedCategory]);
 
   // Charger les données réelles depuis Supabase
@@ -542,7 +545,9 @@ const StockStatusWidget = () => {
       }));
       
       /* Échantillon « marché site » : annonces publiques hors compte vendeur (provisoire, comparaison prix). */
-      const ownIds = new Set((userMachines || []).map((m: { id: string }) => String(m.id)));
+      const ownIds = new Set<string>(
+        (userMachines ?? []).map((m) => String((m as { id?: unknown }).id ?? '')),
+      );
       const { data: proLinkRow } = await supabaseClient
         .from('pro_clients')
         .select('id')
@@ -1042,9 +1047,6 @@ const StockStatusWidget = () => {
         select::-webkit-scrollbar-thumb:hover {
           background: #ea580c;
         }
-        select {
-          max-height: 200px;
-        }
         select option {
           padding: 8px 12px;
           border-bottom: 1px solid #f3f4f6;
@@ -1078,7 +1080,7 @@ const StockStatusWidget = () => {
       </div>
 
       {/* Filtres */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="relative z-20 flex flex-wrap items-center gap-2 mb-3">
         <div className="relative">
           <select
             className="appearance-none rounded border border-orange-200 bg-white text-orange-700 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300 focus:border-orange-400 cursor-pointer min-w-[100px] max-w-[140px] pr-6"
@@ -1088,7 +1090,6 @@ const StockStatusWidget = () => {
               backgroundImage: 'none',
               scrollbarWidth: 'thin',
               scrollbarColor: '#f97316 #fef3c7',
-              maxHeight: '50px'
             }}
           >
             {categories.map(cat => (
@@ -1113,7 +1114,6 @@ const StockStatusWidget = () => {
               backgroundImage: 'none',
               scrollbarWidth: 'thin',
               scrollbarColor: '#f97316 #fef3c7',
-              maxHeight: '50px'
             }}
           >
             {anciennetes.map(a => (
@@ -1135,85 +1135,78 @@ const StockStatusWidget = () => {
         </div>
       </div>
 
-      {/* Actions rapides connectées aux services communs */}
-      <div className="bg-white rounded-lg border border-orange-200 p-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-orange-900 flex items-center gap-2">
-            <Package className="w-4 h-4" />
-            Actions Rapides
-          </h4>
+      {/* Raccourcis : pas de doublon avec les boutons par annonce (photo, boost, offre sur chaque ligne). */}
+      <div className="bg-white rounded-lg border border-orange-200 p-2.5 mb-3">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="min-w-0">
+            <h4 className="text-xs font-semibold text-orange-900 flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 shrink-0" />
+              Raccourcis stock
+            </h4>
+            <p className="text-[10px] text-orange-800/80 mt-0.5 leading-snug">
+              Booster, offre flash et photo : boutons sur chaque annonce ci-dessous.
+            </p>
+          </div>
           <button
-            className="p-1 text-orange-500 hover:text-orange-700 transition-colors"
+            className="p-0.5 text-orange-500 hover:text-orange-700 transition-colors shrink-0"
             onClick={() => setShowQuickActions((v) => !v)}
             title={showQuickActions ? 'Fermer' : 'Ouvrir'}
           >
-            {showQuickActions ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            {showQuickActions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </button>
         </div>
         {showQuickActions && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
             <button
               onClick={(e) => handleQuickAction('add-equipment', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
             >
-              <Plus className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Ajouter</span>
+              <Plus className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Nouvelle annonce
+                <span className="block text-[9px] font-normal text-orange-700/85">Publication</span>
+              </span>
             </button>
-            
+
             <button
               onClick={(e) => handleQuickAction('export-stock', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
             >
-              <Download className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Exporter</span>
+              <Download className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              Exporter stock
             </button>
-            
-            <button
-              onClick={(e) => handleQuickAction('boost-visibility', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
-            >
-              <TrendingUp className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Booster</span>
-            </button>
-            
-            <button
-              onClick={(e) => handleQuickAction('create-flash-offer', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
-            >
-              <Star className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Offre Flash</span>
-            </button>
-            
-            <button
-              onClick={(e) => handleQuickAction('add-photo', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
-            >
-              <Camera className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Photo</span>
-            </button>
-            
+
             <button
               onClick={(e) => handleQuickAction('send-promotion', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
             >
-              <Send className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Promotion</span>
+              <Send className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Campagne promo
+                <span className="block text-[9px] font-normal text-amber-800/90">démo</span>
+              </span>
             </button>
-            
+
             <button
               onClick={(e) => handleQuickAction('analyze-performance', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
             >
-              <BarChart3 className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Analyse</span>
+              <BarChart3 className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Analyse agrégée
+                <span className="block text-[9px] font-normal text-amber-800/90">démo</span>
+              </span>
             </button>
-            
+
             <button
               onClick={(e) => handleQuickAction('optimize-pricing', undefined, e)}
-              className="flex flex-col items-center p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-xs"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
             >
-              <DollarSign className="w-4 h-4 text-orange-600 mb-1" />
-              <span className="text-orange-800 font-medium">Optimiser</span>
+              <DollarSign className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Suggestions prix
+                <span className="block text-[9px] font-normal text-amber-800/90">démo</span>
+              </span>
             </button>
           </div>
         )}
@@ -1261,8 +1254,12 @@ const StockStatusWidget = () => {
                     <div className="min-w-0">
                       <div className="font-medium text-gray-900">{row.leadTitle}</div>
                       <div className="text-xs text-gray-500">
-                        {row.contactLabel}
-                        <span className="mx-1">·</span>
+                        {!isContactLabelRedundantWithLeadTitle(row.leadTitle, row.contactLabel) ? (
+                          <>
+                            {row.contactLabel}
+                            <span className="mx-1">·</span>
+                          </>
+                        ) : null}
                         {row.stage}
                       </div>
                       {row.monitorNeedsSummary ? (

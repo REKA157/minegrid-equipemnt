@@ -1,11 +1,25 @@
 import React from 'react';
-import { Building2, Truck, Target, Package } from 'lucide-react';
+import { Building2, Truck, Target, Package, FolderOpen } from 'lucide-react';
 
 // Widgets pour le métier Logisticien / Supply Chain
 export const LogisticienWidgets = {
   metier: 'Logisticien / Supply Chain',
   description: 'Optimisation de la chaîne logistique',
   widgets: [
+    {
+      id: 'transaction-cases',
+      type: 'list',
+      title: 'Dossiers transaction',
+      description: 'Coordination stockage / livraison sur les dossiers engins',
+      icon: FolderOpen,
+      dataSource: 'transaction_cases',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true
+      }
+    },
     {
       id: 'warehouse-occupancy',
       type: 'metric',

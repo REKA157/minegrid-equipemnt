@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const EditRentalForm = ({
   rental,
@@ -11,6 +12,7 @@ export const EditRentalForm = ({
   onSubmit: (data: any) => void;
   equipment: any[];
 }) => {
+  const { formatCurrency } = useWidgetMadCurrency();
   const [formData, setFormData] = useState({
     equipment_id: rental.equipment_id || '',
     client_name: rental.clientName || 'Client Test',
@@ -29,13 +31,6 @@ export const EditRentalForm = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
   };
 
   return (

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CreditCard, Lock, Check, X, ArrowLeft, Gift } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
 import { toast } from '../utils/toast';
+import { setAccountItem } from '../utils/accountLocalStorage';
 import StripePaymentForm from '../components/StripePaymentForm';
 interface PaymentPageProps {
   subscription: {
@@ -86,9 +87,9 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
       if (userError || !user) {
         // Flux inscription: l'utilisateur n'est pas encore connecté.
         // On conserve l'activation localement; Register finalisera l'inscription.
-        localStorage.setItem('selectedSubscription', subscription.id);
-        localStorage.setItem('subscriptionActivated', 'true');
-        localStorage.setItem('promoCodeUsed', VALID_PROMO_CODE);
+        setAccountItem(null, 'selectedSubscription', subscription.id);
+        setAccountItem(null, 'subscriptionActivated', 'true');
+        setAccountItem(null, 'promoCodeUsed', VALID_PROMO_CODE);
         onSuccess();
         return;
       }
@@ -112,10 +113,10 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
         throw subscriptionError;
       }
 
-      // Sauvegarder dans localStorage
-      localStorage.setItem('selectedSubscription', subscription.id);
-      localStorage.setItem('subscriptionActivated', 'true');
-      localStorage.setItem('promoCodeUsed', VALID_PROMO_CODE);
+      // Sauvegarder par compte
+      setAccountItem(user.id, 'selectedSubscription', subscription.id);
+      setAccountItem(user.id, 'subscriptionActivated', 'true');
+      setAccountItem(user.id, 'promoCodeUsed', VALID_PROMO_CODE);
 
       toast('✅ Abonnement activé avec succès grâce au code promo ! Accès temporaire de 30 jours.');
       onSuccess();

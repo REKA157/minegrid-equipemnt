@@ -24,6 +24,22 @@ import {
 } from '../utils/globalMonitorCoverage';
 import { equipmentNeedsToNotesBlock } from '../utils/globalMonitorEquipmentNeedsText';
 
+/**
+ * N'enregistre pas contact_company si c'est le même libellé que le titre projet
+ * (sinon le Kanban répète deux fois l'intitulé sous « Prospect AO - … »).
+ */
+function contactCompanyForPipeline(projectTitle: string, organization: string | null | undefined): string | undefined {
+  const o = (organization || '').trim();
+  if (!o) return undefined;
+  const p = (projectTitle || '').trim();
+  const oLow = o.toLowerCase();
+  const pLow = p.toLowerCase();
+  if (oLow === pLow) return undefined;
+  if (oLow.length >= 8 && pLow.includes(oLow)) return undefined;
+  if (pLow.length >= 8 && oLow.includes(pLow)) return undefined;
+  return o;
+}
+
 const DEMO_PROJECTS: MonitorProject[] = [
   { id: '1', title: "Mine d'or de Kédougou", type: 'mine', phase: 'construction', country: 'Senegal', region: 'Kédougou', lat: 12.56, lon: -12.18, budget_usd: 350_000_000, start_date: '2025-06-01', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd1', confidence: 0.8, updated_at: '2026-03-01' },
   { id: '2', title: 'Autoroute Dakar-Saint-Louis', type: 'road', phase: 'tender', country: 'Senegal', region: 'Saint-Louis', lat: 15.95, lon: -16.27, budget_usd: 820_000_000, start_date: '2026-01-15', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd2', confidence: 0.7, updated_at: '2026-03-02' },
@@ -152,6 +168,9 @@ export default function GlobalMonitor() {
     }
   }, [selectedId]);
 
+  const activeMetier = localStorage.getItem('lastActiveMetier') || 'vendeur';
+  const assignedToLabel = activeMetier.charAt(0).toUpperCase() + activeMetier.slice(1);
+
   const handleCreateLeadFromContact = useCallback(async (contact: ProjectContact) => {
     if (!selectedDetail) return;
     const { data: authData } = await supabaseClient.auth.getUser();
@@ -168,7 +187,7 @@ export default function GlobalMonitor() {
       value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
       probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
       next_action: 'Prendre contact et qualifier le besoin',
-      assigned_to: 'Vendeur',
+      assigned_to: assignedToLabel,
       last_contact: new Date().toISOString(),
       notes: [
         `Source AO: ${selectedDetail.source || 'inconnue'}`,
@@ -177,7 +196,7 @@ export default function GlobalMonitor() {
         gmNeedsNote,
       ].filter(Boolean).join('\n'),
       contact_name: contact.person_name || undefined,
-      contact_company: contact.organization || undefined,
+      contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
       contact_phone: contact.phone || undefined,
       contact_email: contact.email || undefined,
       source: 'manual',
@@ -266,7 +285,7 @@ export default function GlobalMonitor() {
           value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
           probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
           next_action: 'Prendre contact et qualifier le besoin',
-          assigned_to: 'Vendeur',
+          assigned_to: assignedToLabel,
           last_contact: new Date().toISOString(),
           notes: [
             `Source AO: ${selectedDetail.source || 'inconnue'}`,
@@ -277,7 +296,7 @@ export default function GlobalMonitor() {
             gmNeedsNote,
           ].filter(Boolean).join('\n'),
           contact_name: contact.person_name || undefined,
-          contact_company: contact.organization || undefined,
+          contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
           contact_phone: contact.phone || undefined,
           contact_email: contact.email || undefined,
           source: 'manual',

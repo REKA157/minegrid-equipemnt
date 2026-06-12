@@ -18,6 +18,9 @@ export interface QuoteRequestPayload {
   need_by_date?: string | null;
   message?: string | null;
   source?: string | null;
+  /** Renseigne cote serveur client si session ; requis par RLS pour insert authentifie */
+  buyer_user_id?: string | null;
+  transaction_case_id?: string | null;
 }
 
 export interface QuoteRequestRow extends QuoteRequestPayload {
@@ -25,6 +28,17 @@ export interface QuoteRequestRow extends QuoteRequestPayload {
   status: QuoteRequestStatus;
   created_at: string;
   updated_at: string;
+}
+
+/** Retour de `submitQuoteRequest` : dossier seulement si acheteur connecté, vendeur résolu, et liaison SQL/RLS OK. */
+export interface SubmitQuoteResult {
+  quoteId: string;
+  transactionCaseId: string | null;
+  buyerLoggedIn: boolean;
+  sellerResolved: boolean;
+  linkAttempted: boolean;
+  /** Après création du dossier : participants buyer/seller insérés sans erreur (sinon voir patch RLS participants). */
+  participantsLinked?: boolean | null;
 }
 
 function cleanQuotePayload(payload: QuoteRequestPayload): QuoteRequestPayload {
@@ -45,17 +59,260 @@ function cleanQuotePayload(payload: QuoteRequestPayload): QuoteRequestPayload {
   };
 }
 
+function isMissingTableError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  const msg = (e?.message || '').toLowerCase();
+  return e?.code === 'PGRST205' || msg.includes('could not find the table');
+}
+
+/** Accepte tout UUID Postgres / RFC (versions 1–8), sans rejeter falsed positive côté UI. */
+export function parseSellerUuid(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)
+  ) {
+    return null;
+  }
+  return t;
+}
+
+function isMissingSchemaColumnError(err: unknown): boolean {
+  const hint = ((err as { message?: string })?.message || '').toLowerCase();
+  return (
+    hint.includes('column') &&
+    (hint.includes('does not exist') || hint.includes('schema cache'))
+  );
+}
+
+async function fetchSellerUserIdFromMachine(machineId: string): Promise<string | null> {
+  try {
+    const pick = (data: Record<string, unknown> | null | undefined): string | null => {
+      if (!data) return null;
+      const d = data as Record<string, string | null | undefined>;
+      return (
+        parseSellerUuid(d.sellerid) ||
+        parseSellerUuid(d.seller_id) ||
+        parseSellerUuid(d.user_id) ||
+        parseSellerUuid(d.owner_id)
+      );
+    };
+
+    const wide = await supabase
+      .from('machines')
+      .select('sellerid, seller_id, user_id, owner_id')
+      .eq('id', machineId)
+      .maybeSingle();
+
+    if (!wide.error) {
+      const id = pick(wide.data as Record<string, unknown>);
+      if (id) return id;
+    } else if (isMissingSchemaColumnError(wide.error)) {
+      const narrow = await supabase
+        .from('machines')
+        .select('sellerid, seller_id, user_id')
+        .eq('id', machineId)
+        .maybeSingle();
+      if (!narrow.error) {
+        const id = pick(narrow.data as Record<string, unknown>);
+        if (id) return id;
+      }
+    }
+
+    const legacy = await supabase.from('machines').select('user_id').eq('id', machineId).maybeSingle();
+    if (legacy.error && !isMissingSchemaColumnError(legacy.error)) return null;
+    return parseSellerUuid((legacy.data as { user_id?: string | null })?.user_id);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cree un dossier transaction (si les tables existent) et rattache la demande.
+ * Appele pour un acheteur connecte qui n est pas le vendeur.
+ */
+async function tryLinkQuoteToNewTransactionCase(opts: {
+  quoteId: string;
+  machineId: string;
+  sellerId: string;
+  buyerUserId: string;
+}): Promise<{ caseId: string | null; participantsLinked: boolean }> {
+  const { data, error } = await supabase
+    .from('transaction_cases')
+    .insert({
+      kind: 'sale',
+      status: 'draft',
+      machine_id: opts.machineId,
+      seller_user_id: opts.sellerId,
+      buyer_user_id: opts.buyerUserId,
+      primary_quote_request_id: opts.quoteId,
+      title: 'Demande depuis annonce',
+      created_by: opts.buyerUserId,
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    if (!isMissingTableError(error)) {
+      logger.warn('[submitQuoteRequest] creation dossier transaction', error);
+    }
+    return { caseId: null, participantsLinked: false };
+  }
+
+  const caseId = data?.id as string | undefined;
+  if (!caseId) return { caseId: null, participantsLinked: false };
+
+  const now = new Date().toISOString();
+  const { error: partErr } = await supabase.from('transaction_participants').insert([
+    {
+      case_id: caseId,
+      user_id: opts.buyerUserId,
+      role: 'buyer',
+      invited_by: opts.buyerUserId,
+      invited_at: now,
+    },
+    {
+      case_id: caseId,
+      user_id: opts.sellerId,
+      role: 'seller',
+      invited_by: opts.buyerUserId,
+      invited_at: now,
+    },
+  ]);
+  if (partErr && !isMissingTableError(partErr)) {
+    logger.warn('[submitQuoteRequest] participants dossier', partErr);
+  }
+  const participantsLinked = !partErr;
+
+  const { error: evErr } = await supabase.from('transaction_events').insert({
+    case_id: caseId,
+    actor_user_id: opts.buyerUserId,
+    event_type: 'case.created_from_quote',
+    payload: {
+      quote_request_id: opts.quoteId,
+      machine_id: opts.machineId,
+      summary: 'Dossier ouvert depuis une demande de prix sur une annonce',
+      source: 'submitQuoteRequest',
+    },
+  });
+  if (evErr && !isMissingTableError(evErr)) {
+    logger.warn('[submitQuoteRequest] evenement dossier', evErr);
+  }
+
+  const { error: updateErr } = await supabase
+    .from('quote_requests')
+    .update({ transaction_case_id: caseId, updated_at: new Date().toISOString() })
+    .eq('id', opts.quoteId);
+
+  if (updateErr && !isMissingTableError(updateErr)) {
+    logger.warn(
+      '[submitQuoteRequest] MAJ quote_requests via client refusee — la ligne peut etre liee par trigger SQL (transaction_cases_after_insert_link_quote_request). Detail:',
+      updateErr,
+    );
+  }
+
+  return { caseId, participantsLinked };
+}
+
 export async function submitQuoteRequest(
   payload: QuoteRequestPayload,
-): Promise<void> {
+): Promise<SubmitQuoteResult> {
   const cleaned = cleanQuotePayload(payload);
-  const { error } = await supabase.from('quote_requests').insert(cleaned);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  let uid = session?.user?.id ?? null;
+  if (!uid) {
+    const { data: userData } = await supabase.auth.getUser();
+    uid = userData?.user?.id ?? null;
+  }
+
+  /* Titulaire annonce en base en priorité : évite quote_requests.seller_id ≠ dossier / trigger de liaison. */
+  let sellerId: string | null = null;
+  if (cleaned.machine_id) {
+    sellerId = await fetchSellerUserIdFromMachine(cleaned.machine_id);
+  }
+  const sellerFromPayload = parseSellerUuid(cleaned.seller_id);
+  if (!sellerId) {
+    sellerId = sellerFromPayload;
+  } else if (sellerFromPayload && sellerFromPayload !== sellerId) {
+    logger.info('[submitQuoteRequest] seller_id payload ignoré au profit du titulaire machines', {
+      payload_seller_id: sellerFromPayload,
+      machine_seller_id: sellerId,
+      machine_id: cleaned.machine_id,
+    });
+  }
+  if (!sellerId) {
+    logger.warn(
+      '[submitQuoteRequest] seller_id introuvable pour la machine — devis enregistré mais pas de dossier transaction',
+      { machine_id: cleaned.machine_id },
+    );
+  }
+
+  const row = {
+    ...cleaned,
+    seller_id: sellerId ?? cleaned.seller_id ?? null,
+    buyer_user_id: uid ?? undefined,
+    transaction_case_id: payload.transaction_case_id ?? undefined,
+  };
+  const { data: inserted, error } = await supabase.from('quote_requests').insert(row).select('id').single();
   if (error) {
     logger.error('[supabaseCall:submitQuoteRequest]', error);
     const err = new Error(error.message || 'submitQuoteRequest failed');
     (err as Error & { cause?: unknown }).cause = error;
     throw err;
   }
+
+  if (!inserted?.id) {
+    throw new Error('submitQuoteRequest: insert sans id');
+  }
+  const quoteId = inserted.id;
+  const buyerLoggedIn = Boolean(uid);
+  const sellerResolved = Boolean(sellerId);
+  const linkAttempted = Boolean(quoteId && uid && sellerId && uid !== sellerId);
+
+  let transactionCaseId: string | null = null;
+  let participantsLinked: boolean | null = null;
+  if (linkAttempted) {
+    const linked = await tryLinkQuoteToNewTransactionCase({
+      quoteId,
+      machineId: cleaned.machine_id,
+      sellerId: sellerId!,
+      buyerUserId: uid!,
+    });
+    transactionCaseId = linked.caseId;
+    participantsLinked = linked.caseId ? linked.participantsLinked : null;
+
+    /* Fallback RPC si INSERT dossier / liaison client a échoué (RLS, réseau). */
+    if (!transactionCaseId) {
+      const { data: rpcId, error: rpcErr } = await supabase.rpc('ensure_transaction_case_for_quote_request', {
+        p_quote_request_id: quoteId,
+      });
+      if (rpcErr && !isMissingTableError(rpcErr)) {
+        const msg = (rpcErr.message || '').toLowerCase();
+        const missingRpc =
+          msg.includes('function') &&
+          (msg.includes('does not exist') || msg.includes('schema cache'));
+        if (!missingRpc) {
+          logger.warn('[submitQuoteRequest] RPC ensure_transaction_case_for_quote_request', rpcErr);
+        }
+      } else if (rpcId != null && rpcId !== '') {
+        transactionCaseId = String(rpcId);
+        participantsLinked = true;
+      }
+    }
+  } else if (quoteId && uid && !sellerId) {
+    logger.info('[submitQuoteRequest] pas de liaison dossier (vendeur non résolu ou même compte)');
+  }
+
+  return {
+    quoteId,
+    transactionCaseId,
+    buyerLoggedIn,
+    sellerResolved,
+    linkAttempted,
+    participantsLinked,
+  };
 }
 
 export async function getQuoteRequests(

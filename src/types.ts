@@ -58,6 +58,8 @@ export interface Machine {
     name: string;
     rating: number;
     location: string;
+    /** Présent quand chargé depuis la table `users` (fiche machine) */
+    email?: string;
   };
   statistics?: {
     views: number;

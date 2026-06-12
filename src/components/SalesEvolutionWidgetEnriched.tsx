@@ -11,9 +11,12 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Megaphone, PlusCircle, Pencil, Brain } from 'lucide-react';
+import { Megaphone, PlusCircle, Pencil } from 'lucide-react';
 import { notificationService, exportService } from '../services';
 import { supabaseClient } from '../utils/supabaseClient';
+import { getSalesEvolutionSeriesData } from '../utils/api';
+import { madToDisplayAmount, formatDisplayMoney, formatMadMoney } from '../utils/madMoneyDisplay';
+import { useCurrencyStore } from '../stores/currencyStore';
 import { aiWidgetService } from '../services/aiWidgetService';
 import type { AIPrediction, AISalesBenchmark } from '../services/aiWidgetService';
 
@@ -59,33 +62,11 @@ interface BenchmarkData {
 }
 
 interface Props {
-  data?: any[]; // ou le vrai type si tu l'as
+  /** Réservé compat ; les données viennent de l’API (getSalesEvolutionSeriesData). */
+  data?: unknown;
 }
 
-/** Utilise les données passées par le dashboard quand elles sont au bon format. */
-function normalizeSalesDataFromProp(raw?: any[] | null): SalesData[] | null {
-  if (!raw || !Array.isArray(raw) || raw.length === 0) return null;
-  const first = raw[0];
-  if (first && typeof first.month === 'string' && typeof first.sales === 'number') {
-    return raw.map((r: any) => ({
-      month: r.month,
-      sales: r.sales,
-      target: typeof r.target === 'number' ? r.target : 0,
-      previousYear: typeof r.previousYear === 'number' ? r.previousYear : 0,
-    }));
-  }
-  return null;
-}
-
-const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
-  console.log('✅ SalesEvolutionWidgetEnriched chargé');
-  const dataSyncKey = useMemo(() => {
-    if (!data?.length) return 'empty';
-    return JSON.stringify(
-      data.map((d: any) => [d.month, d.sales, d.target, d.previousYear])
-    );
-  }, [data]);
-
+const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMetric, setSelectedMetric] = useState<'sales' | 'target' | 'previousYear'>('sales');
@@ -105,54 +86,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
   const [benchmarkModalData, setBenchmarkModalData] = useState<AISalesBenchmark | null>(null);
   const [benchmarkModalSource, setBenchmarkModalSource] = useState<'monitor' | 'local' | null>(null);
 
-  // Données par défaut si pas de données réelles
-  const defaultData: SalesData[] = [
-    { month: 'Jan', sales: 42000, target: 50000, previousYear: 45000 },
-    { month: 'Fév', sales: 48000, target: 55000, previousYear: 48000 },
-    { month: 'Mar', sales: 52000, target: 60000, previousYear: 52000 },
-    { month: 'Avr', sales: 58000, target: 65000, previousYear: 55000 },
-    { month: 'Mai', sales: 62000, target: 70000, previousYear: 58000 },
-    { month: 'Juin', sales: 68000, target: 75000, previousYear: 62000 },
-  ];
-
-  useEffect(() => {
-    loadSalesData();
-    // dataSyncKey évite une boucle si le parent passe un nouveau tableau [] à chaque rendu.
-  }, [dataSyncKey]);
-
-  const loadSalesData = async () => {
-    try {
-      setLoading(true);
-
-      // TODO: Remplacer par un vrai appel API quand la table sales sera créée
-      const fromDashboard = normalizeSalesDataFromProp(data);
-      const rows = fromDashboard ?? defaultData;
-
-      setSalesData(rows);
-      generateNotifications(rows);
-      generateAISuggestions();
-      setBenchmarkData({
-        sector: 'Équipements BTP',
-        average: 65000,
-        top25: 85000,
-        yourPerformance: rows[rows.length - 1]?.sales ?? 0,
-      });
-    } catch (error) {
-      console.error('Erreur lors du chargement des données de vente:', error);
-      notificationService.error('Erreur de chargement', 'Impossible de charger les données de vente');
-      const fallback = defaultData;
-      setSalesData(fallback);
-      generateNotifications(fallback);
-      setBenchmarkData({
-        sector: 'Équipements BTP',
-        average: 65000,
-        top25: 85000,
-        yourPerformance: fallback[fallback.length - 1]?.sales ?? 0,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { currentCurrency, rates } = useCurrencyStore();
 
   const generateNotifications = (rows: SalesData[]) => {
     const currentMonth = rows[rows.length - 1];
@@ -211,68 +145,126 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
     setAiSuggestions(suggestions);
   };
 
-  const getMetricColor = (value: number) => {
+  const loadSalesData = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      const rows = await getSalesEvolutionSeriesData(6);
+      const normalized: SalesData[] = rows.map((r) => ({
+        month: r.month,
+        sales: r.sales,
+        target: r.target,
+        previousYear: r.previousYear,
+      }));
+      setSalesData(normalized);
+      generateNotifications(normalized);
+      generateAISuggestions();
+      const last = normalized[normalized.length - 1]?.sales ?? 0;
+      const mean =
+        normalized.length > 0
+          ? Math.round(normalized.reduce((s, r) => s + r.sales, 0) / normalized.length)
+          : 0;
+      const peak = normalized.reduce((m, r) => Math.max(m, r.sales), 0);
+      setBenchmarkData({
+        sector: 'Équipements BTP (est.)',
+        average: mean,
+        top25: Math.round(peak * 1.1),
+        yourPerformance: last,
+        note: 'Basé sur votre pipeline conclu et vos offres (même base que le score commercial).',
+      });
+    } catch (error) {
+      console.error('Erreur lors du chargement des données de vente:', error);
+      notificationService.error('Erreur de chargement', 'Impossible de charger l’évolution des ventes');
+      setSalesData([]);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSalesData();
+  }, [loadSalesData]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void loadSalesData();
+    };
+    window.addEventListener('pipeline:refresh', onRefresh);
+    window.addEventListener('focus', onRefresh);
+    return () => {
+      window.removeEventListener('pipeline:refresh', onRefresh);
+      window.removeEventListener('focus', onRefresh);
+    };
+  }, [loadSalesData]);
+
+  const chartData = useMemo(() => {
+    const toD = (mad: number) => madToDisplayAmount(mad, currentCurrency, rates);
+    let salesBorder = '#3B82F6';
     if (selectedMetric === 'sales') {
-      if (value === 0) return '#6B7280'; // Gris pour les données par défaut
-      return value > 70000 ? '#10B981' : value > 50000 ? '#F59E0B' : '#EF4444';
-    }
-    return '#3B82F6';
-  };
-
-  const chartData = {
-    labels: salesData.map(d => d.month),
-    datasets: [
-      {
-        label: 'Ventes actuelles',
-        data: salesData.map(d => d.sales),
-        borderColor: getMetricColor(salesData[salesData.length - 1]?.sales || 0),
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-      },
-      {
-        label: 'Objectif',
-        data: salesData.map(d => d.target),
-        borderColor: '#10B981',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        borderDash: [5, 5],
-        tension: 0.4,
-      },
-      {
-        label: 'Année précédente',
-        data: salesData.map(d => d.previousYear),
-        borderColor: '#F59E0B',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        tension: 0.4,
-      }
-    ],
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: false,
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function(value: any) {
-            return new Intl.NumberFormat('fr-FR', {
-              style: 'currency',
-              currency: 'EUR',
-              minimumFractionDigits: 0,
-            }).format(value);
-          }
-        }
+      const last = salesData[salesData.length - 1];
+      if (!last || last.target <= 0) salesBorder = '#6B7280';
+      else {
+        const ratio = last.sales / last.target;
+        if (ratio >= 0.85) salesBorder = '#10B981';
+        else if (ratio >= 0.5) salesBorder = '#F59E0B';
+        else salesBorder = '#EF4444';
       }
     }
-  };
+    return {
+      labels: salesData.map((d) => d.month),
+      datasets: [
+        {
+          label: 'Ventes actuelles',
+          data: salesData.map((d) => toD(d.sales)),
+          borderColor: salesBorder,
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          tension: 0.4,
+        },
+        {
+          label: 'Objectif',
+          data: salesData.map((d) => toD(d.target)),
+          borderColor: '#10B981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          borderDash: [5, 5],
+          tension: 0.4,
+        },
+        {
+          label: 'Année précédente',
+          data: salesData.map((d) => toD(d.previousYear)),
+          borderColor: '#F59E0B',
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          tension: 0.4,
+        },
+      ],
+    };
+  }, [salesData, currentCurrency, rates, selectedMetric]);
+
+  const chartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top' as const,
+        },
+        title: {
+          display: false,
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value: string | number) => {
+              const n = typeof value === 'number' ? value : Number(value);
+              return formatDisplayMoney(Number.isFinite(n) ? n : 0, currentCurrency);
+            },
+          },
+        },
+      },
+    }),
+    [currentCurrency],
+  );
 
   const handleQuickAction = (e: MouseEvent<HTMLButtonElement>, action: string) => {
     const button = e.currentTarget;
@@ -417,11 +409,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
     if (/conversion/i.test(metric)) {
       return `${Math.round(value)} %`;
     }
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      maximumFractionDigits: 0,
-    }).format(value);
+    return formatMadMoney(value, currentCurrency, rates);
   };
 
   const trendLabel = (t: AIPrediction['trend']) => {
@@ -437,11 +425,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
   };
 
   const formatBenchmarkMoney = (value: number) =>
-    new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      maximumFractionDigits: 0,
-    }).format(value);
+    formatMadMoney(value, currentCurrency, rates);
 
   const openBenchmarkModal = () => {
     setShowBenchmark(true);
@@ -528,13 +512,19 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
       notificationService.info('Export en cours', 'Génération du rapport...');
       
       const exportData = {
-        monthlyData: salesData.map(month => ({
-          month: month.month,
-          sales: month.sales,
-          target: month.target,
-          gap: month.target - month.sales,
-          achievementRate: Math.round((month.sales / month.target) * 100)
-        }))
+        displayCurrency: currentCurrency,
+        monthlyData: salesData.map((month) => {
+          const salesD = madToDisplayAmount(month.sales, currentCurrency, rates);
+          const targetD = madToDisplayAmount(month.target, currentCurrency, rates);
+          return {
+            month: month.month,
+            sales: salesD,
+            target: targetD,
+            gap: targetD - salesD,
+            achievementRate:
+              month.target > 0 ? Math.round((month.sales / month.target) * 100) : 0,
+          };
+        }),
       };
       
       // Export immédiat (sans await)
@@ -569,9 +559,15 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Évolution des ventes enrichie</h3>
-        <div className="flex gap-2">
+      <div className="flex justify-between items-start mb-6 gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Évolution des ventes enrichie</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            6 derniers mois — agrégat pipeline + offres (réf. {formatMadMoney(50000, currentCurrency, rates)}{' '}
+            par offre en MAD). Affichage : {currentCurrency} (détection auto · taux du site).
+          </p>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
           <select
             value={selectedMetric}
             onChange={(e) => setSelectedMetric(e.target.value as any)}
@@ -593,11 +589,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="text-center">
           <div className="text-2xl font-bold text-blue-600">
-            {new Intl.NumberFormat('fr-FR', {
-              style: 'currency',
-              currency: 'EUR',
-              minimumFractionDigits: 0,
-            }).format(salesData[salesData.length - 1]?.sales || 0)}
+            {formatMadMoney(salesData[salesData.length - 1]?.sales || 0, currentCurrency, rates)}
           </div>
           <div className="text-sm text-gray-600">Ventes du mois</div>
         </div>
@@ -719,74 +711,63 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ data }) => {
         </div>
       )}
 
-      {/* Boutons d'action */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        <button
-          type="button"
-          onClick={() => setShowDetails(true)}
-          className="px-3 py-1 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
-        >
-          Analyse complète
-        </button>
-        <button
-          type="button"
-          onClick={(ev) => handleQuickAction(ev, 'ai_forecast')}
-          className="px-3 py-1 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
-        >
-          Prévision IA
-        </button>
-        <button
-          type="button"
-          onClick={() => openBenchmarkModal()}
-          className="px-3 py-1 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
-        >
-          Benchmark secteur
-        </button>
-        <button
-          type="button"
-          onClick={(ev) => handleQuickAction(ev, 'export_data')}
-          className="px-3 py-1 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
-        >
-          Exporter
-        </button>
-      </div>
-
-      {/* Actions rapides */}
-      <div className="border-t pt-4">
-        <h4 className="font-semibold text-gray-900 mb-3">Actions rapides</h4>
+      {/* Raccourcis (une seule barre, sans doublon) */}
+      <div className="border-t border-gray-100 pt-4 mb-4">
+        <p className="text-xs text-gray-500 mb-2">
+          Raccourcis navigation et modales. Les actions « promo / ajout / correction » ouvrent le même flux que les notifications du widget.
+        </p>
         <div className="flex gap-2 flex-wrap">
           <button
             type="button"
-            onClick={(ev) => handleQuickAction(ev, 'publish_promo')}
-            className="px-3 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center"
+            onClick={() => setShowDetails(true)}
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
           >
-            <Megaphone className="w-4 h-4 mr-2" />
+            Analyse complète
+          </button>
+          <button
+            type="button"
+            onClick={(ev) => handleQuickAction(ev, 'ai_forecast')}
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
+          >
+            Prévision IA
+          </button>
+          <button
+            type="button"
+            onClick={() => openBenchmarkModal()}
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
+          >
+            Benchmark secteur
+          </button>
+          <button
+            type="button"
+            onClick={(ev) => handleQuickAction(ev, 'export_data')}
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
+          >
+            Exporter
+          </button>
+          <button
+            type="button"
+            onClick={(ev) => handleQuickAction(ev, 'publish_promo')}
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center gap-1.5"
+          >
+            <Megaphone className="w-4 h-4 shrink-0" />
             Publier promo
           </button>
           <button
             type="button"
             onClick={(ev) => handleQuickAction(ev, 'add_equipment')}
-            className="px-3 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center"
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center gap-1.5"
           >
-            <PlusCircle className="w-4 h-4 mr-2" />
+            <PlusCircle className="w-4 h-4 shrink-0" />
             Ajouter équipement
           </button>
           <button
             type="button"
             onClick={(ev) => handleQuickAction(ev, 'correct_month')}
-            className="px-3 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center"
+            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center gap-1.5"
           >
-            <Pencil className="w-4 h-4 mr-2" />
+            <Pencil className="w-4 h-4 shrink-0" />
             Corriger ce mois
-          </button>
-          <button
-            type="button"
-            title="Même action que « Prévision IA » dans la barre principale"
-            onClick={(ev) => handleQuickAction(ev, 'ai_forecast')}
-            className="px-3 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center"
-          >
-            <Brain className="w-4 h-4 mr-2" />
-            Prévision IA
           </button>
         </div>
       </div>

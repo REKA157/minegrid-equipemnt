@@ -9,6 +9,7 @@ import { getMessages, getOffers, getDashboardStats } from '../../../utils/api';
 import type { DashboardStats } from '../../../utils/api/types';
 import { buildCorrelatedDailyActions } from '../../../utils/correlateLeadActions';
 import { RealPipelineService } from '../../../services/realPipelineService';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 const EMPTY_DASHBOARD_STATS: DashboardStats = {
   totalViews: 0,
@@ -87,7 +88,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortBy, setSortBy] = useState<'priority' | 'time' | 'value'>('priority');
-  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [showQuickActions, setShowQuickActions] = useState(false);
   const [realActions, setRealActions] = useState<DailyAction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +99,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
     apiBaseUrl: '',
     defaultCountryCode: '+33',
   });
+  const { formatCurrency } = useWidgetMadCurrency();
 
   /** Après un contact réel, aligner `last_contact` du lead Kanban (cohérence multi-widgets). */
   const syncLeadAfterTouch = (action: DailyAction) => {
@@ -256,15 +258,6 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       case 'pending': return <AlertTriangle className="w-4 h-4 text-red-500" />;
       default: return <AlertTriangle className="w-4 h-4 text-gray-500" />;
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
   };
 
   const normalizePhone = (phone?: string) => {
@@ -957,21 +950,47 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
                     </div>
                     <p className="text-sm text-gray-600 mb-2">{action.description}</p>
                     
-                    {/* Contact info */}
-                    {action.contact && (
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                        <span className="font-medium">{action.contact.name}</span>
-                        <span>•</span>
-                        <span>{action.contact.company}</span>
-                        {action.contact.phone && (
+                    {/* Contact : masquer les lignes redondantes avec la description */}
+                    {action.contact &&
+                      (action.contact.name ||
+                        action.contact.company ||
+                        action.contact.phone ||
+                        action.contact.email) && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600 mb-2">
+                        {(action.contact.name || '').trim() ? (
+                          <span className="font-medium">{action.contact.name.trim()}</span>
+                        ) : null}
+                        {(action.contact.name || '').trim() &&
+                        (action.contact.company || '').trim() ? (
+                          <span aria-hidden>•</span>
+                        ) : null}
+                        {(action.contact.company || '').trim() ? (
+                          <span>{action.contact.company.trim()}</span>
+                        ) : null}
+                        {action.contact.phone ? (
                           <>
-                            <span>•</span>
+                            {((action.contact.name || '').trim() ||
+                              (action.contact.company || '').trim()) && (
+                              <span aria-hidden>•</span>
+                            )}
                             <span className="flex items-center gap-1">
                               <Phone className="w-3 h-3" />
                               {action.contact.phone}
                             </span>
                           </>
-                        )}
+                        ) : null}
+                        {action.contact.email ? (
+                          <>
+                            {((action.contact.name || '').trim() ||
+                              (action.contact.company || '').trim() ||
+                              action.contact.phone) && (
+                              <span aria-hidden>•</span>
+                            )}
+                            <span className="truncate max-w-[200px]" title={action.contact.email}>
+                              {action.contact.email}
+                            </span>
+                          </>
+                        ) : null}
                       </div>
                     )}
                     
@@ -1068,12 +1087,18 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       </div>
       )}
 
-      {/* Actions rapides */}
+      {/* Automatisations (client léger : API simulée sauf export) */}
       <div className="border-t border-gray-200 pt-4 mt-6">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-gray-900">Actions Rapides</h4>
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">Automatisations</h4>
+            <p className="text-[11px] text-gray-500 mt-1 max-w-2xl">
+              <span className="font-medium text-gray-700">Exporter</span> génère un fichier depuis les actions affichées.
+              Les autres boutons passent par une <span className="font-medium">simulation d&apos;API</span> (aucun serveur métier pour l&apos;instant).
+            </p>
+          </div>
           <button
-            className="p-1 text-orange-500 hover:text-orange-700 transition-colors"
+            className="p-1 text-orange-500 hover:text-orange-700 transition-colors shrink-0"
             onClick={() => setShowQuickActions((v) => !v)}
             title={showQuickActions ? 'Fermer' : 'Ouvrir'}
           >
@@ -1086,25 +1111,25 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('new-task', e)}
             >
-              Nouvelle tâche
+              Nouvelle tâche <span className="opacity-70">· démo</span>
             </button>
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('auto-followup', e)}
             >
-              Relance auto
+              Relance auto <span className="opacity-70">· démo</span>
             </button>
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('schedule', e)}
             >
-              Planifier
+              Planifier <span className="opacity-70">· démo</span>
             </button>
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('ai-report', e)}
             >
-              Rapport IA
+              Rapport IA <span className="opacity-70">· démo</span>
             </button>
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
@@ -1116,19 +1141,19 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('notify-team', e)}
             >
-              Notifier équipe
+              Notifier équipe <span className="opacity-70">· démo</span>
             </button>
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('sync-crm', e)}
             >
-              Sync CRM
+              Sync CRM <span className="opacity-70">· démo</span>
             </button>
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('optimize-schedule', e)}
             >
-              Optimiser IA
+              Optimiser planning <span className="opacity-70">· démo</span>
             </button>
           </div>
         )}

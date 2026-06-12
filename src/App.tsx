@@ -1,5 +1,4 @@
 import React, { Suspense, lazy } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { useRouteParams } from './router';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -81,18 +80,8 @@ const SourcesAdmin = lazy(() => import('./pages/SourcesAdmin'));
 const DemoEntrepriseAccess = lazy(() => import('./pages/DemoEntrepriseAccess'));
 const LegalStaticPage = lazy(() => import('./pages/LegalStaticPage'));
 const LeadsInbox = lazy(() => import('./pages/LeadsInbox'));
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      /** Réduit les rafales de requêtes quand beaucoup d’utilisateurs naviguent */
-      staleTime: 2 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+const TransactionCasePage = lazy(() => import('./pages/TransactionCasePage'));
+const MyTransactionCasesPage = lazy(() => import('./pages/MyTransactionCasesPage'));
 
 /**
  * Routes considérées comme "application" : elles ont leur propre shell/navigation
@@ -129,6 +118,8 @@ const APP_ONLY_ROUTES = new Set<string>([
   'global-monitor',
   'admin-sources',
   'leads',
+  'dossiers',
+  'dossier',
   'test-widget',
   'update-password',
   'demo-entreprise',
@@ -220,8 +211,19 @@ function AppContent() {
       case 'dashboard-entreprise':
         return <DashboardConfigurator />;
 
-      case 'dashboard-entreprise-display':
-        return <EnterpriseDashboardVendeurDisplay />;
+      case 'dashboard-entreprise-display': {
+        const activeMetier = localStorage.getItem('lastActiveMetier') || 'vendeur';
+        switch (activeMetier) {
+          case 'loueur': return <EnterpriseDashboardLoueurDisplay />;
+          case 'mecanicien': return <EnterpriseDashboardMecanicienDisplay />;
+          case 'transporteur': return <EnterpriseDashboardTransporteurDisplay />;
+          case 'transitaire': return <EnterpriseDashboardTransitaireDisplay />;
+          case 'logisticien': return <EnterpriseDashboardLogisticienDisplay />;
+          case 'investisseur': return <EnterpriseDashboardInvestisseurDisplay />;
+          case 'courtier': return <EnterpriseDashboardCourtierDisplay />;
+          default: return <EnterpriseDashboardVendeurDisplay />;
+        }
+      }
 
       case 'dashboard-loueur-display':
         return <EnterpriseDashboardLoueurDisplay />;
@@ -307,6 +309,27 @@ function AppContent() {
           </ProtectedRoute>
         );
 
+      case 'dossiers':
+        return (
+          <ProtectedRoute>
+            <MyTransactionCasesPage />
+          </ProtectedRoute>
+        );
+
+      case 'dossier':
+        if (pathParts[1]) {
+          return (
+            <ProtectedRoute>
+              <TransactionCasePage caseId={pathParts[1]} />
+            </ProtectedRoute>
+          );
+        }
+        return (
+          <div className="max-w-lg mx-auto px-4 py-16 text-center text-gray-600 text-sm">
+            Indiquez un identifiant de dossier dans l’URL (<span className="font-mono">#dossier/&lt;uuid&gt;</span>).
+          </div>
+        );
+
       case 'test-widget':
         return <WidgetTest />;
 
@@ -345,13 +368,11 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ErrorBoundary>
-          <AppContent />
-        </ErrorBoundary>
-      </AuthProvider>
-    </QueryClientProvider>
+    <AuthProvider>
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
+    </AuthProvider>
   );
 }
 

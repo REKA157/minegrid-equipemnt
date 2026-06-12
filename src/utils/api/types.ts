@@ -159,6 +159,14 @@ export interface DashboardStats {
   monthlyGrowth: number;
 }
 
+/** Série mensuelle pour le widget « Évolution des ventes » (alignée pipeline + offres). */
+export interface SalesEvolutionMonthPoint {
+  month: string;
+  sales: number;
+  target: number;
+  previousYear: number;
+}
+
 export interface SalesPerformanceData {
   score: number;
   target: number;

@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import type { AuthChangeEvent, Session, User } from '@supabase/auth-js';
 import supabaseClient from '../utils/supabaseClient';
+import { migrateLegacyKeysForUser } from '../utils/accountLocalStorage';
 
 /**
  * Contexte d'authentification global.
@@ -45,7 +46,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .getSession()
       .then(({ data }: { data: { session: Session | null } }) => {
         if (mountedRef.current) {
-          setUser(data.session?.user ?? null);
+          const u = data.session?.user ?? null;
+          if (u?.id) {
+            try {
+              migrateLegacyKeysForUser(u.id);
+            } catch {
+              /* ignore migrate */
+            }
+          }
+          setUser(u);
           setLoading(false);
         }
       })
@@ -56,7 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: listener } = supabaseClient.auth.onAuthStateChange(
       (_event: AuthChangeEvent, session: Session | null) => {
         if (mountedRef.current) {
-          setUser(session?.user ?? null);
+          const u = session?.user ?? null;
+          if (u?.id) {
+            try {
+              migrateLegacyKeysForUser(u.id);
+            } catch {
+              /* ignore */
+            }
+          }
+          setUser(u);
         }
       },
     );

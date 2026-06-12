@@ -1,5 +1,5 @@
 import { MACHINE_LIST_COLUMNS, SELLER_MACHINES_MAX_ROWS } from '../../constants/machineQueryFields';
-import type { DashboardStats, SalesPerformanceData } from './types';
+import type { DashboardStats, SalesEvolutionMonthPoint, SalesPerformanceData } from './types';
 import supabase from '../supabaseClient';
 import { getCurrentUser } from './auth';
 import { RealPipelineService } from '../../services/realPipelineService';
@@ -471,5 +471,109 @@ export async function getSalesPerformanceData(): Promise<SalesPerformanceData> {
         responseTime: { value: 2.5, target: 1.5, trend: 'stable' as const },
       },
     };
+  }
+}
+
+const OFFER_VALUE_ESTIMATE_MAD = 50000;
+const YEARLY_SALES_TARGET_MAD = 3_000_000;
+
+function monthKeyYm(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Série CA mensuelle : max(somme leads conclus, offres × estimation) — même logique que getSalesPerformanceData. */
+export async function getSalesEvolutionSeriesData(
+  monthsBack = 6,
+): Promise<SalesEvolutionMonthPoint[]> {
+  const MONTHS_FR = [
+    'janv.',
+    'févr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sept.',
+    'oct.',
+    'nov.',
+    'déc.',
+  ];
+  const monthlyTarget = Math.round(YEARLY_SALES_TARGET_MAD / 12);
+
+  const degradedSeries = (): SalesEvolutionMonthPoint[] => {
+    const now = new Date();
+    const out: SalesEvolutionMonthPoint[] = [];
+    for (let i = monthsBack - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      out.push({
+        month: `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`,
+        sales: 0,
+        target: monthlyTarget,
+        previousYear: 0,
+      });
+    }
+    return out;
+  };
+
+  try {
+    const user = await getCurrentUser();
+    const leads = await RealPipelineService.getLeads();
+    const wonByMonth = new Map<string, number>();
+    for (const l of leads) {
+      if (!isLeadWonStage(l.stage || '')) continue;
+      const raw = l.updated_at || l.created_at;
+      if (!raw) continue;
+      const k = monthKeyYm(new Date(raw));
+      wonByMonth.set(k, (wonByMonth.get(k) || 0) + Number(l.value ?? 0));
+    }
+
+    const now = new Date();
+    const firstDisplayed = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+    const queryFrom = new Date(firstDisplayed.getFullYear() - 1, firstDisplayed.getMonth(), 1);
+
+    const { data: offersRows, error: offersError } = await supabase
+      .from('offers')
+      .select('id, created_at')
+      .eq('seller_id', user.id)
+      .gte('created_at', queryFrom.toISOString());
+
+    if (offersError) throw offersError;
+
+    const offersByMonth = new Map<string, number>();
+    for (const o of offersRows || []) {
+      if (!o.created_at) continue;
+      const k = monthKeyYm(new Date(o.created_at as string));
+      offersByMonth.set(k, (offersByMonth.get(k) || 0) + 1);
+    }
+
+    const out: SalesEvolutionMonthPoint[] = [];
+    for (let i = monthsBack - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+      const prevKey = `${y - 1}-${String(m + 1).padStart(2, '0')}`;
+
+      const won = wonByMonth.get(key) || 0;
+      const nOff = offersByMonth.get(key) || 0;
+      const sales = Math.max(won, nOff * OFFER_VALUE_ESTIMATE_MAD);
+
+      const prevWon = wonByMonth.get(prevKey) || 0;
+      const prevOff = offersByMonth.get(prevKey) || 0;
+      const previousYear = Math.max(prevWon, prevOff * OFFER_VALUE_ESTIMATE_MAD);
+
+      out.push({
+        month: `${MONTHS_FR[m]} ${y}`,
+        sales,
+        target: monthlyTarget,
+        previousYear,
+      });
+    }
+
+    return out;
+  } catch (e) {
+    console.error('Erreur getSalesEvolutionSeriesData:', e);
+    return degradedSeries();
   }
 }

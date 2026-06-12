@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Activity, BarChart3, TrendingUp } from 'lucide-react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const AdvancedKPIsWidget = ({ data }: { data: any }) => {
   const [selectedMetric, setSelectedMetric] = useState<string>('all');
-  const [showTargets, setShowTargets] = useState<boolean>(true);
+  const [showTargets, setShowTargets] = useState<boolean>(false);
+  const { madToDisplay, currentCurrency } = useWidgetMadCurrency();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -44,7 +46,7 @@ export const AdvancedKPIsWidget = ({ data }: { data: any }) => {
   const formatValue = (value: number, unit: string) => {
     if (unit === '%') return `${value.toFixed(1)}%`;
     if (unit === '/5') return `${value.toFixed(1)}/5`;
-    if (unit === 'MAD/h') return `${value.toFixed(0)} MAD/h`;
+    if (unit === 'MAD/h') return `${madToDisplay(value).toFixed(0)} ${currentCurrency}/h`;
     if (unit === 'jours') return `${value.toFixed(1)} jours`;
     if (unit === 'heures') return `${value.toFixed(1)}h`;
     if (unit === 'fois/an') return `${value.toFixed(1)}x/an`;

@@ -1,11 +1,39 @@
 import React from 'react';
-import { DollarSign, Shield, FileText, Users, TrendingUp, Calendar, Target, Building2 } from 'lucide-react';
+import { DollarSign, Shield, FileText, Users, TrendingUp, Calendar, Target, Building2, FolderOpen } from 'lucide-react';
 
 // Widgets pour le métier Courtier en crédit et assurances
 export const CourtierWidgets = {
   metier: 'Courtier',
   description: 'Courtage en crédit et assurances',
   widgets: [
+    {
+      id: 'transaction-cases',
+      type: 'list',
+      title: 'Dossiers transaction (accès courtier)',
+      description: 'Dossiers engins où vous êtes partie prenante, via politiques Plateforme',
+      icon: FolderOpen,
+      dataSource: 'transaction_cases',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true
+      }
+    },
+    {
+      id: 'transaction-broker-financing',
+      type: 'list',
+      title: 'Financement dossiers',
+      description: 'Demandes liées aux dossiers où vous êtes courtier',
+      icon: DollarSign,
+      dataSource: 'financing_requests',
+      features: {
+        periodSelector: false,
+        export: true,
+        analytics: false,
+        alerts: true
+      }
+    },
     {
       id: 'credit-applications',
       type: 'list',

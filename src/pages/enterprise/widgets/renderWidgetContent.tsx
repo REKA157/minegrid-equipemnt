@@ -1,6 +1,6 @@
 import { getListData } from './getListData';
 import { getChartData } from './getChartData';
-import { SalesEvolutionWidgetEnriched } from './SalesEvolutionWidgetEnriched';
+import SalesEvolutionWidgetEnriched from '../../../components/SalesEvolutionWidgetEnriched';
 import DailyActionsPriorityWidget from '../../../components/dashboard/widgets/DailyActionsPriorityWidget';
 import { getDailyActionsData } from './getDailyActionsData';
 import { SalesPipelineWidget } from './SalesPipelineWidget';
@@ -25,6 +25,7 @@ import { getEquipmentAvailabilityData } from './getEquipmentAvailabilityData';
 import { PreventiveMaintenanceWidget } from './PreventiveMaintenanceWidget';
 import { getMaintenanceData } from './getMaintenanceData';
 import StockStatusWidget from '../../../components/dashboard/widgets/StockStatusWidget';
+import SharedSalesPipelineWidget from '../../../components/dashboard/widgets/SalesPipelineWidget';
 import React from 'react';
 
 function dailyActionsWidgetSize(s: 'small' | 'normal' | 'large'): 'small' | 'medium' | 'large' {
@@ -32,37 +33,17 @@ function dailyActionsWidgetSize(s: 'small' | 'normal' | 'large'): 'small' | 'med
 }
 
 export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' | 'large' = 'normal') => {
-  console.log('[DEBUG] Appel widget ID:', widget.id);
-  console.log('[DEBUG] renderWidgetContent appelée avec widget:', widget);
-  console.log('[DEBUG] Type de widget:', widget.type);
-  console.log('[DEBUG] Titre du widget:', widget.title);
 
   // Cas spécial pour le widget "Plan d'action stock & revente" (anciennement "État du stock")
   if (widget.id === 'stock-status' || widget.id === 'inventory-status' || widget.id === 'stock-action') {
     return <StockStatusWidget />;
   }
 
-  // Cas spécial pour le widget "Évolution des ventes enrichie"
   if (widget.id === 'sales-evolution' || widget.id === 'sales-chart') {
-    console.log('🎯 [DEBUG] Widget sales-evolution détecté! Rendu du composant enrichi');
-    try {
-      // Récupérer les données pour le widget d'évolution des ventes
-      const salesData = getChartData(widget.id);
-      console.log('📊 [DEBUG] Données récupérées pour sales-evolution:', salesData);
-      return <SalesEvolutionWidgetEnriched data={salesData} />;
-    } catch (err) {
-      console.error('❌ [ERROR] Erreur rendering SalesEvolutionWidgetEnriched:', err);
-      return <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-        <h3 className="text-red-800 font-semibold">Erreur de rendu du widget enrichi</h3>
-        <p className="text-red-600 text-sm">ID: {widget.id}</p>
-        <p className="text-red-600 text-sm">Erreur: {err instanceof Error ? err.message : String(err)}</p>
-      </div>;
-    }
+    return <SalesEvolutionWidgetEnriched />;
   }
 
-  // Cas spécial pour le widget "Actions prioritaires du jour"
   if (widget.id === 'daily-actions') {
-    console.log('[DEBUG] Widget daily-actions détecté, utilisation de getDailyActionsData');
     return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
   }
 
@@ -124,21 +105,9 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
         onShowInterventionForm={() => {}}
       />;
     case 'chart':
-      // Cas spécial pour le widget "Évolution des ventes enrichie"
+      // Évolution des ventes : données prod dans le composant
       if (widget.id === 'sales-evolution' || widget.id === 'sales-chart') {
-        console.log('🎯 [DEBUG] Widget sales-evolution/sales-chart détecté! Rendu du composant enrichi');
-        try {
-          const chartData = getChartData(widget.id);
-          console.log('📊 [DEBUG] Données pour le widget enrichi:', chartData);
-          return <SalesEvolutionWidgetEnriched data={chartData} />;
-        } catch (err) {
-          console.error('❌ [ERROR] Erreur rendering SalesEvolutionWidgetEnriched:', err);
-          return <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <h3 className="text-red-800 font-semibold">Erreur de rendu du widget enrichi</h3>
-            <p className="text-red-600 text-sm">ID: {widget.id}</p>
-            <p className="text-red-600 text-sm">Erreur: {err instanceof Error ? err.message : String(err)}</p>
-          </div>;
-        }
+        return <SalesEvolutionWidgetEnriched />;
       }
       // Pour les autres widgets de type chart
       return <ChartWidget
@@ -159,37 +128,31 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
     case 'map':
       return <MapWidget widget={widget} data={getMapData(widget.id)} />;
     case 'equipment':
-      console.log('[DEBUG] Rendu du widget equipment pour:', widget.id);
       return <EquipmentAvailabilityWidget data={getEquipmentAvailabilityData(widget.id)} />;
     case 'maintenance':
-      console.log('[DEBUG] Rendu du widget maintenance pour:', widget.id);
       return <PreventiveMaintenanceWidget data={getMaintenanceData(widget.id)} />;
     case 'notifications':
-      console.log('[DEBUG] Rendu du widget notifications pour:', widget.id);
       return <NotificationsWidget data={getNotificationsData(widget.id)} />;
     case 'performance':
-      console.log('[DEBUG] Rendu du widget performance pour:', widget.id);
       return <DashboardSalesPerformanceScoreWidget />;
     case 'pipeline':
-      console.log('[DEBUG] Rendu du widget pipeline pour:', widget.id);
-      if (widget.id === 'sales-pipeline') {
+      if (widget.id === 'sales-pipeline' || widget.id === 'leads-pipeline') {
         return <SalesPipelineWidget data={getListData(widget.id)} />;
       }
-      return <div>Pipeline non reconnu: {widget.id}</div>;
+      if (widget.id === 'rental-pipeline') {
+        return <SharedSalesPipelineWidget variant="rental" />;
+      }
+      return <SalesPipelineWidget data={getListData(widget.id)} />;
     case 'priority':
-      console.log('[DEBUG] Rendu du widget priority pour:', widget.id);
       if (widget.id === 'daily-actions') {
         return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
       }
-      return <div>Widget priorité non reconnu: {widget.id}</div>;
+      return <DailyActionsPriorityWidget data={getListData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
     case 'daily-actions':
-      console.log('[DEBUG] Rendu du widget daily-actions pour:', widget.id);
       return <DailyActionsPriorityWidget data={getDailyActionsData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
     case 'analytics':
-      console.log('[DEBUG] Rendu du widget analytics pour:', widget.id);
       return <div>Widget analytics: {widget.title}</div>;
     default:
-      console.log('[DEBUG] Type de widget non reconnu:', widget.type);
       return <div>Type de widget non reconnu: {widget.type}</div>;
   }
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Filter, RefreshCw } from 'lucide-react';
+import { Filter, RefreshCw, Info, ChevronDown, ChevronUp, Mail, FolderOpen } from 'lucide-react';
 import { getQuoteRequests, updateQuoteRequestStatus } from '../utils/api/quoteRequests';
 import type { QuoteRequestRow, QuoteRequestStatus } from '../utils/api/quoteRequests';
 import { useAuth } from '../hooks/useAuth';
@@ -25,6 +25,10 @@ export default function LeadsInbox() {
   const [statusFilter, setStatusFilter] = useState<QuoteRequestStatus | 'all'>('all');
   const [rows, setRows] = useState<QuoteRequestRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [helpExpanded, setHelpExpanded] = useState(false);
+
+  const toggleHelp = () => setHelpExpanded((v) => !v);
+
   const [error, setError] = useState<string | null>(null);
 
   const loadRows = async (status: QuoteRequestStatus | 'all') => {
@@ -60,6 +64,18 @@ export default function LeadsInbox() {
       acc[row.status] = (acc[row.status] || 0) + 1;
       return acc;
     }, {});
+  }, [rows]);
+
+  const dossierStats = useMemo(() => {
+    let sansDossier = 0;
+    let sansDossierSansSession = 0;
+    for (const r of rows) {
+      if (!r.transaction_case_id) {
+        sansDossier += 1;
+        if (!r.buyer_user_id) sansDossierSansSession += 1;
+      }
+    }
+    return { sansDossier, sansDossierSansSession };
   }, [rows]);
 
   const handleStatusChange = async (id: string, next: QuoteRequestStatus) => {
@@ -101,7 +117,19 @@ export default function LeadsInbox() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Demandes de devis</h1>
           <p className="text-sm text-gray-600 mt-1">
-            {rows.length} lead(s) affiché(s) — nouveaux: {groupedCount.new || 0}
+            {rows.length} lead(s) affiché(s) — nouveaux : {groupedCount.new || 0}
+            {dossierStats.sansDossier > 0 && (
+              <span className="text-amber-800">
+                {' '}
+                · sans dossier lié : {dossierStats.sansDossier}
+                {dossierStats.sansDossierSansSession > 0 ? (
+                  <span className="text-gray-600">
+                    {' '}
+                    (dont {dossierStats.sansDossierSansSession} sans session acheteur)
+                  </span>
+                ) : null}
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -144,6 +172,184 @@ export default function LeadsInbox() {
         </div>
       )}
 
+      {dossierStats.sansDossier > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium mb-1">Colonne « Dossier » en « — » : c’est attendu dans certains cas</p>
+          <ul className="list-disc pl-5 space-y-1 text-amber-900/95">
+            <li>
+              <strong>Sans session</strong> : l’acheteur a envoyé le formulaire sans être connecté → lead enregistré, mais pas
+              de dossier transaction automatique (le vendeur peut suivre depuis cette liste et par email).
+            </li>
+            <li>
+              <strong>Avec session</strong> et toujours sans lien : vérifiez le déploiement SQL{' '}
+              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
+                transaction_platform_core.sql
+              </code>{' '}
+              (+{' '}
+              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
+                patch_transaction_participants_insert_buyer.sql
+              </code>{' '}
+              ou{' '}
+              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
+                transaction_platform_extended.sql
+              </code>
+              ). Pour les anciennes lignes avec acheteur identifié :{' '}
+              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
+                sql/backfill_dossiers_from_quote_requests.sql
+              </code>
+              .
+            </li>
+          </ul>
+        </div>
+      )}
+
+      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/90 shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={toggleHelp}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100/80 transition-colors"
+          aria-expanded={helpExpanded}
+          id="leads-help-toggle"
+        >
+          <span className="flex items-start gap-3 min-w-0">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-800">
+              <Info className="h-4 w-4" aria-hidden />
+            </span>
+            <span>
+              <span className="font-semibold text-slate-900 block">Aide : Leads, dossiers et emails</span>
+              {!helpExpanded && (
+                <span className="text-sm text-slate-600 block mt-0.5">
+                  Cet écran = vos demandes en tant que{' '}
+                  <span className="whitespace-nowrap">vendeur en base</span>. Les emails Contact et les dossiers{' '}
+                  <span className="whitespace-nowrap">transaction</span> ne sont pas la même chose — ouvrir pour le détail.
+                </span>
+              )}
+            </span>
+          </span>
+          <span className="shrink-0 text-slate-500 flex items-center gap-1 text-sm font-medium">
+            {helpExpanded ? (
+              <>
+                Masquer <ChevronUp className="h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Afficher <ChevronDown className="h-4 w-4" />
+              </>
+            )}
+          </span>
+        </button>
+
+        {helpExpanded && (
+          <div
+            className="px-4 pb-4 pt-0 border-t border-slate-200/80 text-sm text-slate-700 space-y-4"
+            role="region"
+            aria-labelledby="leads-help-toggle"
+          >
+            <section>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                Qui voit ce tableau ?
+              </h2>
+              <ul className="list-disc pl-5 space-y-1 marker:text-orange-500">
+                <li>
+                  Vous voyez les lignes où la base vous a enregistré comme vendeur de la demande (
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">seller_id</code>
+                  <span className="text-slate-500"> = votre compte</span>
+                  ). C’est votre <strong className="font-medium text-slate-800">boîte vendeur</strong> pour les leads
+                  capturés depuis le site.
+                </li>
+                <li>
+                  Les <strong className="font-medium text-slate-800">acheteurs</strong> ne passent pas par cette page : ils utilisent le{' '}
+                  <strong className="font-medium text-slate-800">formulaire sur la fiche machine</strong>.
+                </li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                <FolderOpen className="h-3.5 w-3.5" aria-hidden />
+                Colonne « Dossier » (pourquoi « — » ?)
+              </h2>
+              <p className="mb-2 text-slate-600">
+                Ici, « Dossier » = <strong className="font-medium text-slate-800">dossier transaction</strong> déjà lié à la demande.
+                Tant que{' '}
+                <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">transaction_case_id</code> est vide, le lien
+                reste « — » (normal dans plusieurs cas).
+              </p>
+              <p className="mb-2 font-medium text-slate-800">Pour qu’un lien « Ouvrir » apparaisse, il faut notamment :</p>
+              <ul className="list-disc pl-5 space-y-1 marker:text-orange-500">
+                <li>L’acheteur est <strong className="font-medium text-slate-800">connecté</strong> au moment de la demande (pour que le système crée et rattache un dossier).</li>
+                <li>Le vendeur sur l’annonce est bien identifié dans la table machines (champs courants :{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">seller_id</code>,{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">sellerid</code>,{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">user_id</code>,{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">owner_id</code>…).</li>
+                <li>L’acheteur n’est pas la même personne que le vendeur sur cette annonce.</li>
+                <li>
+                  Les scripts SQL plateforme transaction sont déployés :{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">
+                    sql/transaction_platform_core.sql
+                  </code>{' '}
+                  , puis{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">
+                    sql/transaction_platform_extended.sql
+                  </code>{' '}
+                  (ou au minimum{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">
+                    sql/patch_transaction_participants_insert_buyer.sql
+                  </code>{' '}
+                  pour la policy participants compatible acheteur créateur).
+                  Table{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">quote_requests</code>{' '}
+                  à jour avec RLS permettant à l’acheteur de mettre à jour sa ligne après création du dossier.
+                </li>
+              </ul>
+              <p className="mt-2 text-slate-600">
+                Retrouvez vos dossiers depuis le menu{' '}
+                <a href="#dossiers" className="text-orange-700 font-medium hover:underline">
+                  Mes dossiers
+                </a>
+                , ou ouvrez directement{' '}
+                <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">#dossier/&lt;uuid&gt;</code> si vous connaissez l’identifiant.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                <Mail className="h-3.5 w-3.5" aria-hidden />
+                Emails (contact) ≠ cette liste « Leads »
+              </h2>
+              <p className="mb-2 text-slate-600">
+                La notification envoyée après le formulaire de contact passe par l’Edge Function{' '}
+                <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">send-contact-email</code>.
+                Elle ne réutilise pas la colonne dossier ci-dessus ; c’est un <strong className="font-medium text-slate-800">autre flux</strong> (email instantané).
+              </p>
+              <ul className="list-disc pl-5 space-y-1 marker:text-orange-500">
+                <li>
+                  Si le corps de la requête contient un{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">machineId</code>{' '}
+                  valide, la fonction tente de joindre l’email du <strong className="font-medium text-slate-800">propriétaire de l’annonce</strong>, en lisant les champs vendeur/loueur sur{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">machines</code> puis Auth / tables annexes ({' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">users</code>,{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">pro_clients</code>…) — la clé{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">SUPABASE_SERVICE_ROLE_KEY</code> doit être disponible pour la fonction.
+                </li>
+                <li>
+                  Sinon (ou si l’owner n’a pas été résolu), l’email part vers la boîte générique{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">CONTACT_RECEIVER_EMAIL</code>. Idéalement, gardez la même valeur dans{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">VITE_CONTACT_RECEIVER_EMAIL</code>{' '}
+                  côté site pour ce repli cohérent.
+                </li>
+                <li>
+                  Option trace :{' '}
+                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">CONTACT_INQUIRY_BCC_EMAIL</code>{' '}
+                  pour une copie cachée quand le destinataire est le propriétaire de l’annonce (non obligatoire).
+                </li>
+              </ul>
+            </section>
+          </div>
+        )}
+      </div>
+
       <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-gray-700">
@@ -153,13 +359,19 @@ export default function LeadsInbox() {
               <th className="text-left px-4 py-3">Acheteur</th>
               <th className="text-left px-4 py-3">Budget</th>
               <th className="text-left px-4 py-3">Message</th>
+              <th
+                className="text-left px-4 py-3"
+                title="Lien actif lorsque transaction_case_id est renseigné (dossier transaction lié au devis)."
+              >
+                Dossier
+              </th>
               <th className="text-left px-4 py-3">Statut</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td className="px-4 py-8 text-gray-500 text-center" colSpan={6}>
+                <td className="px-4 py-8 text-gray-500 text-center" colSpan={7}>
                   Aucun lead pour ce filtre.
                 </td>
               </tr>
@@ -178,6 +390,17 @@ export default function LeadsInbox() {
                   <a href={`mailto:${row.buyer_email}`} className="text-orange-700 hover:underline">
                     {row.buyer_email}
                   </a>
+                  <div className="text-[11px] text-gray-500 mt-0.5">
+                    {row.buyer_user_id ? (
+                      <span title="Une session acheteur était active lors de l’envoi (UUID stocké).">
+                        Session acheteur : identifiée
+                      </span>
+                    ) : (
+                      <span title="Pas de compte relié à la ligne : dossier transaction automatique impossible.">
+                        Session acheteur : non reliée au site
+                      </span>
+                    )}
+                  </div>
                   {row.buyer_phone && <div className="text-xs text-gray-500">{row.buyer_phone}</div>}
                 </td>
                 <td className="px-4 py-3 text-gray-700">
@@ -187,6 +410,23 @@ export default function LeadsInbox() {
                 </td>
                 <td className="px-4 py-3 max-w-sm">
                   <p className="line-clamp-3 text-gray-700">{row.message || '—'}</p>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {row.transaction_case_id ? (
+                    <a
+                      href={`#dossier/${row.transaction_case_id}`}
+                      className="text-orange-700 font-medium text-sm hover:underline"
+                    >
+                      Ouvrir
+                    </a>
+                  ) : (
+                    <span
+                      className="text-gray-400 text-sm"
+                      title="Pas encore de dossier transaction lié à cette ligne (voir l’aide ci-dessus)."
+                    >
+                      —
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <select

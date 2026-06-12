@@ -30,11 +30,11 @@
     "react-dropzone": "^14.3.8",
     "react-grid-layout": "^1.5.1",
     "recharts": "^2.15.3",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "@supabase/supabase-js": "^2.50.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
-    "@supabase/supabase-js": "^2.50.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.0.3",

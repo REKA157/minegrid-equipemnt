@@ -26,7 +26,7 @@ import { MetricWidget } from './MetricWidget';
 import { EquipmentAvailabilityWidget } from './EquipmentAvailabilityWidget';
 import { SalesPipelineWidget } from './SalesPipelineWidget';
 import { ListWidget } from './ListWidget';
-import { SalesEvolutionWidgetEnriched } from './SalesEvolutionWidgetEnriched';
+import SalesEvolutionWidgetEnriched from '../../../components/SalesEvolutionWidgetEnriched';
 import { ChartWidget } from './ChartWidget';
 import { CalendarWidget } from './CalendarWidget';
 import { getCalendarData } from './getCalendarData';
@@ -37,6 +37,7 @@ import { PreventiveMaintenanceWidget } from './PreventiveMaintenanceWidget';
 import { getMaintenanceData } from './getMaintenanceData';
 import DashboardSalesPerformanceScoreWidget from '../../../components/dashboard/widgets/SalesPerformanceScoreWidget';
 import { DailyActionsPriorityWidget } from '../../DailyActionsWidgetFixed';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const WidgetComponent = ({
   widget,
@@ -75,6 +76,7 @@ export const WidgetComponent = ({
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { madToDisplay, currentCurrency, formatCurrency: formatMadMoneyLabel } = useWidgetMadCurrency();
 
   // Fonctions de formatage adaptatives selon la taille du widget
   const getAdaptiveTextSize = (baseSize: string) => {
@@ -110,23 +112,30 @@ export const WidgetComponent = ({
     }
   };
 
-  const formatAdaptiveCurrency = (amount: number) => {
+  const formatAdaptiveCurrency = (amountMad: number) => {
     const isSmall = widgetSize === 'small';
     const isLarge = widgetSize === 'large';
-    
-    if (amount >= 1000000) {
-      return isSmall ? `${(amount / 1000000).toFixed(1)}M` : 
-             isLarge ? `${(amount / 1000000).toFixed(2)}M MAD` :
-             `${(amount / 1000000).toFixed(1)}M MAD`;
-    } else if (amount >= 1000) {
-      return isSmall ? `${(amount / 1000).toFixed(0)}k` :
-             isLarge ? `${(amount / 1000).toFixed(1)}k MAD` :
-             `${(amount / 1000).toFixed(0)}k MAD`;
-    } else {
-      return isSmall ? `${amount}` :
-             isLarge ? `${amount.toLocaleString('fr-FR')} MAD` :
-             `${amount.toLocaleString('fr-FR')}`;
+    const d = madToDisplay(amountMad);
+
+    if (d >= 1000000) {
+      return isSmall
+        ? `${(d / 1000000).toFixed(1)}M`
+        : isLarge
+          ? `${(d / 1000000).toFixed(2)}M ${currentCurrency}`
+          : `${(d / 1000000).toFixed(1)}M ${currentCurrency}`;
     }
+    if (d >= 1000) {
+      return isSmall
+        ? `${(d / 1000).toFixed(0)}k`
+        : isLarge
+          ? `${(d / 1000).toFixed(1)}k ${currentCurrency}`
+          : `${(d / 1000).toFixed(0)}k ${currentCurrency}`;
+    }
+    return isSmall
+      ? `${Math.round(d)}`
+      : isLarge
+        ? formatMadMoneyLabel(amountMad)
+        : d.toLocaleString('fr-FR');
   };
 
   const formatAdaptiveNumber = (num: number) => {
@@ -231,6 +240,14 @@ export const WidgetComponent = ({
           return;
         }
 
+        if (
+          widget.type === 'chart' &&
+          (widget.id === 'sales-evolution' || widget.id === 'sales-chart')
+        ) {
+          setIsLoading(false);
+          return;
+        }
+
         switch (widget.dataSource) {
           case 'interventions-today':
             result = await getDailyInterventions();
@@ -259,12 +276,6 @@ export const WidgetComponent = ({
             console.log('[DEBUG] Données reçues de getEquipmentAvailability():', JSON.stringify(result, null, 2));
             setData(result);
             break;
-          case 'sales-evolution':
-            console.log('[DEBUG] Chargement du widget sales-evolution...');
-            result = getChartData('sales-evolution');
-            console.log('[DEBUG] Données reçues de getChartData(sales-evolution):', JSON.stringify(result, null, 2));
-            setData(result);
-            break;
           case 'upcoming-rentals':
             result = await getUpcomingRentals();
             setData(result);
@@ -286,7 +297,7 @@ export const WidgetComponent = ({
     };
 
     loadData();
-  }, [widget.dataSource, dataVersion, widget.type]);
+  }, [widget.dataSource, dataVersion, widget.type, widget.id]);
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${isExpanded ? 'col-span-2' : ''}`}>
@@ -352,6 +363,12 @@ export const WidgetComponent = ({
             if (widget.type === 'performance') {
               return <DashboardSalesPerformanceScoreWidget />;
             }
+            if (
+              widget.type === 'chart' &&
+              (widget.id === 'sales-evolution' || widget.id === 'sales-chart')
+            ) {
+              return <SalesEvolutionWidgetEnriched />;
+            }
             if (isLoading) {
               return (
                 <div className="text-center text-gray-500 dark:text-gray-400 py-3">
@@ -402,9 +419,6 @@ export const WidgetComponent = ({
                 />;
               case 'chart':
                 console.log('[DEBUG] Rendu du widget chart enrichi pour:', widget.id);
-                if (widget.id === 'sales-chart') {
-                  return <SalesEvolutionWidgetEnriched data={data} />;
-                }
                 return <ChartWidget
                   widget={widget}
                   data={data}

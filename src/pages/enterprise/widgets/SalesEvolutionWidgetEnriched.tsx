@@ -29,7 +29,7 @@ export const SalesEvolutionWidgetEnriched = ({ data = [] }: { data?: any[] }) =>
   const [sectorData, setSectorData] = useState<any[]>([]);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
   const [aiRecommendations, setAiRecommendations] = useState<any[]>([]);
-  const [showMultiChart, setShowMultiChart] = useState(true);
+  const [showMultiChart, setShowMultiChart] = useState(false);
   const [showAIForecast, setShowAIForecast] = useState(false);
   const [benchmarkData, setBenchmarkData] = useState<any>({});
   const [aiInsights, setAiInsights] = useState<any[]>([]);
@@ -1018,14 +1018,16 @@ export const SalesEvolutionWidgetEnriched = ({ data = [] }: { data?: any[] }) =>
             onClick={() => setShowQuickActions(!showQuickActions)}
             className="px-4 py-2 bg-amber-800 text-white rounded-lg hover:bg-amber-900 text-sm"
           >
-            Actions rapides
+            Outils démo
           </button>
         </div>
 
-        {/* Actions rapides */}
         {showQuickActions && (
           <div className="mt-3 p-4 bg-gray-50 rounded-lg border">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">Actions rapides</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Ces commandes sont une <span className="font-medium">démonstration côté client</span> (pas d’appel API métier réel pour l’instant).
+            </p>
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Scénarios de démo</h4>
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => handleQuickAction('refresh-data')}

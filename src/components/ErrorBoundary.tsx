@@ -1,4 +1,5 @@
 import React from 'react';
+import { logger } from '../utils/logger';
 
 interface State {
   hasError: boolean;
@@ -16,9 +17,7 @@ export default class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    if (import.meta.env.DEV) {
-      console.error('[ErrorBoundary]', error, info.componentStack);
-    }
+    logger.error('[ErrorBoundary] crash React', error, { componentStack: info.componentStack });
   }
 
   private handleReset = () => this.setState({ hasError: false, error: null });
@@ -36,8 +35,16 @@ export default class ErrorBoundary extends React.Component<
             </div>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Une erreur est survenue</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Quelque chose s'est mal passé. Veuillez rafraîchir la page.
+              Quelque chose s’est mal passé. Veuillez rafraîchir la page.
             </p>
+            {this.state.error?.message && (
+              <p
+                className="mb-4 rounded-lg bg-gray-50 px-3 py-2 text-left text-xs text-gray-700 break-words border border-gray-200 max-h-32 overflow-y-auto"
+                title={this.state.error.message}
+              >
+                {this.state.error.message}
+              </p>
+            )}
             <button
               onClick={this.handleReset}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"

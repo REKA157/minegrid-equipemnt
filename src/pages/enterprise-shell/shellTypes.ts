@@ -4,10 +4,19 @@
  * configurateur historique (Widget, WidgetLayout, DashboardConfig).
  */
 
+/** Repère un widget du catalogue métier (localStorage + rendu). Pas d’index signature pour rester assignable aux configs typées (ex. vendeur). */
 export interface ShellWidget {
   id: string;
   title?: string;
-  [key: string]: unknown;
+  type?: string;
+  description?: string;
+  dataSource?: string;
+  icon?: unknown;
+  enabled?: boolean;
+  features?: unknown;
+  priority?: number;
+  category?: string;
+  size?: string;
 }
 
 export interface ShellWidgetsSource {

@@ -1,11 +1,25 @@
 import React from 'react';
-import { DollarSign, Target, TrendingUp, Shield, Star } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, Shield, Star, FolderOpen } from 'lucide-react';
 
 // Widgets pour le métier Investisseur
 export const InvestisseurWidgets = {
   metier: 'Investisseur',
   description: 'Investissement et financement',
   widgets: [
+    {
+      id: 'transaction-cases',
+      type: 'list',
+      title: 'Mes dossiers transaction',
+      description: 'Suivi des dossiers où vous achetez ou investissez (selon vos droits)',
+      icon: FolderOpen,
+      dataSource: 'transaction_cases',
+      features: {
+        periodSelector: false,
+        export: false,
+        analytics: false,
+        alerts: true
+      }
+    },
     {
       id: 'portfolio-value',
       type: 'metric',

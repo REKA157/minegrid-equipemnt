@@ -118,7 +118,7 @@ function mapSupabaseRowToMachine(m: MachineRow): Machine {
     __machineGroup: machineGroup,
     __jobSector: jobSector.toLowerCase(),
     price: typeof m.price === 'string' ? Number(m.price) || 0 : (m.price || 0),
-  } as Machine;
+  } as unknown as Machine;
 }
 
 interface MachinesProps {

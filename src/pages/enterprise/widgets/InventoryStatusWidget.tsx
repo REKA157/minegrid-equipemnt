@@ -13,6 +13,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { toast } from '../../../utils/toast';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
@@ -30,6 +31,7 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
   const [selectedAction, setSelectedAction] = useState<string>('');
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [showSalesActions, setShowSalesActions] = useState(false);
+  const { formatCurrency } = useWidgetMadCurrency();
 
   // Fonction pour générer des recommandations IA
   const generateAIRecommendation = (item: any) => {
@@ -70,26 +72,83 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
 
   // Enrichir les données avec des informations de vente et de visibilité
   const enrichedData = React.useMemo(() => {
-    return data.map(item => ({
-      ...item,
-      // Ajouter des données simulées pour la démonstration
-      dormantDays: item.dormantDays || Math.floor(Math.random() * 120) + 1,
-      visibilityRate: item.visibilityRate || Math.floor(Math.random() * 100),
-      averageSalesTime: item.averageSalesTime || Math.floor(Math.random() * 90) + 30,
-      clickCount: item.clickCount || Math.floor(Math.random() * 50),
-      lastContact: item.lastContact || new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(),
-      priceReduction: item.priceReduction || 0,
-      premiumBoost: item.premiumBoost || false,
-      aiRecommendation: generateAIRecommendation(item)
-    }));
+    return data.map((item) => {
+      const stock = typeof item.stock === 'number' ? item.stock : 0;
+      const minStock =
+        typeof item.minStock === 'number'
+          ? item.minStock
+          : typeof item.min === 'number'
+            ? item.min
+            : 0;
+
+      const dormantDays = item.dormantDays ?? Math.floor(Math.random() * 120) + 1;
+      const visibilityRate = item.visibilityRate ?? Math.floor(Math.random() * 100);
+      const averageSalesTime = item.averageSalesTime ?? Math.floor(Math.random() * 90) + 30;
+      const clickCount = item.clickCount ?? Math.floor(Math.random() * 50);
+      const lastContact =
+        item.lastContact ||
+        new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString();
+      const priceReduction = item.priceReduction || 0;
+      const premiumBoost = item.premiumBoost || false;
+
+      const title = item.title ?? item.category ?? 'Article';
+
+      const aiRecommendation = generateAIRecommendation({
+        ...item,
+        title,
+        stock,
+        minStock,
+        dormantDays,
+        visibilityRate,
+      });
+
+      let status: string = item.status;
+      if (!status) {
+        if (stock <= 0) status = 'En rupture';
+        else if (minStock > 0 && stock < minStock) status = 'Stock faible';
+        else if (dormantDays > 60) status = 'Stock dormant';
+        else if (visibilityRate < 30) status = 'Faible visibilité';
+        else status = 'Disponible';
+      }
+
+      const priority: string = item.priority ?? aiRecommendation.priority;
+
+      return {
+        ...item,
+        title,
+        stock,
+        minStock,
+        dormantDays,
+        visibilityRate,
+        averageSalesTime,
+        clickCount,
+        lastContact,
+        priceReduction,
+        premiumBoost,
+        aiRecommendation,
+        status,
+        priority,
+      };
+    });
   }, [data]);
 
-  const categories = ['all', ...Array.from(new Set(enrichedData.map(item => item.category)))];
+  const categories = React.useMemo(() => {
+    const labels = new Set<string>();
+    for (const row of enrichedData) {
+      const c = row.category;
+      if (c != null && String(c).trim() !== '') labels.add(String(c).normalize('NFC').trim());
+    }
+    return ['all', ...[...labels].sort((a, b) => a.localeCompare(b, 'fr'))];
+  }, [enrichedData]);
+
   const priorities = ['all', 'high', 'medium', 'low'];
-  const statuses = ['all', 'En rupture', 'Stock faible', 'Disponible', 'Stock dormant', 'Faible visibilité', 'En rupture'];
+  const statuses = ['all', 'En rupture', 'Stock faible', 'Disponible', 'Stock dormant', 'Faible visibilité'];
 
   const filteredData = enrichedData.filter(item => {
-    const categoryMatch = selectedCategory === 'all' || item.category === selectedCategory;
+    const categoryMatch =
+      selectedCategory === 'all' ||
+      String(item.category ?? '').normalize('NFC').trim() ===
+        selectedCategory.normalize('NFC').trim();
     const priorityMatch = selectedPriority === 'all' || item.priority === selectedPriority;
     const statusMatch = selectedStatus === 'all' || item.status === selectedStatus;
     return categoryMatch && priorityMatch && statusMatch;
@@ -162,15 +221,6 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
     if (percentage < 50) return 'bg-orange-500';
     if (percentage < 100) return 'bg-yellow-500';
     return 'bg-green-500';
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
   };
 
   const formatDate = (dateString: string) => {
@@ -522,12 +572,15 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
           </div>
         </div>
 
-        {/* Actions rapides */}
+        {/* Raccourcis : applique un traitement sur le premier article éligible (pas une sélection manuelle). */}
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-          <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center">
+          <h4 className="text-sm font-semibold text-green-800 mb-1 flex items-center">
             <Zap className="h-4 w-4 mr-2" />
-            ⚡ Actions rapides disponibles
+            Raccourcis sur le premier article éligible
           </h4>
+          <p className="text-[11px] text-green-900/80 mb-3">
+            Chaque bouton cible automatiquement une ligne du catalogue (ex. stock dormant). Vérifiez toujours le détail sur la fiche article.
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <button 
               onClick={() => {
@@ -1167,9 +1220,11 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Actions rapides */}
               <div className="bg-green-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-green-900 mb-3">⚡ Actions Rapides</h4>
+                <h4 className="font-semibold text-green-900 mb-1">Scénarios de démo</h4>
+                <p className="text-xs text-green-900/80 mb-3">
+                  Notifications toast uniquement — non connectées à votre catalogue réel tant que l&apos;API n&apos;est pas branchée.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button 
                     onClick={() => {

@@ -11,14 +11,24 @@ export const getInventoryStatus = async () => {
     { label: 'getInventoryStatus', fallback: [] },
   );
 
-  return data.map((item) => ({
-    category: item.category,
-    stock: item.current_stock,
-    min: item.minimum_stock,
-    unit_price: item.unit_price,
-    supplier: item.supplier,
-    needs_restock: item.current_stock < item.minimum_stock,
-  }));
+  return data.map((item) => {
+    const stock = item.current_stock;
+    const minStock = item.minimum_stock;
+    const unitPrice = typeof item.unit_price === 'number' ? item.unit_price : Number(item.unit_price) || 0;
+    return {
+      id: item.id,
+      title: item.category || 'Article',
+      category: item.category,
+      stock,
+      minStock,
+      min: minStock,
+      value: unitPrice * Math.max(stock, 0),
+      unit_price: unitPrice,
+      supplier: item.supplier,
+      needs_restock: stock < minStock,
+      last_restock_date: (item as { last_restock_date?: string | null }).last_restock_date ?? null,
+    };
+  });
 };
 
 export const updateInventoryStock = async (id: string, newStock: number) => {
@@ -42,8 +52,16 @@ export const createStockOrder = async (order: {
   expected_delivery_date: string;
 }) => {
   const total_price = order.quantity * order.unit_price;
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) throw new Error('Utilisateur non authentifié');
+
   return supabaseCall(
-    () => supabase.from('stock_orders').insert([{ ...order, total_price }]).select().single(),
+    () =>
+      supabase
+        .from('stock_orders')
+        .insert([{ ...order, total_price, created_by: userData.user.id, status: 'En attente' }])
+        .select()
+        .single(),
     { label: 'createStockOrder', toastOnError: true, toastMessage: 'Impossible de créer la commande de stock' },
   );
 };

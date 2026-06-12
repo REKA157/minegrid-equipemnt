@@ -1,15 +1,8 @@
 import React from 'react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const PerformanceScoreWidget = ({ data }: { data: any }) => {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
+  const { formatCurrency } = useWidgetMadCurrency();
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-orange-600';

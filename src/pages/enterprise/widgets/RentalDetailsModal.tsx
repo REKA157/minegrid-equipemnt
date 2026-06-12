@@ -1,14 +1,9 @@
 import { X } from 'lucide-react';
 import React from 'react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const RentalDetailsModal = ({ rental, onClose }: { rental: any; onClose: () => void }) => {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
-
+  const { formatCurrency } = useWidgetMadCurrency();
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
       day: '2-digit',

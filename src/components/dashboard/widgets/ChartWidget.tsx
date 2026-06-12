@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TrendingUp, TrendingDown, BarChart3, PieChart, LineChart, X } from 'lucide-react';
 import { Widget } from '../../../constants/dashboardTypes';
 import { formatCurrency, formatNumber } from '../../../utils/dashboardUtils';
+import { useCurrencyStore } from '../../../stores/currencyStore';
 
 interface ChartWidgetProps {
   widget: Widget;
@@ -10,6 +11,7 @@ interface ChartWidgetProps {
 }
 
 const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'medium' }) => {
+  useCurrencyStore((s) => s.currentCurrency);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
   const [showDetails, setShowDetails] = useState(false);
 

@@ -103,7 +103,6 @@ import { PreventiveMaintenanceWidget } from "./enterprise/widgets/PreventiveMain
 import { getChartData } from "./enterprise/widgets/getChartData";
 import { SalesPipelineWidget } from "./enterprise/widgets/SalesPipelineWidget";
 import { InventoryStatusWidget } from "./enterprise/widgets/InventoryStatusWidget";
-import { SalesEvolutionWidgetEnriched } from "./enterprise/widgets/SalesEvolutionWidgetEnriched";
 import { NotificationsWidget } from "./enterprise/widgets/NotificationsWidget";
 import { AdvancedKPIsWidget } from "./enterprise/widgets/AdvancedKPIsWidget";
 import { InterventionForm } from "./enterprise/widgets/InterventionForm";

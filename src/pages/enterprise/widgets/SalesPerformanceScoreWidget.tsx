@@ -1,6 +1,8 @@
 import React from 'react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
+  const { formatCurrency } = useWidgetMadCurrency();
   // Utiliser des valeurs par défaut intelligentes même si data est null/undefined
   const safeData = {
     score: data?.score || 0,
@@ -52,15 +54,6 @@ export const SalesPerformanceScoreWidget = ({ data }: { data: any }) => {
       prospects: { value: 0, target: 10, trend: 'stable' },
       responseTime: { value: 2.5, target: 1.5, trend: 'stable' }
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
   };
 
   const getScoreColor = (score: number) => {

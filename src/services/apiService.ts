@@ -85,7 +85,8 @@ export const apiCall = async (method: string, endpoint: string, data?: any): Pro
   try {
     console.log(`🔄 API Call: ${method} ${endpoint}`, data);
     
-    // Simulation des appels API pour les fonctionnalités non encore implémentées
+    // Client-only stubs : les endpoints listés retournent un succès simulé (pas de requête HTTP réelle).
+    // À remplacer par fetch vers votre backend lorsque les routes seront disponibles.
     switch (endpoint) {
       case '/api/actions/start':
         return { success: true, message: 'Action démarrée' };

@@ -1,6 +1,8 @@
-
+import { useCallback } from 'react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const useAdaptiveWidget = (widgetSize: 'small' | 'normal' | 'large' = 'normal') => {
+  const { madToDisplay, currentCurrency, formatCurrency: formatMadMoneyLabel } = useWidgetMadCurrency();
   const getTextSize = (type: 'title' | 'subtitle' | 'value' | 'small') => {
     switch (widgetSize) {
       case 'small':
@@ -23,42 +25,54 @@ export const useAdaptiveWidget = (widgetSize: 'small' | 'normal' | 'large' = 'no
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    const isSmall = widgetSize === 'small';
-    const isLarge = widgetSize === 'large';
-    
-    if (amount >= 1000000) {
-      return isSmall ? `${(amount / 1000000).toFixed(1)}M` : 
-             isLarge ? `${(amount / 1000000).toFixed(2)}M MAD` :
-             `${(amount / 1000000).toFixed(1)}M MAD`;
-    } else if (amount >= 1000) {
-      return isSmall ? `${(amount / 1000).toFixed(0)}k` :
-             isLarge ? `${(amount / 1000).toFixed(1)}k MAD` :
-             `${(amount / 1000).toFixed(0)}k MAD`;
-    } else {
-      return isSmall ? `${amount}` :
-             isLarge ? `${amount.toLocaleString('fr-FR')} MAD` :
-             `${amount.toLocaleString('fr-FR')}`;
-    }
-  };
+  const formatCurrency = useCallback(
+    (amountMad: number) => {
+      const isSmall = widgetSize === 'small';
+      const isLarge = widgetSize === 'large';
+      const d = madToDisplay(amountMad);
+
+      if (d >= 1000000) {
+        return isSmall
+          ? `${(d / 1000000).toFixed(1)}M`
+          : isLarge
+            ? `${(d / 1000000).toFixed(2)}M ${currentCurrency}`
+            : `${(d / 1000000).toFixed(1)}M ${currentCurrency}`;
+      }
+      if (d >= 1000) {
+        return isSmall
+          ? `${(d / 1000).toFixed(0)}k`
+          : isLarge
+            ? `${(d / 1000).toFixed(1)}k ${currentCurrency}`
+            : `${(d / 1000).toFixed(0)}k ${currentCurrency}`;
+      }
+      return isSmall
+        ? `${Math.round(d)}`
+        : isLarge
+          ? formatMadMoneyLabel(amountMad)
+          : d.toLocaleString('fr-FR');
+    },
+    [widgetSize, madToDisplay, currentCurrency, formatMadMoneyLabel],
+  );
 
   const formatNumber = (num: number) => {
     const isSmall = widgetSize === 'small';
     const isLarge = widgetSize === 'large';
-    
+
     if (num >= 1000000) {
-      return isSmall ? `${(num / 1000000).toFixed(1)}M` :
-             isLarge ? `${(num / 1000000).toFixed(2)}M` :
-             `${(num / 1000000).toFixed(1)}M`;
-    } else if (num >= 1000) {
-      return isSmall ? `${(num / 1000).toFixed(0)}k` :
-             isLarge ? `${(num / 1000).toFixed(1)}k` :
-             `${(num / 1000).toFixed(0)}k`;
-    } else {
-      return isSmall ? `${num}` :
-             isLarge ? `${num.toLocaleString('fr-FR')}` :
-             `${num.toLocaleString('fr-FR')}`;
+      return isSmall
+        ? `${(num / 1000000).toFixed(1)}M`
+        : isLarge
+          ? `${(num / 1000000).toFixed(2)}M`
+          : `${(num / 1000000).toFixed(1)}M`;
     }
+    if (num >= 1000) {
+      return isSmall
+        ? `${(num / 1000).toFixed(0)}k`
+        : isLarge
+          ? `${(num / 1000).toFixed(1)}k`
+          : `${(num / 1000).toFixed(0)}k`;
+    }
+    return isSmall ? `${num}` : isLarge ? `${num.toLocaleString('fr-FR')}` : `${num.toLocaleString('fr-FR')}`;
   };
 
   return {
@@ -66,6 +80,6 @@ export const useAdaptiveWidget = (widgetSize: 'small' | 'normal' | 'large' = 'no
     getGridCols,
     formatCurrency,
     formatNumber,
-    widgetSize
+    widgetSize,
   };
 };

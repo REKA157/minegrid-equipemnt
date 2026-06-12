@@ -7,6 +7,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { supabaseClient as supabase } from '../utils/supabaseClient';
+import { setAccountItem, removeAccountItem } from '../utils/accountLocalStorage';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
@@ -113,19 +114,16 @@ const PaymentForm: React.FC<StripePaymentFormProps> = ({
 
       if (error) throw error;
 
-      // Mettre à jour le localStorage
-      localStorage.setItem('userSubscription', planType);
-      localStorage.removeItem('subscriptionCancelled');
+      // Mettre à jour le localStorage par compte
+      setAccountItem(user.id, 'userSubscription', planType);
+      removeAccountItem(user.id, 'subscriptionCancelled');
       
       // Mettre à jour les clés spécifiques pour l'abonnement entreprise
       if (planType === 'enterprise') {
-        // Nettoyer d'abord les anciennes données
-        localStorage.removeItem('subscriptionCancelled');
-        
-        // Mettre à jour avec les bonnes valeurs
-        localStorage.setItem('userSubscription', 'enterprise');
-        localStorage.setItem('enterpriseService', 'true');
-        localStorage.setItem('userServices', 'enterprise');
+        removeAccountItem(user.id, 'subscriptionCancelled');
+        setAccountItem(user.id, 'userSubscription', 'enterprise');
+        setAccountItem(user.id, 'enterpriseService', 'true');
+        setAccountItem(user.id, 'userServices', 'enterprise');
         
           setTimeout(() => {
           window.dispatchEvent(new CustomEvent('enterpriseSubscriptionActivated', {

@@ -1,7 +1,7 @@
 import { Widget } from '../types';
 import React from 'react';
 import { iconMap } from './iconMap';
-import { SalesEvolutionWidgetEnriched } from './SalesEvolutionWidgetEnriched';
+import SalesEvolutionWidgetEnriched from '../../../components/SalesEvolutionWidgetEnriched';
 import { EquipmentAvailabilityWidget } from './EquipmentAvailabilityWidget';
 import { getInterventionsByStatus } from '../../../utils/enterpriseApi';
 import {
@@ -17,6 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 import { Package, PieChart } from 'lucide-react';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const ChartWidget = ({
   widget,
@@ -29,12 +30,13 @@ export const ChartWidget = ({
   onShowDetails: (content: React.ReactNode) => void;
   onShowInterventionForm: () => void;
 }) => {
+  const { formatCurrency } = useWidgetMadCurrency();
   const IconComponent = typeof widget.icon === 'string' ? iconMap[widget.icon] : widget.icon;
 
   const renderChart = () => {
     switch (widget.id) {
         case 'sales-chart':
-            return <SalesEvolutionWidgetEnriched data={data} />;
+            return <SalesEvolutionWidgetEnriched />;
 
         case 'equipment-availability':
             return <EquipmentAvailabilityWidget data={data} />;
@@ -318,7 +320,7 @@ export const ChartWidget = ({
                         <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                     <div>
                             <span className="text-gray-600">Prix unitaire:</span>
-                            <span className="font-medium ml-1">{item.unit_price} MAD</span>
+                            <span className="font-medium ml-1">{formatCurrency(Number(item.unit_price) || 0)}</span>
                     </div>
                           <div>
                             <span className="text-gray-600">Fournisseur:</span>

@@ -46,6 +46,18 @@ export default function EquipmentAvailabilityWidget({ data, widgetSize }: Equipm
 
   const filtered = filter === 'all' ? data : data.filter((e) => e.status === filter);
 
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-center">
+        <Truck className="mx-auto h-10 w-10 text-gray-300" />
+        <p className="mt-2 text-sm font-medium text-gray-700">Aucune donnée de parc</p>
+        <p className="mt-1 max-w-xs text-xs text-gray-500">
+          Rien à afficher pour ce compte. Vérifiez la connexion ou que le matériel est bien enregistré côté loueur.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Gauge */}

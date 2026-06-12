@@ -5,10 +5,54 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { commonServices } from '../../constants/commonServices';
 import { NotificationContainer } from '../../components/NotificationToast';
+import type { Widget as DashboardWidget } from '../../constants/dashboardTypes';
 import WidgetRenderer from '../../components/dashboard/WidgetRenderer';
 import { getOrderedAndCompleteLayout } from './layoutHelpers';
 import { useShellState } from './useShellState';
-import type { ShellLayoutItem, ShellWidgetsSource } from './shellTypes';
+import type { ShellLayoutItem, ShellWidget, ShellWidgetsSource } from './shellTypes';
+import { useAuth } from '../../hooks/useAuth';
+
+const DASHBOARD_WIDGET_TYPES: readonly DashboardWidget['type'][] = [
+  'metric',
+  'chart',
+  'list',
+  'calendar',
+  'map',
+  'equipment',
+  'maintenance',
+  'performance',
+  'pipeline',
+  'priority',
+  'analytics',
+  'daily-actions',
+  'daily-priority',
+  'inventory',
+  'equipment-catalog',
+  'customer-leads',
+  'quotes-management',
+  'after-sales-service',
+  'market-trends',
+  'sales-analytics',
+  'ai-insights',
+  'ai-optimization',
+] as const;
+
+function shellWidgetToDashboardWidget(w: ShellWidget): DashboardWidget {
+  const raw = typeof w.type === 'string' ? w.type : '';
+  const type: DashboardWidget['type'] = DASHBOARD_WIDGET_TYPES.includes(raw as DashboardWidget['type'])
+    ? (raw as DashboardWidget['type'])
+    : 'analytics';
+
+  return {
+    id: w.id,
+    type,
+    title: String(w.title ?? w.id),
+    description: String(w.description ?? ''),
+    icon: w.icon ?? null,
+    enabled: typeof w.enabled === 'boolean' ? w.enabled : true,
+    dataSource: String(w.dataSource ?? w.id),
+  };
+}
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -46,6 +90,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
   validIds,
   modalLabel,
 }) => {
+  const { user } = useAuth();
   const {
     config,
     layout,
@@ -58,7 +103,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
     removeWidget,
     restoreAllWidgets,
     saveDashboard,
-  } = useShellState({ role, widgetsSource, validIds });
+  } = useShellState({ role, widgetsSource, validIds, storageUserId: user?.id });
 
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -213,9 +258,10 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
                   style={{ maxHeight: '100%' }}
                 >
                   <WidgetRenderer
-                    widget={widget}
+                    widget={shellWidgetToDashboardWidget(widget)}
                     widgetSize="medium"
                     onAction={handleWidgetAction}
+                    dashboardRole={role}
                   />
                 </div>
               </div>

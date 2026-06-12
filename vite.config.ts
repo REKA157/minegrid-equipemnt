@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     extensions: ['.tsx', '.ts', '.jsx', '.js'],
+    /** Une seule copie de React / react-query : évite « No QueryClient set » avec des chunks isolés. */
+    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   server: {
     port: 5173,
@@ -30,20 +32,19 @@ export default defineConfig({
          * isolant les deps lourdes qui ne sont pas utilisees sur la
          * page d'accueil.
          *
-         * - react-vendor : tjrs charge, cache long (7 MB+ combine)
+         * - react-vendor : react + react-dom + react-query (même fichier = même contexte)
          * - supabase     : utilise partout, mais en chunk separe pour
          *                  meilleur cache entre deploiements
          * - charts/maps/grid/stripe : chunks optionnels charges a la
          *                  demande par les pages qui en ont besoin
          */
         manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
+          'react-vendor': ['react', 'react-dom', '@tanstack/react-query'],
           'supabase': ['@supabase/supabase-js'],
           'charts': ['recharts', 'chart.js', 'react-chartjs-2'],
           'maps': ['leaflet'],
           'grid': ['react-grid-layout', '@hello-pangea/dnd'],
           'stripe': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
-          'query': ['@tanstack/react-query'],
           'zustand': ['zustand'],
         },
       },

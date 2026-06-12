@@ -21,7 +21,7 @@ import FinancingSimulator from '../components/FinancingSimulator';
 import Price from '../components/Price';
 import { useCurrencyStore } from '../stores/currencyStore';
 import { toast } from '../utils/toast';
-import { submitQuoteRequest } from '../utils/api/quoteRequests';
+import { submitQuoteRequest, parseSellerUuid } from '../utils/api/quoteRequests';
 import { trackEvent } from '../utils/analytics';
 import { logger } from '../utils/logger';
 interface MachineDetailProps {
@@ -41,6 +41,8 @@ interface ContactFormData {
 interface MachineLegacyFields {
   sellerid?: string | null;
   seller_id?: string | null;
+  user_id?: string | null;
+  owner_id?: string | null;
   photos?: string[] | null;
 }
 
@@ -53,7 +55,28 @@ interface DimensionsLike {
 function getLegacySellerId(value: unknown): string {
   if (!value || typeof value !== 'object') return '';
   const v = value as MachineLegacyFields;
-  return v.sellerid || v.seller_id || '';
+  return v.sellerid || v.seller_id || v.user_id || v.owner_id || '';
+}
+
+const PLACEHOLDER_SELLER_IDS = new Set([
+  '00000000-0000-0000-0000-000000000000',
+  '00000000-0000-0000-0000-000000000001',
+]);
+
+function isPlaceholderSellerUuid(id: string): boolean {
+  return PLACEHOLDER_SELLER_IDS.has(id.trim().toLowerCase());
+}
+
+/** Priorité alignée avec send-contact-email */
+function resolveSellerUuidFromMachineRecord(row: Record<string, unknown>): string | null {
+  const keys = ['seller_id', 'sellerid', 'user_id', 'owner_id'] as const;
+  for (const k of keys) {
+    const raw = row[k];
+    if (typeof raw !== 'string') continue;
+    const uuid = parseSellerUuid(raw);
+    if (uuid && !isPlaceholderSellerUuid(uuid)) return uuid;
+  }
+  return null;
 }
 
 function getLegacyPhotos(value: unknown): string[] {
@@ -126,66 +149,37 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
       .eq('id', id)
       .single()
       .abortSignal(new AbortController().signal)  // Force refresh
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error) {
           console.error('Erreur chargement machine :', error);
           setError('Erreur lors du chargement de la machine. Veuillez réessayer.');
           setLoading(false);
-        } else {
-          // Ensuite, charger les données du vendeur séparément
-          if (data.sellerid && data.sellerid !== '00000000-0000-0000-0000-000000000001') {
-            supabase
-            .from('users')
-            .select('id, name, email, location, phone, company_name, description')
-            .eq('id', data.sellerid)
-            .single()
-            .then(({ data: sellerData, error: sellerError }) => {
-              if (!sellerError && sellerData) {
-                setMachineData({
-                  ...data,
-                  seller: {
-                    ...sellerData,
-                    location:
-                      sellerData.location ||
-                      [data.city, data.region, data.country].filter(Boolean).join(', ') ||
-                      'Localisation inconnue',
-                  }
-                });
-              } else {
-                if (!isMissingTableError(sellerError)) {
-                  console.error('Erreur chargement vendeur:', sellerError);
-                }
-                setMachineData({
-                  ...data,
-                  seller: {
-                    id: getLegacySellerId(data),
-                    name: '',
-                    rating: 0,
-                    location: [data.city, data.region, data.country].filter(Boolean).join(', ') || 'Localisation inconnue',
-                  },
-                });
-              }
-              // Définir loading à false seulement après avoir tenté de charger le vendeur
-              setLoading(false);
-            });
-          } else {
-            setMachineData({
-              ...data,
-              seller: {
-                id: getLegacySellerId(data),
-                name: '',
-                rating: 0,
-                location: [data.city, data.region, data.country].filter(Boolean).join(', ') || 'Localisation inconnue',
-              },
-            });
-            setLoading(false);
-          }
-    
-          // 🔁 Générer les URLs images : URL externe directe OU path Storage legacy.
+          return;
+        }
+
+        let merged: Record<string, unknown> = { ...data };
+        const idsPick = await supabase
+          .from('machines')
+          .select('seller_id,sellerid,user_id,owner_id')
+          .eq('id', id)
+          .maybeSingle();
+        if (!idsPick.error && idsPick.data && typeof idsPick.data === 'object') {
+          merged = { ...merged, ...(idsPick.data as Record<string, unknown>) };
+        }
+
+        const sellerUid = resolveSellerUuidFromMachineRecord(merged);
+
+        const geoLine =
+          [merged.city, merged.region, merged.country]
+            .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+            .join(', ') || 'Localisation inconnue';
+
+        const finishSellerAndImages = (machinePayload: MachineWithPremium) => {
           const urls: string[] = [];
           const imgCandidates: string[] = [];
-          if (Array.isArray(data.images)) imgCandidates.push(...data.images);
-          imgCandidates.push(...getLegacyPhotos(data));
+          const md = machinePayload as unknown as MachineLegacyFields & { images?: string[] };
+          if (Array.isArray(md.images)) imgCandidates.push(...md.images);
+          imgCandidates.push(...getLegacyPhotos(machinePayload));
           imgCandidates.forEach((img: string) => {
             const raw = String(img || '').trim();
             if (!raw) return;
@@ -211,9 +205,60 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
 
           const sortedUrls = [...new Set(urls)].sort((a, b) => scoreImageUrl(b) - scoreImageUrl(a));
           setImageUrls(sortedUrls);
-
-          // 📊 Enregistrer la vue de la machine
           recordMachineView(id).catch(() => undefined);
+        };
+
+        if (sellerUid) {
+          supabase
+            .from('users')
+            .select('id, name, email, location, phone, company_name, description')
+            .eq('id', sellerUid)
+            .single()
+            .then(({ data: sellerData, error: sellerError }) => {
+              const basePayload = merged as unknown as MachineWithPremium;
+              if (!sellerError && sellerData) {
+                const payload: MachineWithPremium = {
+                  ...basePayload,
+                  seller: {
+                    ...sellerData,
+                    location:
+                      sellerData.location ||
+                      geoLine,
+                  },
+                };
+                setMachineData(payload);
+                finishSellerAndImages(payload);
+              } else {
+                if (!isMissingTableError(sellerError)) {
+                  console.error('Erreur chargement vendeur:', sellerError);
+                }
+                const stubPayload: MachineWithPremium = {
+                  ...basePayload,
+                  seller: {
+                    id: sellerUid,
+                    name: '',
+                    rating: 0,
+                    location: geoLine,
+                  },
+                };
+                setMachineData(stubPayload);
+                finishSellerAndImages(stubPayload);
+              }
+              setLoading(false);
+            });
+        } else {
+          const stubPayload: MachineWithPremium = {
+            ...(merged as unknown as MachineWithPremium),
+            seller: {
+              id: getLegacySellerId(merged),
+              name: '',
+              rating: 0,
+              location: geoLine,
+            },
+          };
+          setMachineData(stubPayload);
+          finishSellerAndImages(stubPayload);
+          setLoading(false);
         }
       });
     } else {
@@ -409,14 +454,11 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
 
     try {
       const sellerIdRaw = machineData?.seller?.id || getLegacySellerId(machineData) || null;
-      const sellerId =
-        typeof sellerIdRaw === 'string' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sellerIdRaw)
-          ? sellerIdRaw
-          : null;
+      const sellerId = typeof sellerIdRaw === 'string' ? parseSellerUuid(sellerIdRaw) : null;
 
+      let quoteSubmit: Awaited<ReturnType<typeof submitQuoteRequest>> | null = null;
       try {
-        await submitQuoteRequest({
+        quoteSubmit = await submitQuoteRequest({
           machine_id: machineId,
           machine_name: machineData?.name || 'Machine',
           brand: machineData?.brand || null,
@@ -444,13 +486,22 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
         return;
       }
 
+      const sellerNotifyEmail =
+        typeof machineData?.seller?.email === 'string' ? machineData.seller.email.trim() : '';
+      logger.info('[MachineDetail] envoi notification vendeur', {
+        machineId,
+        sellerUuidForQuote: sellerId,
+        sellerEmailFromUsersTable: sellerNotifyEmail ? '[présent]' : '[absent]',
+      });
+
       // Envoi email best-effort: la demande reste valide meme si l'email echoue.
-      const receiverEmail =
+      const inboxFallback =
         (import.meta.env.VITE_CONTACT_RECEIVER_EMAIL as string | undefined)?.trim() ||
         'contact@minegrid-equipment.com';
       const { data: emailData, error: emailError } = await supabase.functions.invoke('send-contact-email', {
         body: {
-          to: receiverEmail,
+          // Doit être identique à CONTACT_RECEIVER_EMAIL (Supabase) si le routage automatique échoue
+          to: inboxFallback,
           from: contactForm.email,
           subject: `Demande d'information - ${machineData?.name}`,
           html: `
@@ -462,17 +513,56 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             <p><strong>Message :</strong></p>
             <p>${contactForm.message.replace(/\n/g, '<br>')}</p>
           `,
-          machineId: machineId,
-          messageId: null
-        }
+          machineId,
+        },
       });
+
+      const emailRoute =
+        emailData &&
+        typeof emailData === 'object' &&
+        'routing' in emailData &&
+        typeof (emailData as { routing?: unknown }).routing === 'string'
+          ? (emailData as { routing: string }).routing
+          : '';
+
+      const emailDeliveredHint =
+        emailRoute === 'machine_owner'
+          ? ' Notification envoyée au vendeur / loueur (email du compte Auth). Si cet email est différent de la boîte CONTACT du site, une copie est aussi envoyée à cette boîte pour traçabilité.'
+          : emailRoute === 'fallback_inbox'
+            ? ' L’email n’a été envoyé qu’à la boîte générique : le vendeur n’a pas pu être identifié (annonce sans vendeur valide, ou clé service absente sur la fonction).'
+            : '';
+
+      const dossierHint = (() => {
+        if (!quoteSubmit) return '';
+        if (quoteSubmit.transactionCaseId) {
+          if (quoteSubmit.participantsLinked === false) {
+            return ` Dossier ouvert : #dossier/${quoteSubmit.transactionCaseId}. Les lignes « participants » n’ont pas pu être enregistrées (policy RLS) — déployez sql/patch_transaction_participants_insert_buyer.sql ou sql/transaction_platform_extended.sql puis réessayez une nouvelle demande si besoin.`;
+          }
+          return ` Dossier ouvert : #dossier/${quoteSubmit.transactionCaseId}.`;
+        }
+        if (!quoteSubmit.buyerLoggedIn) {
+          return ' Connectez-vous avec le même compte pour qu’un dossier transaction soit créé automatiquement.';
+        }
+        if (!quoteSubmit.sellerResolved) {
+          return ' Le vendeur n’a pas été identifié sur l’annonce : aucun dossier automatique.';
+        }
+        if (quoteSubmit.buyerLoggedIn && quoteSubmit.sellerResolved && !quoteSubmit.linkAttempted) {
+          return ' Vous êtes le vendeur de cette annonce : aucun dossier automatique pour une demande sur votre propre machine.';
+        }
+        if (quoteSubmit.linkAttempted && !quoteSubmit.transactionCaseId) {
+          return ' La demande est bien enregistrée ; la liaison dossier a échoué (vérifiez tables transaction + RLS sur quote_requests).';
+        }
+        return '';
+      })();
 
       if (emailError) {
         logger.warn('[MachineDetail] devis enregistré, email non envoyé', emailError);
-        setSuccessMessage('Demande enregistrée. Notification email temporairement indisponible.');
+        setSuccessMessage(
+          `Demande enregistrée. Notification email temporairement indisponible.${dossierHint}`,
+        );
       } else {
-        logger.info('[MachineDetail] email vendeur envoyé', { ok: Boolean(emailData) });
-        setSuccessMessage('Demande enregistrée et envoyée au vendeur.');
+        logger.info('[MachineDetail] email acheteur → vendeur / boîte', { routing: emailRoute, ok: Boolean(emailData) });
+        setSuccessMessage(`Demande enregistrée et envoyée.${emailDeliveredHint}${dossierHint}`);
       }
 
       // Succès
@@ -781,6 +871,36 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           {showContactForm && (
             <div className="bg-white rounded-lg shadow-md p-6 transition-all duration-300 ease-in-out">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Contacter le vendeur</h2>
+
+              {canEdit ? (
+                <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+                  <p className="font-medium text-amber-900">À propos des notifications (vous êtes le vendeur de cette annonce)</p>
+                  {machineData.seller?.email ? (
+                    <p className="mt-1">
+                      L’email affiché pour vous dans le profil public{' '}
+                      <code className="text-xs bg-white/70 px-1 rounded border border-amber-200/80">users</code> est :{' '}
+                      <strong className="break-all">{machineData.seller.email}</strong>
+                      <span className="block text-xs text-amber-900/85 mt-1.5">
+                        L’Edge Function envoie en priorité l’email du compte Auth pour l’UUID vendeur (
+                        {String(machineData.seller.id).slice(0, 8)}…), qui peut différer si la table{' '}
+                        <code className="text-xs">users</code> n’est pas à jour.
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-amber-900/90">
+                      Aucun email n’a été trouvé dans la table <code className="text-xs bg-white/70 px-1 rounded">users</code> pour
+                      le vendeur de cette annonce. Vérifiez en base les colonnes{' '}
+                      <code className="text-xs">seller_id</code>, <code className="text-xs">sellerid</code>,{' '}
+                      <code className="text-xs">user_id</code>, <code className="text-xs">owner_id</code> et la ligne correspondante dans{' '}
+                      <code className="text-xs">users</code> / <code className="text-xs">auth.users</code>.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 mb-4">
+                  Votre demande sera transmise au propriétaire de l’annonce sur l’adresse email liée à son compte (non affichée sur cette page).
+                </p>
+              )}
               
               {emailSent ? (
                 <div className="text-center py-8">

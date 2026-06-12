@@ -22,12 +22,14 @@ import {
   Heart,
   Bell,
   Sun,
-  Moon
+  Moon,
+  FolderOpen,
 } from 'lucide-react';
 
 import supabaseClient from '../utils/supabaseClient';
 import CurrencySelector from './CurrencySelector';
 import { categories, iconMap } from '../data/categories';
+import { getAccountItem } from '../utils/accountLocalStorage';
 
 const servicesMenu = [
   { label: 'Financement', section: 'financement', icon: Wallet },
@@ -60,24 +62,28 @@ const Header = () => {
   const servicesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { user } = useAuth();
+  const accountId = user?.id ?? null;
   const [showMyDashboardTab, setShowMyDashboardTab] = useState(false);
 
   useEffect(() => {
     const computeDashboardEligibility = () => {
-      const userServices = (localStorage.getItem('userServices') || '').toLowerCase();
-      const userSubscription = (localStorage.getItem('userSubscription') || '').toLowerCase();
+      const userServices = (getAccountItem(accountId, 'userServices') || '').toLowerCase();
+      const userSubscription = (getAccountItem(accountId, 'userSubscription') || '').toLowerCase();
       const hasEnterprisePlan =
         userServices.includes('enterprise') ||
         userSubscription === 'enterprise' ||
-        localStorage.getItem('enterpriseService') === 'true';
+        getAccountItem(accountId, 'enterpriseService') === 'true';
 
-      const configuredFlag = localStorage.getItem('enterpriseDashboardConfigured') === 'true';
-      const hasLegacyConfig = Boolean(localStorage.getItem('enterpriseDashboardConfig'));
-      const hasRoleConfig = Object.keys(localStorage).some((key) => key.startsWith('enterpriseDashboardConfig_'));
-      const hasDashboardConfig = configuredFlag || hasLegacyConfig || hasRoleConfig;
+      const configuredFlag = getAccountItem(accountId, 'enterpriseDashboardConfigured') === 'true';
+      const hasLegacyConfig = Boolean(getAccountItem(accountId, 'enterpriseDashboardConfig'));
+      const hasRoleConfig =
+        accountId !== null &&
+        Object.keys(localStorage).some((key) => key.startsWith(`mg:${accountId}:enterpriseDashboardConfig_`));
+      const hasDashboardConfig =
+        configuredFlag ||
+        hasLegacyConfig ||
+        hasRoleConfig;
 
-      // UX: afficher l'entree des qu'un compte entreprise est actif.
-      // Si la config n'existe pas encore, la page cible gerera la suite (setup/display).
       setShowMyDashboardTab(hasEnterprisePlan || hasDashboardConfig);
     };
 
@@ -93,7 +99,7 @@ const Header = () => {
       window.removeEventListener('enterpriseSubscriptionActivated', computeDashboardEligibility as EventListener);
       window.removeEventListener('subscriptionCancelled', computeDashboardEligibility as EventListener);
     };
-  }, []);
+  }, [accountId]);
 
   const handleMachinesMenuEnter = () => {
     if (machinesTimeoutRef.current) {
@@ -382,6 +388,13 @@ const Header = () => {
                       <Bell className="h-4 w-4 mr-2" />
                       Leads
                     </a>
+                    <a
+                      href="#dossiers"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                    >
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      Mes dossiers
+                    </a>
                     <button
                       onClick={async () => {
                         await supabaseClient.auth.signOut();
@@ -521,6 +534,10 @@ const Header = () => {
               <>
                 <a href="#dashboard" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
                   Mon espace
+                </a>
+                <a href="#dossiers" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4" />
+                  Mes dossiers
                 </a>
                 <a href="#leads" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
                   Leads

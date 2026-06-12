@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   AlertTriangle,
-  Brain,
+  ListFilter,
   ChevronDown,
   ChevronUp,
   Download,
@@ -14,6 +14,36 @@ import {
 } from 'lucide-react';
 import { toast } from '../../../utils/toast';
 import { RealPipelineService } from '../../../services/realPipelineService';
+import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
+import { leadTitleWithoutAoPrefix } from '../../../utils/stockLeadSuggestions';
+
+function leadTitleForCard(title: unknown): { full: string; compact: string } {
+  const full = String(title ?? 'Sans titre').trim() || 'Sans titre';
+  const compact = (leadTitleWithoutAoPrefix(full).trim() || full).trim();
+  return { full, compact };
+}
+
+function TransactionDossierLink({
+  caseId,
+  className = '',
+  stopClickBubble = false,
+}: {
+  caseId?: string | null;
+  className?: string;
+  stopClickBubble?: boolean;
+}) {
+  if (!caseId) return null;
+  return (
+    <a
+      href={`#dossier/${caseId}`}
+      className={className}
+      onClick={stopClickBubble ? (e) => e.stopPropagation() : undefined}
+    >
+      Dossier
+    </a>
+  );
+}
+
 export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'value' | 'probability' | 'lastContact'>('value');
@@ -25,10 +55,11 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
   
   // Nouvelles états pour les fonctionnalités enrichies
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'timeline'>('list');
-  const [showAIInsights, setShowAIInsights] = useState(false);
+  const [showPipelineAlertsOpen, setShowPipelineAlertsOpen] = useState(false);
   const [showConversionRates, setShowConversionRates] = useState(false);
   const [aiInsights, setAiInsights] = useState<any[]>([]);
   const [conversionRates, setConversionRates] = useState<any>({});
+  const { formatCurrency } = useWidgetMadCurrency();
 
   // Mettre à jour les données quand les props changent
   React.useEffect(() => {
@@ -77,6 +108,7 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
       source: r.source || 'manual',
       email: r.contact_email || undefined,
       phone: r.contact_phone || undefined,
+      transaction_case_id: r.transaction_case_id ?? null,
     }));
     setLeadsData(mapped);
   }, []);
@@ -156,8 +188,8 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
     return rates;
   }, [leadsData]);
 
-  // Générer les insights IA
-  const generateAIInsights = React.useMemo(() => {
+  /** Heuristiques sur les leads affichés — distinct du widget « Insights IA » (aiWidgetService). */
+  const pipelineHeuristicAlerts = React.useMemo(() => {
     const insights = [];
     
     // Analyser les blocages
@@ -271,15 +303,6 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
       'low': 'bg-green-100 text-green-800'
     };
     return colors[priority as keyof typeof colors] || 'bg-gray-100 text-gray-800';
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-MA', {
-      style: 'currency',
-      currency: 'MAD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
   };
 
   const formatDate = (dateString: string) => {
@@ -591,13 +614,13 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-orange-900">Pipeline Commercial</h3>
         <div className="flex items-center gap-2">
-          {/* Boutons de vue */}
-          <div className="flex bg-orange-100 rounded-lg p-1">
+          {/* Boutons de vue — compacts (aligné dashboard vendeur) */}
+          <div className="flex bg-orange-100 rounded-md p-0.5 gap-0.5 flex-wrap">
             <button
               onClick={handleViewList}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                viewMode === 'list' 
-                  ? 'bg-orange-600 text-white' 
+              className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-orange-600 text-white'
                   : 'text-orange-700 hover:bg-orange-200'
               }`}
             >
@@ -605,9 +628,9 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
             </button>
             <button
               onClick={handleViewKanban}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                viewMode === 'kanban' 
-                  ? 'bg-orange-600 text-white' 
+              className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                viewMode === 'kanban'
+                  ? 'bg-orange-600 text-white'
                   : 'text-orange-700 hover:bg-orange-200'
               }`}
             >
@@ -615,30 +638,30 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
             </button>
             <button
               onClick={handleViewTimeline}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                viewMode === 'timeline' 
-                  ? 'bg-orange-600 text-white' 
+              className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                viewMode === 'timeline'
+                  ? 'bg-orange-600 text-white'
                   : 'text-orange-700 hover:bg-orange-200'
               }`}
             >
               Timeline
             </button>
           </div>
-          
+
           <button
             onClick={handleAddNewLead}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm flex items-center gap-2"
+            className="px-2 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-[11px] leading-tight font-medium flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" />
-            Nouveau Lead
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            Nouveau lead
           </button>
           <button
             onClick={handleDownloadKanban}
-            className="px-4 py-2 bg-white text-orange-700 border border-orange-300 rounded-lg hover:bg-orange-50 text-sm flex items-center gap-2"
+            className="px-2 py-1.5 bg-white text-orange-700 border border-orange-300 rounded-md hover:bg-orange-50 text-[11px] leading-tight font-medium flex items-center gap-1"
             title="Télécharger le Kanban en CSV"
           >
-            <Download className="h-4 w-4" />
-            Télécharger
+            <Download className="h-3.5 w-3.5 shrink-0" />
+            Exporter
           </button>
         </div>
       </div>
@@ -695,26 +718,32 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
         )}
       </div>
 
-      {/* Insights IA */}
-      {generateAIInsights.length > 0 && (
+      {/* Alertes pipeline (règles locales, pas le widget IA) */}
+      {pipelineHeuristicAlerts.length > 0 && (
         <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-sm font-semibold text-orange-900 flex items-center gap-2">
-              <Brain className="w-4 h-4" />
-              Insights IA
-            </h4>
+          <div className="flex justify-between items-start gap-2 mb-2">
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-orange-900 flex items-center gap-2">
+                <ListFilter className="w-4 h-4 shrink-0" />
+                Alertes sur le pipeline
+              </h4>
+              <p className="text-[10px] text-gray-600 mt-1 leading-snug">
+                Calculées sur vos leads dans ce widget. Pour analyses IA (prédictions, onglets dédiés), utilisez le widget{' '}
+                <span className="font-medium text-gray-800">Insights IA</span>.
+              </p>
+            </div>
             <button
-              onClick={() => setShowAIInsights(!showAIInsights)}
-              className="text-xs text-orange-600 hover:text-orange-800 flex items-center gap-1"
+              onClick={() => setShowPipelineAlertsOpen(!showPipelineAlertsOpen)}
+              className="text-xs text-orange-600 hover:text-orange-800 flex items-center gap-1 shrink-0"
             >
-              {showAIInsights ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              {showAIInsights ? 'Masquer' : 'Voir détails'}
+              {showPipelineAlertsOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {showPipelineAlertsOpen ? 'Masquer' : 'Voir détail'}
             </button>
           </div>
-          
-          {showAIInsights && (
+
+          {showPipelineAlertsOpen && (
             <div className="space-y-3">
-              {generateAIInsights.map((insight, index) => (
+              {pipelineHeuristicAlerts.map((insight, index) => (
                 <div key={index} className={`p-3 rounded-lg border ${getInsightColor(insight.type)}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
@@ -757,12 +786,12 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
         </div>
       </div>
 
-      {/* Filtres et tri */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      {/* Filtres et tri — compacts */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <select
           value={selectedStage || ''}
           onChange={(e) => setSelectedStage(e.target.value || null)}
-          className="px-3 py-2 border border-orange-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          className="text-[11px] leading-tight px-1.5 py-0.5 border border-orange-300 rounded bg-white text-orange-900 max-w-[148px] focus:outline-none focus:ring-1 focus:ring-orange-400"
         >
           <option value="">Toutes les étapes</option>
           <option value="Prospection">Prospection</option>
@@ -775,7 +804,7 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as 'value' | 'probability' | 'lastContact')}
-          className="px-3 py-2 border border-orange-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          className="text-[11px] leading-tight px-1.5 py-0.5 border border-orange-300 rounded bg-white text-orange-900 max-w-[168px] focus:outline-none focus:ring-1 focus:ring-orange-400"
         >
           <option value="value">Trier par valeur</option>
           <option value="probability">Trier par probabilité</option>
@@ -788,11 +817,18 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
         <>
           {/* Liste des leads */}
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {sortedLeads.map((lead) => (
+            {sortedLeads.map((lead) => {
+              const { full: titleFull, compact: titleCompact } = leadTitleForCard(lead.title);
+              return (
               <div key={lead.id} className="bg-white border border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h5 className="font-semibold text-gray-900">{lead.title}</h5>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <h5
+                      className="font-semibold text-gray-900 line-clamp-2 break-words leading-snug"
+                      title={titleFull}
+                    >
+                      {titleCompact}
+                    </h5>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-xs px-2 py-1 rounded-full ${getStageColor(lead.stage)}`}>
                         {formatStageLabel(lead.stage)}
@@ -838,13 +874,17 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                       ({getDaysSinceLastContact(lead.lastContact)} jours)
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => handleViewDetails(lead)}
                       className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
                     >
                       Voir détails
                     </button>
+                    <TransactionDossierLink
+                      caseId={lead.transaction_case_id}
+                      className="text-xs bg-white text-orange-800 border border-orange-300 px-2 py-1 rounded hover:bg-orange-50"
+                    />
                     <button
                       onClick={() => handleNextStage(lead)}
                       disabled={lead.stage === 'Conclu' || lead.stage === 'Perdu'}
@@ -871,7 +911,8 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {sortedLeads.length === 0 && (
@@ -899,10 +940,44 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                 </div>
                 
                 <div className="space-y-2">
-                  {stageLeads.map((lead) => (
-                    <div key={lead.id} className="bg-white rounded-lg p-3 border border-orange-200 hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleViewDetails(lead)}>
-                      <h5 className="font-semibold text-sm text-gray-900 mb-1">{lead.title}</h5>
-                      <div className="text-lg font-bold text-orange-700 mb-1">{formatCurrency(lead.value)}</div>
+                  {stageLeads.map((lead) => {
+                    const { full: titleFull, compact: titleCompact } = leadTitleForCard(lead.title);
+                    return (
+                    <div
+                      key={lead.id}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-white rounded-lg p-3 border border-orange-200 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => handleViewDetails(lead)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleViewDetails(lead);
+                        }
+                      }}
+                    >
+                      <h5
+                        className="font-semibold text-sm text-gray-900 mb-0.5 line-clamp-2 break-words leading-snug"
+                        title={titleFull}
+                      >
+                        {titleCompact}
+                      </h5>
+                      <button
+                        type="button"
+                        className="text-[10px] font-medium text-orange-600 hover:text-orange-800 hover:underline text-left w-full mb-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDetails(lead);
+                        }}
+                      >
+                        Fiche complète →
+                      </button>
+                      <TransactionDossierLink
+                        caseId={lead.transaction_case_id}
+                        stopClickBubble
+                        className="text-[10px] font-medium text-orange-700 hover:underline block mb-1"
+                      />
+                      <div className="text-sm font-bold text-orange-700 mb-1">{formatCurrency(lead.value)}</div>
                       <div className="flex items-center justify-between text-xs">
                         <span className={`px-2 py-1 rounded-full ${getPriorityColor(lead.priority)}`}>
                           {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}
@@ -913,7 +988,8 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                         {getDaysSinceLastContact(lead.lastContact)} jours
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -929,16 +1005,23 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
             <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-orange-300"></div>
             
     <div className="space-y-4">
-              {sortedLeads.map((lead, index) => (
+              {sortedLeads.map((lead, index) => {
+                const { full: titleFull, compact: titleCompact } = leadTitleForCard(lead.title);
+                return (
                 <div key={lead.id} className="relative flex items-start gap-4">
                   {/* Timeline dot */}
                   <div className={`absolute left-3 w-3 h-3 rounded-full border-2 border-white ${getStageColor(lead.stage).includes('bg-green') ? 'bg-green-500' : getStageColor(lead.stage).includes('bg-red') ? 'bg-red-500' : 'bg-orange-500'}`}></div>
                   
                   {/* Content */}
-                  <div className="ml-8 bg-white rounded-lg p-4 border border-orange-200 flex-1 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h5 className="font-semibold text-gray-900">{lead.title}</h5>
+                  <div className="ml-8 bg-white rounded-lg p-4 border border-orange-200 flex-1 hover:shadow-md transition-shadow min-w-0">
+                    <div className="flex items-start justify-between mb-2 gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h5
+                          className="font-semibold text-gray-900 line-clamp-2 break-words leading-snug"
+                          title={titleFull}
+                        >
+                          {titleCompact}
+                        </h5>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`text-xs px-2 py-1 rounded-full ${getStageColor(lead.stage)}`}>
                             {formatStageLabel(lead.stage)}
@@ -963,9 +1046,16 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                       <span>Dernier contact: {formatDate(lead.lastContact)}</span>
                       <span>({getDaysSinceLastContact(lead.lastContact)} jours)</span>
                     </div>
+                    <div className="mt-2">
+                      <TransactionDossierLink
+                        caseId={lead.transaction_case_id}
+                        className="text-xs font-medium text-orange-700 hover:underline"
+                      />
+                    </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1007,6 +1097,17 @@ export const SalesPipelineWidget = ({ data }: { data: any[] }) => {
                       <span className="text-gray-600">Probabilité:</span>
                       <div className="text-lg font-semibold">{selectedLead.probability}%</div>
                   </div>
+                    {selectedLead.transaction_case_id ? (
+                      <div>
+                        <span className="text-gray-600">Dossier:</span>
+                        <a
+                          href={`#dossier/${selectedLead.transaction_case_id}`}
+                          className="ml-2 font-medium text-orange-600 hover:underline"
+                        >
+                          Ouvrir
+                        </a>
+                      </div>
+                    ) : null}
                 </div>
               </div>
 
