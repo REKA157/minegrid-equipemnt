@@ -45,13 +45,13 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 | Q1 | Fermer la façade premium client | `premium.ts` | corriger | pro_clients / stripe-webhook | ✅ fait (058c4fc3) |
 | Q9 | Compteur modale widgets entreprise | `EnterpriseDashboardShell.tsx` | améliorer | validIds | ✅ fait (058c4fc3) |
 | Q3 | Filtre catégorie/secteur en SQL | `SectorMachines.tsx`, `Machines.tsx` | améliorer | `.eq('category', …)` | à faire |
-| Q4 | Recherche texte brand/model/description | `Machines.tsx:336` | améliorer | champs déjà présents | à faire |
-| Q5 | Persister `total_hours` à la publication | `PublicationRapide.tsx` | corriger | champ saisi non inséré | à faire |
+| Q4 | Recherche texte brand/model/description | `Machines.tsx:336` | améliorer | champs déjà présents | ✅ fait (06187674) |
+| Q5 | Persister `total_hours` à la publication | `PublicationRapide.tsx` | corriger | champ saisi non inséré | ✅ fait (06187674) |
 | Q6 | Badge demandes/vues sur « Mes Annonces » | `PublicationRapide.tsx` | corréler | leads/quote_requests/machine_views | à faire |
-| Q7 | Estimation prix médiane client | `inline.tsx`, `priceService.ts` | enrichir | médiane machines brand/model/year | à faire |
-| Q8 | Remplacer `listingAgeMinutes` codé en dur | `inline.tsx:108` | corriger | `machines.created_at` | à faire |
+| Q7 | Estimation prix médiane client | `inline.tsx`, `priceService.ts` | enrichir | médiane machines brand/model/year | ✅ fait (c369b7a5) |
+| Q8 | Remplacer `listingAgeMinutes` codé en dur | `inline.tsx:108` | corriger | `machines.created_at` | ✅ fait (c369b7a5) |
 | Q10 | Garde-fou email autoSpecs/communication | `communicationService.ts` | connecter | edge `send-contact-email` | à faire |
-| Q2 | Gating abonnement serveur (vs localStorage) | `DemoEntrepriseAccess.tsx`, gating app | corriger | `subscription.ts` (pro_clients) | ⚠️ démo — à valider |
+| Q2 | Bandeau « Mode démo » (gating localStorage) | `EnterpriseDashboardShell.tsx` | repositionner | flag widgetsTemporaryAccess | ✅ bandeau (5e91dd7f) ; durcissement serveur à planifier |
 
 ### 🟡 Fort levier (M — corrélations cross-module)
 
@@ -112,5 +112,10 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 - ✅ `daily-actions` vendeur : confirmé déjà réel (auto-charge) — clarifier
 - ✅ `sales-evolution` : suggestions IA réelles (serveur/local) — connecter
 - ✅ Q1 façade premium + Q9 compteur — corriger
+- ✅ Q7+Q8 fiche machine : estimation prix médiane client (déblocage PriceVsMarketInline/FraudInline) + vélocité fraude réelle (`created_at`)
+- ✅ Q4+Q5 : recherche multi-champs (brand/model/description) + persistance `total_hours`
+- ✅ Q2 : bandeau « Mode démo » sur les dashboards entreprise
+- **Reste quick-wins** : Q3 (filtre catégorie SQL), Q6 (badges Mes Annonces), Q10 (garde-fou email)
+- Validation cumul : tsc + 140 tests + build OK
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
