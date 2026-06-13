@@ -65,6 +65,8 @@ import { buildTransitaireCockpit } from './buildTransitaireCockpit';
 import { buildFinancierCockpit } from './buildFinancierCockpit';
 import { buildQuoteSignals } from './correlations/quoteCorrelation';
 import { buildDossierStageSignals } from './correlations/caseCorrelation';
+import { buildMonitorSignals } from './correlations/monitorCorrelation';
+import { buildMonitorContextBySourceIds } from '../../../utils/buildMonitorContextForLeadSourceIds';
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -87,20 +89,32 @@ function pick(r: PromiseSettledResult<any>, fb: any): any {
 // ---------------------------------------------------------------------------
 
 async function loadVendeur(): Promise<CockpitSummaryData> {
-  const [leads, stats, quotes, cases] = await Promise.allSettled([
+  const [leadsR, statsR, quotesR, casesR] = await Promise.allSettled([
     RealPipelineService.getLeads(),
     getDashboardStats(),
     getQuoteRequests('all'),
     listAccessibleTransactionCases(),
   ]);
-  const cockpit = buildVendeurCockpit(pick(leads, []), pick(stats, EMPTY_STATS));
+  const leadList = pick(leadsR, []);
+  const cockpit = buildVendeurCockpit(leadList, pick(statsR, EMPTY_STATS));
   // M1 — devis → action (+ dossier) : signaux cross-module quote_requests × transaction_cases.
-  const q = buildQuoteSignals(pick(quotes, []));
+  const q = buildQuoteSignals(pick(quotesR, []));
   // M2 — dossier transaction → action d'avancement par étape (transaction_cases, RLS).
-  const d = buildDossierStageSignals(pick(cases, []));
+  const d = buildDossierStageSignals(pick(casesR, []));
+  // M8/M9 — Global Monitor → opportunité : prospects dont le besoin projet est détecté.
+  let monitorMap = new Map<string, unknown>();
+  try {
+    const sourceIds = (leadList as Array<{ source_id?: string | null }>)
+      .map((l) => String(l.source_id || '').trim())
+      .filter(Boolean);
+    if (sourceIds.length) monitorMap = await buildMonitorContextBySourceIds(sourceIds);
+  } catch {
+    /* Global Monitor indisponible -> aucune carte (anti-façade) */
+  }
+  const m = buildMonitorSignals(leadList, monitorMap);
   cockpit.priorities = [...q.priorities, ...d.priorities, ...cockpit.priorities];
   cockpit.risks = [...d.risks, ...cockpit.risks];
-  cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities];
+  cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities, ...m.opportunities];
   return cockpit;
 }
 
