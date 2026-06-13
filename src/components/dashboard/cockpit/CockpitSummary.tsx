@@ -49,6 +49,7 @@ import {
   getFreightDocumentsForList,
 } from '../../../utils/enterpriseApi/transitaire';
 import { listAccessibleTransactionCases } from '../../../utils/api/transactionCases';
+import { getQuoteRequests } from '../../../utils/api/quoteRequests';
 import {
   buildVendeurCockpit,
   type CockpitSummaryData,
@@ -62,6 +63,7 @@ import { buildInvestisseurCockpit } from './buildInvestisseurCockpit';
 import { buildLogisticienCockpit } from './buildLogisticienCockpit';
 import { buildTransitaireCockpit } from './buildTransitaireCockpit';
 import { buildFinancierCockpit } from './buildFinancierCockpit';
+import { buildQuoteSignals } from './correlations/quoteCorrelation';
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -84,11 +86,17 @@ function pick(r: PromiseSettledResult<any>, fb: any): any {
 // ---------------------------------------------------------------------------
 
 async function loadVendeur(): Promise<CockpitSummaryData> {
-  const [leads, stats] = await Promise.allSettled([
+  const [leads, stats, quotes] = await Promise.allSettled([
     RealPipelineService.getLeads(),
     getDashboardStats(),
+    getQuoteRequests('all'),
   ]);
-  return buildVendeurCockpit(pick(leads, []), pick(stats, EMPTY_STATS));
+  const cockpit = buildVendeurCockpit(pick(leads, []), pick(stats, EMPTY_STATS));
+  // M1 — devis → action (+ dossier) : signaux cross-module quote_requests × transaction_cases.
+  const q = buildQuoteSignals(pick(quotes, []));
+  cockpit.priorities = [...q.priorities, ...cockpit.priorities];
+  cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities];
+  return cockpit;
 }
 
 async function loadLoueur(): Promise<CockpitSummaryData> {
