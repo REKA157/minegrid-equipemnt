@@ -7,6 +7,7 @@ const WIDGETS_TRANSITAIRE_IDS = [
   'container-tracking',
   'import-export-stats',
   'document-status',
+  'transaction-cases',
 ];
 
 const EnterpriseDashboardTransitaireDisplay: React.FC = () => (

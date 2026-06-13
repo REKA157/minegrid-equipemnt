@@ -8,6 +8,7 @@ const WIDGETS_COURTIER_IDS = [
   'commission-tracking',
   'client-portfolio',
   'performance-analytics',
+  'transaction-cases',
 ];
 
 const EnterpriseDashboardCourtierDisplay: React.FC = () => (

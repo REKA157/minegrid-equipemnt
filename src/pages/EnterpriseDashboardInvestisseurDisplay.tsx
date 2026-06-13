@@ -8,6 +8,7 @@ const WIDGETS_INVESTISSEUR_IDS = [
   'roi-analysis',
   'risk-assessment',
   'opportunities',
+  'transaction-cases',
 ];
 
 const EnterpriseDashboardInvestisseurDisplay: React.FC = () => (

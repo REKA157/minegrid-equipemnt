@@ -7,6 +7,7 @@ const WIDGETS_LOGISTICIEN_IDS = [
   'route-optimization',
   'supply-chain-kpis',
   'inventory-alerts',
+  'transaction-cases',
 ];
 
 const EnterpriseDashboardLogisticienDisplay: React.FC = () => (

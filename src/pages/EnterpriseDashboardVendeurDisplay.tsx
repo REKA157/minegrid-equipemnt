@@ -7,6 +7,7 @@ const WIDGETS_VENDEUR_IDS = [
   'stock-status',
   'sales-evolution',
   'sales-pipeline',
+  'transaction-cases',
   'daily-actions',
   'ai-insights',
   'ai-optimization',
