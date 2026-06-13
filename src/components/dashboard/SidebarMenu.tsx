@@ -71,13 +71,6 @@ export default function SidebarMenu({ dashboardConfig, layout }: SidebarMenuProp
             <span className="text-xs font-medium text-gray-700">Planning</span>
           </a>
           <a
-            href="#assistant-ia"
-            className="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group border border-gray-200"
-          >
-            <Zap className="h-6 w-6 text-gray-600 mb-2 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-medium text-gray-700">Assistant IA</span>
-          </a>
-          <a
             href="#dashboard-entreprise"
             className="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group border border-gray-200"
           >

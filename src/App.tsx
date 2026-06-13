@@ -51,16 +51,12 @@ const SellEquipment = lazy(() => import('./pages/SellEquipment'));
 const ProDashboard = lazy(() => import('./pages/ProDashboard'));
 const EnterpriseService = lazy(() => import('./pages/EnterpriseService'));
 const DashboardConfigurator = lazy(() => import('./pages/DashboardConfigurator'));
-const VendeurDashboardLegacy = lazy(() => import('./pages/VendeurDashboardLegacy'));
 const VitrinePersonnalisee = lazy(() => import('./pages/VitrinePersonnalisee'));
 const PublicationRapide = lazy(() => import('./pages/PublicationRapide'));
 const DevisGenerator = lazy(() => import('./pages/DevisGenerator'));
 const DocumentsEspace = lazy(() => import('./pages/DocumentsEspace'));
 const MessagesBoite = lazy(() => import('./pages/MessagesBoite'));
 const PlanningPro = lazy(() => import('./pages/PlanningPro'));
-const AssistantIA = lazy(() => import('./pages/AssistantIA'));
-const WidgetTest = lazy(() => import('./WidgetTest'));
-const VendeurDashboardRestored = lazy(() => import('./pages/VendeurDashboardRestored'));
 const EnterpriseDashboardVendeurDisplay = lazy(
   () => import('./pages/EnterpriseDashboardVendeurDisplay')
 );
@@ -281,12 +277,6 @@ function AppContent() {
       case 'dashboard-configurator':
         return paidRoute('enterprise', <DashboardConfigurator />);
 
-      case 'dashboard-vendeur-legacy':
-        return <VendeurDashboardLegacy />;
-
-      case 'dashboard-vendeur-restored':
-        return <VendeurDashboardRestored />;
-
       case 'vitrine':
         return <VitrinePersonnalisee />;
 
@@ -304,9 +294,6 @@ function AppContent() {
 
       case 'planning':
         return <PlanningPro />;
-
-      case 'assistant-ia':
-        return <AssistantIA />;
 
       case 'api-docs':
         return paidRoute('pro', <ApiDocs />);
@@ -358,9 +345,6 @@ function AppContent() {
             Indiquez un identifiant de dossier dans l’URL (<span className="font-mono">#dossier/&lt;uuid&gt;</span>).
           </div>
         );
-
-      case 'test-widget':
-        return <WidgetTest />;
 
       case 'demo-entreprise':
         return <DemoEntrepriseAccess />;
