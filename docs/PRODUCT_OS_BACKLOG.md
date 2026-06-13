@@ -136,4 +136,23 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 
 > **9/9 cockpits livrés.** Chaque carte passe le test « quelle action concrète en découle ? ». Les cartes cross-module dossier (inspection→escrow mécanicien, financement→dossier courtier/financier, transport/douane→dossier) sont **spécifiées et codées en `availableToday=false`** : elles s'activeront automatiquement dès que les tables `transaction_platform` (inspection_requests, financing_requests, transport_requests, customs_cases…) seront peuplées par un workflow dossier. C'est le levier N1 restant (cf L3/L4).
 
+### Corrélations cross-module M1-M12 — état
+
+| # | Corrélation | État | Surface |
+|---|---|---|---|
+| M1 | devis → lead/action | ✅ réel | cockpit vendeur (quote_requests × dossier) |
+| M2 | lead → dossier (avancement) | ✅ réel | cockpit vendeur (transaction_cases) |
+| M3 | dossier → trust | ✅ inline | fiche machine (SellerTrustInline) — pas d'action cockpit |
+| M4 | dossier → inspection | 🔌 branché, gated | cockpit mécanicien (inspection_requests) |
+| M5 | inspection → escrow | 🔌 branché, gated | cockpit financier (payment_records) |
+| M6 | escrow → finance | 🔌 branché, gated | cockpit courtier + financier (financing_requests) |
+| M7 | finance → transport/logistique | 🔌 branché, gated | cockpit transporteur + logisticien (transport_requests) |
+| M8 | Global Monitor → opportunité | ✅ réel | cockpit vendeur (leads × monitor) |
+| M9 | Global Monitor → vendeur | ✅ réel | cockpit vendeur (idem M8) |
+| M10 | machine → estimation prix | ✅ inline | fiche machine (PriceVsMarketInline, médiane marché) |
+| M11 | machine → risque fraude | ✅ inline | fiche machine (FraudInline, vélocité + prix) |
+| M12 | messages → prochaine action | ✅ réel | cockpit vendeur (messages non lus) |
+
+> 🔌 *branché, gated* = corrélation codée + testée + branchée au cockpit, mais **invisible tant que les tables `transaction_platform` ne sont pas peuplées** par un workflow dossier serveur (L3/L4). Anti-façade : zéro donnée simulée. Module : `src/components/dashboard/cockpit/correlations/`.
+
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
