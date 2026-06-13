@@ -89,6 +89,8 @@ function CockpitCard({
 /** Vue partagée du cockpit (4 cartes décisionnelles). */
 function CockpitView({ data }: { data: CockpitSummaryData }) {
   const revenue = new Intl.NumberFormat('fr-FR').format(Math.round(data.revenueValue));
+  const headlineAvailable = data.revenueAvailable !== false;
+  const unit = data.revenueUnit ?? 'MAD';
   return (
     <section className="mb-6">
       <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -96,13 +98,15 @@ function CockpitView({ data }: { data: CockpitSummaryData }) {
         <span className="text-[11px] text-gray-400">Temps réel · données de votre activité</span>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <CockpitCard icon={<TrendingUp className="h-3.5 w-3.5" />} title="Revenu en vue" accent="text-emerald-700">
-          <div className="text-xl font-bold text-gray-900">
-            {revenue} <span className="text-sm font-medium text-gray-500">MAD</span>
-          </div>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            {data.revenueLabel} · {data.revenueHint}
-          </p>
+        <CockpitCard icon={<TrendingUp className="h-3.5 w-3.5" />} title={data.revenueLabel} accent="text-emerald-700">
+          {headlineAvailable ? (
+            <div className="text-xl font-bold text-gray-900">
+              {revenue} <span className="text-sm font-medium text-gray-500">{unit}</span>
+            </div>
+          ) : (
+            <div className="text-xl font-bold text-gray-400">—</div>
+          )}
+          {data.revenueHint ? <p className="mt-0.5 text-[11px] text-gray-500">{data.revenueHint}</p> : null}
         </CockpitCard>
 
         <CockpitCard icon={<Target className="h-3.5 w-3.5" />} title="Priorités du jour" accent="text-orange-700">

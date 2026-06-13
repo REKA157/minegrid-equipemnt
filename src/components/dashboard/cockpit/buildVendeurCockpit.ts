@@ -13,9 +13,13 @@ export interface CockpitSignal {
 
 export interface CockpitSummaryData {
   revenueLabel: string;
-  /** Montant en MAD (pipeline ouvert). */
+  /** Valeur numérique de la métrique de tête (montant ou compte). */
   revenueValue: number;
   revenueHint: string;
+  /** Unité affichée (défaut 'MAD'). Ex : 'interventions', 'dossiers', '%'. */
+  revenueUnit?: string;
+  /** false => métrique de tête indisponible (affiche « — », anti-façade). Défaut true. */
+  revenueAvailable?: boolean;
   priorities: CockpitSignal[];
   risks: CockpitSignal[];
   opportunities: CockpitSignal[];
