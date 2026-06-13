@@ -126,14 +126,14 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 |---|---|---|
 | Vendeur | ✅ livré | leads (pipeline) + machine_views/messages/offers |
 | Loueur | ✅ livré | rentals + parc machines/interventions |
-| Mécanicien | à brancher | interventions/repairs/inventory/technicians (réels) |
-| Transporteur | à brancher | deliveries/drivers (réels) |
-| Courtier | à brancher | credit_applications/insurance_policies (réels) |
-| Investisseur | à brancher | investments/opportunities (réels) |
-| Logisticien | à brancher | logistics_* (réels) |
-| Transitaire | à brancher | customs/freight_* (réels) |
-| Financier | à brancher | dériver rentals/offers/commissions |
+| Mécanicien | ✅ livré | interventions/repairs/inventory/technicians |
+| Transporteur | ✅ livré | deliveries/drivers/vehicles |
+| Courtier | ✅ livré | credit_applications/insurance_policies/clients |
+| Investisseur | ✅ livré | investments/investment_opportunities |
+| Logisticien | ✅ livré | logistics_* + transaction_cases |
+| Transitaire | ✅ livré | customs_declarations/freight_* |
+| Financier | ✅ livré *(dashboard à router, cf N5)* | rentals + courtier + dossiers |
 
-> Pattern établi (builder pur testé + hook + `CockpitView` partagée) : chaque rôle restant se branche en réutilisant ses services `enterpriseApi` déjà réels.
+> **9/9 cockpits livrés.** Chaque carte passe le test « quelle action concrète en découle ? ». Les cartes cross-module dossier (inspection→escrow mécanicien, financement→dossier courtier/financier, transport/douane→dossier) sont **spécifiées et codées en `availableToday=false`** : elles s'activeront automatiquement dès que les tables `transaction_platform` (inspection_requests, financing_requests, transport_requests, customs_cases…) seront peuplées par un workflow dossier. C'est le levier N1 restant (cf L3/L4).
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
