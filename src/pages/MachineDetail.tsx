@@ -8,6 +8,7 @@ import { isSeller, isOwner } from '../utils/auth';
 import supabase from '../utils/supabaseClient';
 import MachineTrustPanel from '../nextgen/integration/MachineTrustPanel';
 import TransactionOptionsPanel from '../nextgen/integration/TransactionOptionsPanel';
+import RecommendedMachines from '../nextgen/integration/RecommendedMachines';
 import { MACHINE_LIST_COLUMNS } from '../constants/machineQueryFields';
 import { recordMachineView } from '../utils/api';
 import {
@@ -1085,8 +1086,14 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           />
 
           {/* Simulateur de financement */}
-          <FinancingSimulator 
+          <FinancingSimulator
             machinePrice={machineData.price || 0}
+          />
+
+          <RecommendedMachines
+            machineId={machineId}
+            brand={(machineData as { brand?: string }).brand ?? null}
+            category={(machineData as { category?: string }).category ?? null}
           />
         </div>
       </div>

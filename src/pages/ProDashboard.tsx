@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Activity, 
+import ProTrustSummary from '../nextgen/integration/ProTrustSummary';
+import {
+  Activity,
   Package, 
   FileText, 
   Wrench, 
@@ -280,6 +281,7 @@ export default function ProDashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <ProTrustSummary />
         {activeTab === 'overview' && <OverviewTab stats={stats} />}
         {activeTab === 'equipment' && <EquipmentTab equipment={equipment} userMachines={userMachines} onRefresh={loadDashboardData} />}
         {activeTab === 'orders' && <OrdersTab orders={orders} onRefresh={loadDashboardData} />}

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Package, Settings, FileText, Bell, User, LogOut, ChevronRight, Shield, Wallet, RefreshCw, Eye, MessageSquare, DollarSign, Camera, X, CreditCard, Gift, Save } from 'lucide-react';
 import StripePaymentForm from '../components/StripePaymentForm';
+import SellerTrustPanel from '../nextgen/integration/SellerTrustPanel';
+import BuyerServicesPanel from '../nextgen/integration/BuyerServicesPanel';
 import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData, getOffers } from '../utils/api';
 import { supabaseClient as supabase } from '../utils/supabaseClient';
 import { logger } from '../utils/logger';
@@ -840,6 +842,11 @@ export default function Dashboard({ section = 'overview' }) {
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Confiance & services MineGrid (vendeur + acheteur) */}
+                <div className="grid lg:grid-cols-2 gap-4 mb-8">
+                  <SellerTrustPanel />
+                  <BuyerServicesPanel />
+                </div>
                 {/* Header */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
