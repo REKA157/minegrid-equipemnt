@@ -52,6 +52,13 @@ import { listAccessibleTransactionCases } from '../../../utils/api/transactionCa
 import { getQuoteRequests } from '../../../utils/api/quoteRequests';
 import { getMessages } from '../../../utils/api/messages';
 import {
+  inspectionService,
+  financingRequestService,
+  transportRequestService,
+  customsCaseService,
+  paymentRecordService,
+} from '../../../utils/api/transactionPlatform';
+import {
   buildVendeurCockpit,
   type CockpitSummaryData,
   type CockpitSignal,
@@ -69,6 +76,13 @@ import { buildDossierStageSignals } from './correlations/caseCorrelation';
 import { buildMonitorSignals } from './correlations/monitorCorrelation';
 import { buildMonitorContextBySourceIds } from '../../../utils/buildMonitorContextForLeadSourceIds';
 import { buildMessageSignals } from './correlations/messageCorrelation';
+import {
+  buildInspectionCaseSignals,
+  buildFinancingCaseSignals,
+  buildTransportCaseSignals,
+  buildCustomsCaseSignals,
+  buildPaymentCaseSignals,
+} from './correlations/chainCorrelation';
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -83,6 +97,19 @@ const EMPTY_STATS: DashboardStats = {
 /** Valeur d'un fetch (allSettled) ou fallback si rejet. `any` volontaire : les builders sont défensifs. */
 function pick(r: PromiseSettledResult<any>, fb: any): any {
   return r.status === 'fulfilled' ? r.value : fb;
+}
+
+/**
+ * Agrège les lignes d'exécution (inspection/financement/transport/douane/paiement)
+ * de TOUS les dossiers accessibles (M4-M7). Tolérant : tables vides → []. Plafonné.
+ */
+async function caseRows<T>(
+  cases: Array<{ id: string }>,
+  list: (id: string) => Promise<T[]>,
+): Promise<T[]> {
+  if (!Array.isArray(cases) || !cases.length) return [];
+  const settled = await Promise.allSettled(cases.slice(0, 50).map((c) => list(c.id)));
+  return settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
 }
 
 // ---------------------------------------------------------------------------
@@ -145,52 +172,67 @@ async function loadLoueur(): Promise<CockpitSummaryData> {
 }
 
 async function loadMecanicien(): Promise<CockpitSummaryData> {
-  const [interventions, urgent, repairs, inventory, technicians] = await Promise.allSettled([
+  const [interventions, urgent, repairs, inventory, technicians, casesR] = await Promise.allSettled([
     getPreventiveMaintenance(),
     getUrgentInterventions(),
     getRepairsStatus(),
     getInventoryStatus(),
     getTechniciansWorkload(),
+    listAccessibleTransactionCases(),
   ]);
-  return buildMecanicienCockpit({
+  const cockpit = buildMecanicienCockpit({
     interventions: pick(interventions, { interventions: [], stats: {} }),
     urgent: pick(urgent, []),
     repairs: pick(repairs, []),
     inventory: pick(inventory, []),
     technicians: pick(technicians, []),
   });
+  // M4 — inspection de dossier → intervention prioritaire (gated jusqu'au peuplement).
+  const inspections = await caseRows(pick(casesR, []), inspectionService.listRequestsByCase);
+  cockpit.priorities = [...buildInspectionCaseSignals(inspections), ...cockpit.priorities];
+  return cockpit;
 }
 
 async function loadTransporteur(): Promise<CockpitSummaryData> {
-  const [deliveries, drivers, vehicles, schedule, costs] = await Promise.allSettled([
+  const [deliveries, drivers, vehicles, schedule, costs, casesR] = await Promise.allSettled([
     getActiveDeliveries(),
     getDriversList(),
     getVehiclesList(),
     getDriverSchedule(),
     getTransportCosts(),
+    listAccessibleTransactionCases(),
   ]);
-  return buildTransporteurCockpit({
+  const cockpit = buildTransporteurCockpit({
     deliveries: pick(deliveries, { total: 0, rows: [] }),
     drivers: pick(drivers, []),
     vehicles: pick(vehicles, []),
     schedule: pick(schedule, []),
     costs: pick(costs, []),
   });
+  // M7 — mission transport de dossier (gated jusqu'au peuplement de transport_requests).
+  const transports = await caseRows(pick(casesR, []), transportRequestService.listByCase);
+  cockpit.priorities = [...buildTransportCaseSignals(transports), ...cockpit.priorities];
+  return cockpit;
 }
 
 async function loadCourtier(): Promise<CockpitSummaryData> {
-  const [credits, policies, commissions, clients] = await Promise.allSettled([
+  const [credits, policies, commissions, clients, casesR] = await Promise.allSettled([
     getCreditApplications(),
     getInsurancePolicies(),
     getCommissionTracking(),
     getClientPortfolio(),
+    listAccessibleTransactionCases(),
   ]);
-  return buildCourtierCockpit({
+  const cockpit = buildCourtierCockpit({
     credits: pick(credits, []),
     policies: pick(policies, []),
     commissions: pick(commissions, { monthCommission: 0, totalCommission: 0 }),
     clients: pick(clients, []),
   });
+  // M6 — financement de dossier à monter (gated jusqu'au peuplement de financing_requests).
+  const financings = await caseRows(pick(casesR, []), financingRequestService.listByCase);
+  cockpit.priorities = [...buildFinancingCaseSignals(financings), ...cockpit.priorities];
+  return cockpit;
 }
 
 async function loadInvestisseur(): Promise<CockpitSummaryData> {
@@ -216,26 +258,35 @@ async function loadLogisticien(): Promise<CockpitSummaryData> {
     getSupplyChainKpisChart(),
     listAccessibleTransactionCases(),
   ]);
-  return buildLogisticienCockpit({
+  const cockpit = buildLogisticienCockpit({
     warehouses: pick(warehouses, {}),
     routes: pick(routes, []),
     alerts: pick(alerts, []),
     kpis: pick(kpis, {}),
     cases: pick(cases, []),
   });
+  // M7 — transport de dossier à coordonner (gated jusqu'au peuplement de transport_requests).
+  const transports = await caseRows(pick(cases, []), transportRequestService.listByCase);
+  cockpit.priorities = [...buildTransportCaseSignals(transports), ...cockpit.priorities];
+  return cockpit;
 }
 
 async function loadTransitaire(): Promise<CockpitSummaryData> {
-  const [customs, containers, documents] = await Promise.allSettled([
+  const [customs, containers, documents, casesR] = await Promise.allSettled([
     getCustomsClearanceMetrics(),
     getContainerTrackingRows(),
     getFreightDocumentsForList(),
+    listAccessibleTransactionCases(),
   ]);
-  return buildTransitaireCockpit({
+  const cockpit = buildTransitaireCockpit({
     customs: pick(customs, {}),
     containers: pick(containers, []),
     documents: pick(documents, []),
   });
+  // Douane de dossier → action documentaire (gated jusqu'au peuplement de customs_cases).
+  const customsCases = await caseRows(pick(casesR, []), customsCaseService.listByCase);
+  cockpit.priorities = [...buildCustomsCaseSignals(customsCases), ...cockpit.priorities];
+  return cockpit;
 }
 
 async function loadFinancier(): Promise<CockpitSummaryData> {
@@ -251,7 +302,7 @@ async function loadFinancier(): Promise<CockpitSummaryData> {
       getPerformanceAnalytics(),
       listAccessibleTransactionCases(),
     ]);
-  return buildFinancierCockpit({
+  const cockpit = buildFinancierCockpit({
     rentalRevenue: pick(rentalRevenue, { revenue: 0, count: 0, growth: 0 }),
     upcomingRentals: pick(upcomingRentals, []),
     pipeline: pick(pipeline, []),
@@ -262,6 +313,18 @@ async function loadFinancier(): Promise<CockpitSummaryData> {
     performance: pick(performance, []),
     cases: pick(cases, []),
   });
+  // M5 escrow + M6 financement de dossier (gated jusqu'au peuplement payment_records / financing_requests).
+  const fcases = pick(cases, []);
+  const [financings, payments] = await Promise.all([
+    caseRows(fcases, financingRequestService.listByCase),
+    caseRows(fcases, paymentRecordService.listByCase),
+  ]);
+  cockpit.priorities = [
+    ...buildPaymentCaseSignals(payments),
+    ...buildFinancingCaseSignals(financings),
+    ...cockpit.priorities,
+  ];
+  return cockpit;
 }
 
 const LOADERS: Record<string, () => Promise<CockpitSummaryData>> = {
