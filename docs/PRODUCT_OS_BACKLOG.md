@@ -116,6 +116,24 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 - ✅ Q4+Q5 : recherche multi-champs (brand/model/description) + persistance `total_hours`
 - ✅ Q2 : bandeau « Mode démo » sur les dashboards entreprise
 - **Reste quick-wins** : Q3 (filtre catégorie SQL), Q6 (badges Mes Annonces), Q10 (garde-fou email)
-- Validation cumul : tsc + 140 tests + build OK
+- ✅ Q1 complet : durcissement RLS DB `premium_services` + tests anti-contournement (préservés)
+- ✅ **Cockpit décisionnel « Que dois-je faire aujourd'hui ? »** — assistants **vendeur** + **loueur** (Revenu / Priorités / Risques / Opportunités) sur données 100 % réelles, en tête des dashboards entreprise. Logique pure testée, extensible aux 7 autres rôles. *(Phases 6/7/9)*
+- Validation cumul : tsc + 152 tests + build OK
+
+## Assistants métier (cockpits) — état
+
+| Rôle | Cockpit | Source réelle |
+|---|---|---|
+| Vendeur | ✅ livré | leads (pipeline) + machine_views/messages/offers |
+| Loueur | ✅ livré | rentals + parc machines/interventions |
+| Mécanicien | à brancher | interventions/repairs/inventory/technicians (réels) |
+| Transporteur | à brancher | deliveries/drivers (réels) |
+| Courtier | à brancher | credit_applications/insurance_policies (réels) |
+| Investisseur | à brancher | investments/opportunities (réels) |
+| Logisticien | à brancher | logistics_* (réels) |
+| Transitaire | à brancher | customs/freight_* (réels) |
+| Financier | à brancher | dériver rentals/offers/commissions |
+
+> Pattern établi (builder pur testé + hook + `CockpitView` partagée) : chaque rôle restant se branche en réutilisant ses services `enterpriseApi` déjà réels.
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
