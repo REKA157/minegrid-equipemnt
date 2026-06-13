@@ -7,6 +7,7 @@ import { commonServices } from '../../constants/commonServices';
 import { NotificationContainer } from '../../components/NotificationToast';
 import type { Widget as DashboardWidget } from '../../constants/dashboardTypes';
 import WidgetRenderer from '../../components/dashboard/WidgetRenderer';
+import CockpitSummary from '../../components/dashboard/cockpit/CockpitSummary';
 import { getOrderedAndCompleteLayout } from './layoutHelpers';
 import { useShellState } from './useShellState';
 import type { ShellLayoutItem, ShellWidget, ShellWidgetsSource } from './shellTypes';
@@ -290,6 +291,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
             Accès entreprise temporaire (démonstration). Les données et actions ne reflètent pas un abonnement actif.
           </div>
         )}
+        <CockpitSummary role={role} />
         {renderServices()}
 
         <div className="flex justify-between items-center mb-4">
