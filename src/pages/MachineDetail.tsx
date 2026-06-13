@@ -7,6 +7,7 @@ import type { Machine, MachineWithPremium } from '../types';
 import { isSeller, isOwner } from '../utils/auth';
 import supabase from '../utils/supabaseClient';
 import MachineTrustPanel from '../nextgen/integration/MachineTrustPanel';
+import TransactionOptionsPanel from '../nextgen/integration/TransactionOptionsPanel';
 import { MACHINE_LIST_COLUMNS } from '../constants/machineQueryFields';
 import { recordMachineView } from '../utils/api';
 import {
@@ -110,6 +111,8 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
   const [machineData, setMachineData] = useState<MachineWithPremium | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactForm, setShowContactForm] = useState(false);
+  // Services souhaités exprimés dans le tunnel de devis (intérêt informatif, pas une transaction).
+  const [desiredServices, setDesiredServices] = useState<string[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -457,6 +460,11 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
       const sellerIdRaw = machineData?.seller?.id || getLegacySellerId(machineData) || null;
       const sellerId = typeof sellerIdRaw === 'string' ? parseSellerUuid(sellerIdRaw) : null;
 
+      // Joindre les services souhaités à la demande (intérêt informatif, jamais une transaction).
+      const messageWithServices = desiredServices.length
+        ? `${contactForm.message}\n\nServices souhaités (en attente d'intégration partenaire) : ${desiredServices.join(', ')}`
+        : contactForm.message;
+
       let quoteSubmit: Awaited<ReturnType<typeof submitQuoteRequest>> | null = null;
       try {
         quoteSubmit = await submitQuoteRequest({
@@ -470,7 +478,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           country: contactForm.country || null,
           budget_max: contactForm.offerAmount || null,
           need_by_date: contactForm.needByDate || null,
-          message: contactForm.message,
+          message: messageWithServices,
           source: 'machine_detail_contact_form',
         });
         trackEvent('lead_submit', {
@@ -512,7 +520,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             <p><strong>Email :</strong> ${contactForm.email}</p>
             <p><strong>Téléphone :</strong> ${contactForm.phone || 'Non renseigné'}</p>
             <p><strong>Message :</strong></p>
-            <p>${contactForm.message.replace(/\n/g, '<br>')}</p>
+            <p>${messageWithServices.replace(/\n/g, '<br>')}</p>
           `,
           machineId,
         },
@@ -1026,7 +1034,9 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
                       required
                     />
                   </div>
-                  
+
+                  <TransactionOptionsPanel value={desiredServices} onChange={setDesiredServices} />
+
                   <div className="flex space-x-3">
                     <button 
                       type="submit" 
