@@ -153,6 +153,16 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 | M11 | machine → risque fraude | ✅ inline | fiche machine (FraudInline, vélocité + prix) |
 | M12 | messages → prochaine action | ✅ réel | cockpit vendeur (messages non lus) |
 
-> 🔌 *branché, gated* = corrélation codée + testée + branchée au cockpit, mais **invisible tant que les tables `transaction_platform` ne sont pas peuplées** par un workflow dossier serveur (L3/L4). Anti-façade : zéro donnée simulée. Module : `src/components/dashboard/cockpit/correlations/`.
+> 🔌 *branché, gated* = corrélation codée + testée + branchée au cockpit. Le **write-side qui crée les lignes existe désormais** (cf. ci-dessous) ; les cartes M4-M7 s'affichent dès que la migration SQL est appliquée et qu'un participant déclenche une étape. Anti-façade : zéro donnée simulée. Module : `src/components/dashboard/cockpit/correlations/`.
+
+### Write-side dossier (L3/L4) — livré (code)
+
+| Élément | Fichier | Rôle |
+|---|---|---|
+| RPC `SECURITY DEFINER` | `sql/2026-06_transaction_chain_write_side.sql` | create_inspection/payment/financing/transport/customs_step + advance_transaction_case_step ; idempotent, contrôle de participation, anti-doublon |
+| Services client | `src/utils/api/transactionChain.ts` | wrappers RPC, retour honnête (`not_deployed`/`forbidden`/`created`) |
+| Déclencheur UI | `src/pages/TransactionCasePage.tsx` | panneau « Faire avancer le dossier » → crée les lignes |
+
+> **Sécurité** : `payment_records` n'est jamais écrit côté client (escrow en `awaiting_partner`, jamais de paiement simulé) ; assignation partenaire absente → `à assigner`. **Reste à faire** : (1) appliquer la migration SQL en prod ; (2) ajouter les **participants partenaires** (mécanicien/courtier/transporteur/transitaire) au dossier pour que leurs cockpits voient les cartes assignées — réseau partenaire = prochaine étape.
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
