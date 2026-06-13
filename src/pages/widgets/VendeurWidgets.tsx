@@ -47,43 +47,9 @@ export const VendeurWidgets: VendeurWidgetsConfig = {
   metier: 'Vendeur',
   description: 'Vente d\'équipements et matériels avec IA et recommandations avancées',
   widgets: [
-    {
-      id: 'sales-performance-score',
-      type: 'performance',
-      title: 'Score de Performance Commerciale',
-      description: 'Score global sur 100, comparaison avec objectif, rang anonymisé, recommandations IA',
-      icon: Target,
-      dataSource: 'sales-performance-score',
-      priority: 1,
-      category: 'performance',
-      features: {
-        periodSelector: true,
-        export: true,
-        analytics: true,
-        alerts: true,
-        aiRecommendations: true,
-        benchmarking: true,
-      }
-    },
-    {
-      id: 'sales-evolution',
-      type: 'chart',
-      title: 'Évolution des ventes enrichie',
-      description: 'Courbe avec benchmarking secteur, notifications automatiques, actions rapides',
-      icon: TrendingUp,
-      dataSource: 'sales-evolution',
-      priority: 2,
-      category: 'analytics',
-      features: {
-        periodSelector: true,
-        export: true,
-        analytics: true,
-        alerts: true,
-        sectorComparison: true,
-        autoNotifications: true,
-        quickActions: true,
-      }
-    },
+    // [UX] Widgets retirés car données fictives (Math.random) / IA gadget :
+    // 'sales-performance-score', 'sales-evolution', 'ai-insights', 'ai-optimization'.
+    // À réintroduire seulement branchés sur des données réelles.
     {
       id: 'stock-status',
       type: 'list',
@@ -157,45 +123,5 @@ export const VendeurWidgets: VendeurWidgetsConfig = {
         stickyDisplay: true,
       }
     },
-    {
-      id: 'ai-insights',
-      type: 'ai-insights',
-      title: 'Insights IA',
-      description: 'Analyses prédictives, recommandations intelligentes et insights automatiques',
-      icon: BarChart3,
-      dataSource: 'ai-insights',
-      priority: 6,
-      category: 'ai',
-      features: {
-        periodSelector: true,
-        export: true,
-        analytics: true,
-        alerts: true,
-        aiGenerated: true,
-        dynamicContent: true,
-        forecasting: true,
-        trendAnalysis: true,
-      }
-    },
-    {
-      id: 'ai-optimization',
-      type: 'ai-optimization',
-      title: 'Optimisation IA',
-      description: 'Suggestions d\'optimisation pour les prix, le SEO et le marketing',
-      icon: TrendingUp,
-      dataSource: 'ai-optimization',
-      priority: 7,
-      category: 'ai',
-      features: {
-        periodSelector: true,
-        export: true,
-        analytics: true,
-        alerts: true,
-        aiGenerated: true,
-        dynamicContent: true,
-        recommendations: true,
-        autoNotifications: true,
-      }
-    }
   ]
 }; 
