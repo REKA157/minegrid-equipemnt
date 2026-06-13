@@ -96,6 +96,10 @@ const LegalStaticPage = lazy(() => import('./pages/LegalStaticPage'));
 const LeadsInbox = lazy(() => import('./pages/LeadsInbox'));
 const TransactionCasePage = lazy(() => import('./pages/TransactionCasePage'));
 const MyTransactionCasesPage = lazy(() => import('./pages/MyTransactionCasesPage'));
+// Espace NextGen conservé comme DÉMO/ADMIN interne (pas l'expérience principale) :
+// les briques (Trust/Inspection/Escrow/Finance/Logistics/Data/IA) sont intégrées
+// directement dans les parcours réels (fiche machine, recherche, etc.).
+const NextGenRouter = lazy(() => import('./pages/nextgen/NextGenRouter'));
 
 /**
  * Routes considérées comme "application" : elles ont leur propre shell/navigation
@@ -212,6 +216,9 @@ function AppContent() {
 
       case 'financement':
         return <FinancingRequest />;
+
+      case 'nextgen':
+        return <NextGenRouter sub={pathParts[1]} />;
 
       case 'secteur':
         return <SectorMachines />;
