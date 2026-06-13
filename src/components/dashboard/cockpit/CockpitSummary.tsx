@@ -50,6 +50,7 @@ import {
 } from '../../../utils/enterpriseApi/transitaire';
 import { listAccessibleTransactionCases } from '../../../utils/api/transactionCases';
 import { getQuoteRequests } from '../../../utils/api/quoteRequests';
+import { getMessages } from '../../../utils/api/messages';
 import {
   buildVendeurCockpit,
   type CockpitSummaryData,
@@ -67,6 +68,7 @@ import { buildQuoteSignals } from './correlations/quoteCorrelation';
 import { buildDossierStageSignals } from './correlations/caseCorrelation';
 import { buildMonitorSignals } from './correlations/monitorCorrelation';
 import { buildMonitorContextBySourceIds } from '../../../utils/buildMonitorContextForLeadSourceIds';
+import { buildMessageSignals } from './correlations/messageCorrelation';
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -89,11 +91,12 @@ function pick(r: PromiseSettledResult<any>, fb: any): any {
 // ---------------------------------------------------------------------------
 
 async function loadVendeur(): Promise<CockpitSummaryData> {
-  const [leadsR, statsR, quotesR, casesR] = await Promise.allSettled([
+  const [leadsR, statsR, quotesR, casesR, messagesR] = await Promise.allSettled([
     RealPipelineService.getLeads(),
     getDashboardStats(),
     getQuoteRequests('all'),
     listAccessibleTransactionCases(),
+    getMessages(),
   ]);
   const leadList = pick(leadsR, []);
   const cockpit = buildVendeurCockpit(leadList, pick(statsR, EMPTY_STATS));
@@ -112,7 +115,9 @@ async function loadVendeur(): Promise<CockpitSummaryData> {
     /* Global Monitor indisponible -> aucune carte (anti-façade) */
   }
   const m = buildMonitorSignals(leadList, monitorMap);
-  cockpit.priorities = [...q.priorities, ...d.priorities, ...cockpit.priorities];
+  // M12 — messages non lus → prochaine action (table messages, RLS).
+  const msg = buildMessageSignals(pick(messagesR, []));
+  cockpit.priorities = [...q.priorities, ...d.priorities, ...msg.priorities, ...cockpit.priorities];
   cockpit.risks = [...d.risks, ...cockpit.risks];
   cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities, ...m.opportunities];
   return cockpit;
