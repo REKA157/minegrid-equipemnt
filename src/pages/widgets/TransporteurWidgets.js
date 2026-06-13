@@ -6,6 +6,8 @@ export const TransporteurWidgets = {
   metier: 'Transporteur / Logistique',
   description: 'Transport et livraison d\'équipements',
   widgets: [
+    // Widget PLANIFIÉ (non branché) — conservé pour sa valeur métier, masqué via exclusion du validId.
+    // Cible : tables logistics_requests / transport_quotes / shipments. Voir plannedEnterpriseWidgets.ts.
     {
       id: 'tx-assigned-transports',
       type: 'list',

@@ -9,6 +9,8 @@ const WIDGETS_COURTIER_IDS = [
   'client-portfolio',
   'performance-analytics',
   'transaction-cases',
+  // 'transaction-broker-financing' : widget planifié, volontairement exclu tant que non branché
+  // (voir widgets/plannedEnterpriseWidgets.ts + docs/PLANNED_ENTERPRISE_WIDGETS.md)
 ];
 
 const EnterpriseDashboardCourtierDisplay: React.FC = () => (

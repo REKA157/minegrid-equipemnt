@@ -20,6 +20,8 @@ export const CourtierWidgets = {
         alerts: true
       }
     },
+    // Widget PLANIFIÉ (non branché) — conservé pour sa valeur métier, masqué via exclusion du validId.
+    // Cible : tables finance_applications / partner_submissions. Voir plannedEnterpriseWidgets.ts.
     {
       id: 'transaction-broker-financing',
       type: 'list',

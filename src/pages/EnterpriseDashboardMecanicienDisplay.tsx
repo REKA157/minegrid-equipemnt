@@ -7,6 +7,8 @@ const WIDGETS_MECANICIEN_IDS = [
   'repair-status',
   'parts-inventory',
   'technician-workload',
+  // 'tx-assigned-inspections' : widget planifié, volontairement exclu tant que non branché
+  // (voir widgets/plannedEnterpriseWidgets.ts + docs/PLANNED_ENTERPRISE_WIDGETS.md)
 ];
 
 const EnterpriseDashboardMecanicienDisplay: React.FC = () => (

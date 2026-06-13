@@ -6,6 +6,8 @@ export const MecanicienWidgets = {
   metier: 'Mécanicien / Atelier',
   description: 'Maintenance et réparation d\'équipements',
   widgets: [
+    // Widget PLANIFIÉ (non branché) — conservé pour sa valeur métier, masqué via exclusion du validId.
+    // Cible : tables inspection_requests / inspection_reports. Voir plannedEnterpriseWidgets.ts.
     {
       id: 'tx-assigned-inspections',
       type: 'list',
