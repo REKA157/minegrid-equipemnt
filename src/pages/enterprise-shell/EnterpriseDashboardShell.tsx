@@ -293,8 +293,8 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
             <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
               <h2 className="text-lg font-bold mb-4">Ajouter un {modalLabel}</h2>
               <div className="mb-2 text-xs text-gray-500">
-                Widgets disponibles : {widgetsSource.widgets.length} | Widgets filtrés :{' '}
-                {widgetsSource.widgets.filter((w) => validIds.includes(w.id)).length}
+                {widgetsSource.widgets.filter((w) => validIds.includes(w.id)).length} widget(s)
+                installable(s) pour ce métier
               </div>
               <ul>
                 {widgetsSource.widgets

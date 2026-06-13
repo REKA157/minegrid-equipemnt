@@ -18,37 +18,28 @@ export async function getPremiumService(): Promise<PremiumService | null> {
     .single();
 
   if (error && error.code !== 'PGRST116') throw error;
-  
-  // Si pas de service premium, créer un service de base pour les tests
-  if (!data) {
-    const baseService = {
-      id: 'base-service',
-      user_id: user.id,
-      service_type: 'basic' as const,
-      status: 'active' as const,
-      start_date: new Date().toISOString(),
-      end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      features: ['Annonces prioritaires', 'Statistiques avancées', 'Support prioritaire'],
-      price: 29.99,
-      created_at: new Date().toISOString()
-    };
-    return baseService;
-  }
-  
-  return data;
+
+  // Anti-façade : si aucun service premium réel, on renvoie null (PremiumDashboard
+  // gère l'état "aucun abonnement actif"). On ne fabrique JAMAIS un service actif
+  // fictif côté client (l'entitlement réel = pro_clients via subscription.ts).
+  return data ?? null;
 }
 
 export async function requestPremiumService(serviceType: 'premium' | 'enterprise') {
   const user = await getCurrentUser();
   if (!user) throw new Error('Utilisateur non connecté');
 
+  // SÉCURITÉ (anti-contournement paiement, finding #5 / backlog Q1) : on n'active
+  // JAMAIS un service côté client. La demande est créée en 'pending' ; le passage
+  // en 'active' est fait côté serveur APRÈS paiement (edge function stripe-webhook,
+  // source de vérité pro_clients). Aucun appelant UI aujourd'hui.
   const serviceData = {
     user_id: user.id,
     service_type: serviceType,
-    status: 'active' as const,
+    status: 'pending' as const,
     start_date: new Date().toISOString(),
     end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 jours
-    features: serviceType === 'premium' 
+    features: serviceType === 'premium'
       ? ['Annonces prioritaires', 'Statistiques avancées', 'Support prioritaire']
       : ['Tout du Premium', 'API personnalisée', 'Gestionnaire dédié', 'Formation incluse'],
     price: serviceType === 'premium' ? 99 : 299
@@ -60,11 +51,11 @@ export async function requestPremiumService(serviceType: 'premium' | 'enterprise
 
   if (error) throw error;
 
-  // Créer une notification
+  // Notification : demande enregistrée (PAS "activé" — l'activation suit le paiement).
   await createNotification({
     type: 'premium',
-    title: 'Service Premium activé',
-    content: `Votre service ${serviceType} a été activé avec succès !`
+    title: 'Demande de service premium enregistrée',
+    content: `Votre demande de service ${serviceType} a été enregistrée. Elle sera activée après confirmation du paiement.`
   });
 
   return data;
