@@ -35,4 +35,14 @@ describe('chainCorrelation (M4-M7 chaîne dossier)', () => {
     expect(buildPaymentCaseSignals([{ status: 'released' } as any])).toHaveLength(0);
     expect(buildPaymentCaseSignals([{ status: 'held' } as any])[0]?.id).toBe('corr:case-payment');
   });
+
+  it('statuts du write-side reconnus par le read-side (cartes visibles)', () => {
+    // Statuts posés par les RPC create_*_step (sql/2026-06_transaction_chain_write_side.sql).
+    expect(buildInspectionCaseSignals([{ status: 'a_assigner' } as any])).toHaveLength(1);
+    expect(buildInspectionCaseSignals([{ status: 'assigned' } as any])).toHaveLength(1);
+    expect(buildFinancingCaseSignals([{ status: 'a_examiner' } as any])).toHaveLength(1);
+    expect(buildTransportCaseSignals([{ status: 'a_planifier' } as any])).toHaveLength(1);
+    expect(buildCustomsCaseSignals([{ customs_status: 'a_traiter', missing_documents: [] } as any])).toHaveLength(1);
+    expect(buildPaymentCaseSignals([{ status: 'awaiting_partner' } as any])[0]?.id).toBe('corr:case-payment');
+  });
 });

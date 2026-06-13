@@ -93,7 +93,7 @@ export function buildCustomsCaseSignals(rows: CustomsCaseRow[]): CockpitSignal[]
   ];
 }
 
-const PAYMENT_PENDING = new Set(['pending', 'held', 'in_escrow', 'awaiting', 'escrow']);
+const PAYMENT_PENDING = new Set(['pending', 'held', 'in_escrow', 'awaiting', 'awaiting_partner', 'escrow']);
 export function buildPaymentCaseSignals(rows: PaymentRecordRow[]): CockpitSignal[] {
   const pending = rows.filter((r) => PAYMENT_PENDING.has(lc(r.status)));
   if (!pending.length) return [];
