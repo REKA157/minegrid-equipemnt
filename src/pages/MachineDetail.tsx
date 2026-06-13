@@ -818,6 +818,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               category={(machineData as { category?: string }).category ?? null}
               country={machineData.seller?.location ?? null}
               hasImages={Array.isArray((machineData as { images?: unknown[] }).images) && ((machineData as { images?: unknown[] }).images?.length ?? 0) > 0}
+              createdAt={(machineData as { created_at?: string }).created_at ?? null}
             />
             <FinancingInline price={machineData.price ? Number(machineData.price) : null} />
             <div className="mb-6" />

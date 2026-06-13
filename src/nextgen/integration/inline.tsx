@@ -92,7 +92,7 @@ export function PriceVsMarketInline({ price, ...ctx }: MachineCtx) {
 }
 
 /** Alerte fraude inline — n'apparaît QUE si un risque réel est détecté. */
-export function FraudInline({ price, sellerId, hasImages, ...ctx }: MachineCtx & { sellerId?: string | null; hasImages?: boolean }) {
+export function FraudInline({ price, sellerId, hasImages, createdAt, ...ctx }: MachineCtx & { sellerId?: string | null; hasImages?: boolean; createdAt?: string | null }) {
   const [warn, setWarn] = useState<string | null>(null);
   useEffect(() => {
     let c = false;
@@ -105,14 +105,16 @@ export function FraudInline({ price, sellerId, hasImages, ...ctx }: MachineCtx &
         estimate: e.estimate ?? null,
         sellerTrustScore: tp?.trust_score ?? 0,
         sellerVerifiedIdentity: !!tp && tp.trust_tier !== 'unverified',
-        listingAgeMinutes: 10000,
+        listingAgeMinutes: createdAt
+          ? Math.max(0, Math.round((Date.now() - new Date(createdAt).getTime()) / 60000))
+          : 100000,
         hasImages: !!hasImages,
       });
       if (!c) setWarn(r.risk !== 'low' ? (r.reasons[0] ?? 'Signaux à vérifier') : null);
     })();
     return () => { c = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [price, sellerId, ctx.brand, ctx.model, ctx.year, ctx.category, ctx.country, hasImages]);
+  }, [price, sellerId, ctx.brand, ctx.model, ctx.year, ctx.category, ctx.country, hasImages, createdAt]);
   if (!warn) return null;
   return (
     <div className="mt-2 rounded-md bg-amber-50 text-amber-800 text-xs px-3 py-2">
