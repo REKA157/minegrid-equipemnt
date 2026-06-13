@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
       currency: 'eur',
       payment_method_types: ['card'],
       metadata: {
+        // Lus par la fonction `stripe-webhook` pour activer l'abonnement côté serveur.
         planId,
         userId: userData.user.id,
       },
@@ -119,15 +120,23 @@ Deno.serve(async (req) => {
   }
 });
 
-function getPlanAmount(planId: string): number {
-  const prices = {
-    basic: 2999,    // 29.99€
-    pro: 4999,      // 49.99€
-    enterprise: 9999 // 99.99€
-  };
-  return prices[planId as keyof typeof prices] || 4999;
+type PlanId = 'basic' | 'pro' | 'premium' | 'enterprise';
+
+// Grille tarifaire canonique — SOURCE DE VÉRITÉ UNIQUE (en centimes d'EUR), alignée
+// sur les tiers affichés côté front (70 / 149 / 299). Auparavant le plan `premium`
+// n'était pas reconnu (paiement Premium en erreur 400) et l'affichage « USD » ne
+// correspondait pas au débit EUR. Le montant est calculé ICI, jamais reçu du client.
+const PLAN_PRICES_EUR_CENTS: Record<PlanId, number> = {
+  basic: 2900,       // 29 €
+  pro: 7000,         // 70 €
+  premium: 14900,    // 149 €
+  enterprise: 29900, // 299 €
+};
+
+function getPlanAmount(planId: PlanId): number {
+  return PLAN_PRICES_EUR_CENTS[planId];
 }
 
-function isValidPlanId(planId: unknown): planId is 'basic' | 'pro' | 'enterprise' {
-  return planId === 'basic' || planId === 'pro' || planId === 'enterprise';
+function isValidPlanId(planId: unknown): planId is PlanId {
+  return planId === 'basic' || planId === 'pro' || planId === 'premium' || planId === 'enterprise';
 }

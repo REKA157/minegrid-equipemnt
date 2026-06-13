@@ -585,47 +585,13 @@ export default function PublicationRapide() {
     if (!file) return;
 
     setExcelFile(file);
-    setLoading(true);
-    setUploadProgress(0);
-
-    try {
-      // Simulation du traitement OCR
-      for (let i = 0; i <= 100; i += 10) {
-        setUploadProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-
-      // Données simulées extraites
-      const mockExtractedData = [
-        {
-          name: 'Pelle hydraulique CAT 320D',
-          brand: 'Caterpillar',
-          model: '320D',
-          category: 'Pelles hydrauliques',
-          year: 2018,
-          price: 125000,
-          location: 'Bamako, Mali'
-        },
-        {
-          name: 'Bulldozer Komatsu D65',
-          brand: 'Komatsu',
-          model: 'D65',
-          category: 'Bulldozers',
-          year: 2019,
-          price: 98000,
-          location: 'Ouagadougou, Burkina Faso'
-        }
-      ];
-
-      setPreviewData(mockExtractedData);
-      toast('Fichier traité avec succès ! Vérifiez les données extraites.');
-
-    } catch (error) {
-      console.error('Erreur traitement fichier:', error);
-      toast('Erreur lors du traitement du fichier');
-    } finally {
-      setLoading(false);
-    }
+    // SÉCURITÉ / INTÉGRITÉ DU CATALOGUE : l'ancienne version simulait un « OCR » puis
+    // PRÉ-REMPLISSAIT 2 machines fictives codées en dur (CAT 320D Bamako, Komatsu D65),
+    // qui étaient ensuite réellement insérées dans la base de production. On ne
+    // fabrique plus aucune donnée. L'extraction réelle du fichier Excel reste à
+    // implémenter (côté serveur / n8n, cf. SellEquipment.handleExcelSubmit).
+    setPreviewData([]);
+    toast("L'import Excel est en cours d'intégration. Utilisez la publication manuelle pour ajouter une annonce.");
   };
 
   const handleExcelSubmit = async () => {

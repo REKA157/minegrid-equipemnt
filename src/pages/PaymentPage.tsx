@@ -80,50 +80,12 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
     }
   };
 
+  // SÉCURITÉ : suppression de l'activation d'abonnement par code promo côté client.
+  // Le code promo est inliné dans le bundle (VITE_PROMO_CODE) donc trivialement
+  // extractible ; l'écriture directe dans `pro_clients` contournait le paiement.
+  // La validation/activation doit être réalisée par une Edge Function serveur.
   const activateSubscriptionWithPromo = async () => {
-    try {
-      // Obtenir l'utilisateur actuel
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        // Flux inscription: l'utilisateur n'est pas encore connecté.
-        // On conserve l'activation localement; Register finalisera l'inscription.
-        setAccountItem(null, 'selectedSubscription', subscription.id);
-        setAccountItem(null, 'subscriptionActivated', 'true');
-        setAccountItem(null, 'promoCodeUsed', VALID_PROMO_CODE);
-        onSuccess();
-        return;
-      }
-
-      // Créer l'abonnement avec accès temporaire
-      const { error: subscriptionError } = await supabase
-        .from('pro_clients')
-        .insert({
-          user_id: user.id,
-          company_name: `${userData.firstName} ${userData.lastName}`,
-          subscription_type: subscription.id,
-          subscription_status: 'active',
-          subscription_start: new Date().toISOString().split('T')[0],
-          subscription_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 jours
-          max_users: subscription.id === 'enterprise' ? 10 : 5,
-          promo_code_used: VALID_PROMO_CODE,
-          payment_method: 'promo_code'
-        });
-
-      if (subscriptionError) {
-        throw subscriptionError;
-      }
-
-      // Sauvegarder par compte
-      setAccountItem(user.id, 'selectedSubscription', subscription.id);
-      setAccountItem(user.id, 'subscriptionActivated', 'true');
-      setAccountItem(user.id, 'promoCodeUsed', VALID_PROMO_CODE);
-
-      toast('✅ Abonnement activé avec succès grâce au code promo ! Accès temporaire de 30 jours.');
-      onSuccess();
-    } catch (error) {
-      console.error('Erreur activation abonnement promo:', error);
-      throw error;
-    }
+    toast("La validation des codes promo est en cours de sécurisation côté serveur et n'active plus l'abonnement directement.");
   };
 
   const stripePlanType: 'premium' | 'pro' | 'enterprise' =

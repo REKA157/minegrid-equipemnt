@@ -554,9 +554,10 @@ export default function ProSubscription() {
                       toast('Veuillez entrer un code promo valide');
                     }
                   } else {
-                    // Simulation de paiement par carte
-                    toast('💳 Paiement traité avec succès ! Votre abonnement est maintenant actif.');
-                    activateSubscriptionWithCard();
+                    // SÉCURITÉ : plus de « simulation » de paiement carte (qui activait
+                    // l'abonnement sans débit). Le paiement carte passe par le formulaire
+                    // Stripe sécurisé (Edge Function create-payment + webhook serveur).
+                    toast("Le paiement par carte se fait via le formulaire Stripe sécurisé. Aucun montant n'a été débité.");
                   }
                 }}
                 className="w-full mt-6 bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 font-semibold flex items-center justify-center"
@@ -575,75 +576,10 @@ export default function ProSubscription() {
     </div>
   );
 
-  // Fonction pour activer l'abonnement avec code promo
+  // SÉCURITÉ : l'activation d'abonnement par code promo côté client est supprimée
+  // (la valeur du code est dans le bundle JS, donc contournable). La validation et
+  // l'activation doivent passer par une Edge Function serveur. No-op informatif.
   const activateSubscriptionWithPromo = async () => {
-    try {
-      // Obtenir l'utilisateur actuel
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('Utilisateur non connecté');
-      }
-
-      // Créer l'abonnement avec accès temporaire
-      const { error: subscriptionError } = await supabase
-        .from('pro_clients')
-        .insert({
-          user_id: user.id,
-          company_name: formData.companyName,
-          subscription_type: selectedPlan,
-          subscription_status: 'active',
-          subscription_start: new Date().toISOString().split('T')[0],
-          subscription_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 jours
-          max_users: plans.find(p => p.id === selectedPlan)?.maxUsers || 5,
-          promo_code_used: PROMO_CODE,
-          payment_method: 'promo_code'
-        });
-
-      if (subscriptionError) {
-        throw subscriptionError;
-      }
-
-      toast('✅ Abonnement activé avec succès grâce au code promo ! Accès temporaire de 30 jours.');
-      setShowPayment(false);
-      window.location.hash = '#pro';
-    } catch (error) {
-      console.error('Erreur activation abonnement promo:', error);
-      toast('Erreur lors de l\'activation de l\'abonnement');
-    }
-  };
-
-  // Fonction pour activer l'abonnement avec paiement carte
-  const activateSubscriptionWithCard = async () => {
-    try {
-      // Obtenir l'utilisateur actuel
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('Utilisateur non connecté');
-      }
-
-      // Créer l'abonnement avec paiement
-      const { error: subscriptionError } = await supabase
-        .from('pro_clients')
-        .insert({
-          user_id: user.id,
-          company_name: formData.companyName,
-          subscription_type: selectedPlan,
-          subscription_status: 'active',
-          subscription_start: new Date().toISOString().split('T')[0],
-          max_users: plans.find(p => p.id === selectedPlan)?.maxUsers || 5,
-          payment_method: 'card',
-          payment_amount: plans.find(p => p.id === selectedPlan)?.price || 0
-        });
-
-      if (subscriptionError) {
-        throw subscriptionError;
-      }
-
-      setShowPayment(false);
-      window.location.hash = '#pro';
-    } catch (error) {
-      console.error('Erreur paiement carte:', error);
-      toast('Erreur lors du traitement du paiement');
-    }
+    toast("La validation des codes promo est en cours de sécurisation côté serveur et n'active plus l'abonnement directement.");
   };
 } 

@@ -7,7 +7,6 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { supabaseClient as supabase } from '../utils/supabaseClient';
-import { setAccountItem, removeAccountItem } from '../utils/accountLocalStorage';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
@@ -81,8 +80,12 @@ const PaymentForm: React.FC<StripePaymentFormProps> = ({
       if (error) {
         onError(error.message || 'Erreur lors du paiement');
       } else if (paymentIntent.status === 'succeeded') {
-        // Paiement réussi - activer l'abonnement
-        await activateSubscription(paymentIntent.id);
+        // Paiement réussi. L'ACTIVATION de l'abonnement est faite côté SERVEUR par
+        // le webhook Stripe (supabase/functions/stripe-webhook) à la réception de
+        // l'événement payment_intent.succeeded. Le client ne doit jamais écrire son
+        // propre abonnement (sinon : contournement de paiement). On se contente de
+        // demander un rafraîchissement de l'état d'abonnement lu depuis le serveur.
+        notifySubscriptionRefresh();
         onSuccess();
       }
     } catch (error) {
@@ -93,49 +96,10 @@ const PaymentForm: React.FC<StripePaymentFormProps> = ({
     }
   };
 
-  const activateSubscription = async (paymentIntentId: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Utilisateur non connecté');
-
-      // Activer l'abonnement dans la base de données
-      const { error } = await supabase
-        .from('pro_clients')
-        .insert({
-          user_id: user.id,
-          company_name: user.user_metadata?.full_name || 'Entreprise',
-          subscription_type: planType,
-          subscription_status: 'active',
-          subscription_start: new Date().toISOString().split('T')[0],
-          payment_method: 'stripe',
-          payment_amount: amount,
-          stripe_payment_intent_id: paymentIntentId
-        });
-
-      if (error) throw error;
-
-      // Mettre à jour le localStorage par compte
-      setAccountItem(user.id, 'userSubscription', planType);
-      removeAccountItem(user.id, 'subscriptionCancelled');
-      
-      // Mettre à jour les clés spécifiques pour l'abonnement entreprise
-      if (planType === 'enterprise') {
-        removeAccountItem(user.id, 'subscriptionCancelled');
-        setAccountItem(user.id, 'userSubscription', 'enterprise');
-        setAccountItem(user.id, 'enterpriseService', 'true');
-        setAccountItem(user.id, 'userServices', 'enterprise');
-        
-          setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('enterpriseSubscriptionActivated', {
-            detail: { planType: 'enterprise' }
-          }));
-        }, 100);
-      }
-
-    } catch (error) {
-      console.error('Erreur activation abonnement:', error);
-      throw error;
-    }
+  const notifySubscriptionRefresh = () => {
+    window.dispatchEvent(
+      new CustomEvent('subscriptionRefreshRequested', { detail: { planType } }),
+    );
   };
 
   const cardElementOptions = {

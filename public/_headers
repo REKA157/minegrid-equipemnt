@@ -1,0 +1,14 @@
+# En-têtes de sécurité HTTP (format Netlify / compatible _headers).
+# L'audit a relevé l'absence totale d'en-têtes de sécurité (clickjacking, pas de
+# défense XSS en profondeur, pas de HSTS). Ces en-têtes durcissent toutes les pages.
+#
+# Note CSP : volontairement permissive (Supabase, Stripe, n8n, images distantes)
+# pour ne pas casser l'app ; à resserrer une fois les domaines réellement utilisés
+# figés (retirer 'unsafe-inline'/'unsafe-eval' après audit des scripts inline).
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Permissions-Policy: geolocation=(self), microphone=(), camera=()
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.hstgr.cloud https://nominatim.openstreetmap.org; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'

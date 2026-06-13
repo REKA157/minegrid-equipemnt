@@ -9,10 +9,15 @@
     <meta name="keywords" content="équipements miniers, construction, Afrique, machines, BTP, occasion, neuf" />
     <meta property="og:title" content="Minegrid - Équipements de Construction et Mines en Afrique" />
     <meta property="og:description" content="Plateforme leader en Afrique pour l'achat et la vente d'équipements miniers et de construction." />
-    <meta property="og:image" content="/og-image.jpg" />
+    <meta property="og:image" content="https://minegrid-equipement.com/og-image.jpg" />
+    <meta property="og:url" content="https://minegrid-equipement.com" />
+    <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="canonical" href="https://minegrid-equipement.com" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <!-- preconnect Supabase : réduit la latence du premier appel data sur 3G/4G -->
+    <link rel="preconnect" href="https://tnfbggrftmtxpgbcwqzo.supabase.co" crossorigin />
+    <!-- CSS Leaflet auto-hébergé (importé dans src/main.tsx) au lieu d'un CDN unpkg
+         tiers : supprime un SPOF runtime, le risque RGPD et l'absence de SRI. -->
   </head>
   <body>
     <div id="root"></div>

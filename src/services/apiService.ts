@@ -80,67 +80,31 @@ export interface Promotion {
   createdAt: string;
 }
 
-// Fonction utilitaire pour les appels API
-export const apiCall = async (method: string, endpoint: string, data?: any): Promise<any> => {
-  try {
-    console.log(`🔄 API Call: ${method} ${endpoint}`, data);
-    
-    // Client-only stubs : les endpoints listés retournent un succès simulé (pas de requête HTTP réelle).
-    // À remplacer par fetch vers votre backend lorsque les routes seront disponibles.
-    switch (endpoint) {
-      case '/api/actions/start':
-        return { success: true, message: 'Action démarrée' };
-      case '/api/actions/complete':
-        return { success: true, message: 'Action terminée' };
-      case '/api/actions/reschedule':
-        return { success: true, message: 'Action reprogrammée' };
-      case '/api/actions/create':
-        return { success: true, message: 'Action créée' };
-      case '/api/actions/auto-followup':
-        return { success: true, message: 'Relances automatiques programmées' };
-      case '/api/actions/schedule':
-        return { success: true, message: 'Actions planifiées' };
-      case '/api/actions/ai-report':
-        return { success: true, data: { report: 'Rapport IA généré' } };
-      case '/api/actions/sync-crm':
-        return { success: true, message: 'CRM synchronisé' };
-      case '/api/actions/optimize-schedule':
-        return { success: true, message: 'Planning optimisé' };
-      case '/api/equipment/boost':
-        return { success: true, message: 'Équipement boosté' };
-      case '/api/equipment/add-photo':
-        return { success: true, message: 'Photo ajoutée' };
-      case '/api/equipment/create-offer':
-        return { success: true, message: 'Offre flash créée' };
-      case '/api/equipment/send-promotion':
-        return { success: true, message: 'Promotion envoyée' };
-      case '/api/equipment/analyze':
-        return { success: true, message: 'Analyse effectuée' };
-      case '/api/equipment/optimize-pricing':
-        return { success: true, message: 'Prix optimisé' };
-      case '/api/pipeline/add-lead':
-        return { success: true, message: 'Lead ajouté' };
-      case '/api/pipeline/export':
-        return { success: true, message: 'Pipeline exporté' };
-      case '/api/pipeline/followup':
-        return { success: true, message: 'Suivi envoyé' };
-      case '/api/pipeline/meeting':
-        return { success: true, message: 'Rendez-vous programmé' };
-      case '/api/pipeline/report':
-        return { success: true, message: 'Rapport généré' };
-      case '/api/pipeline/relance':
-        return { success: true, message: 'Relance automatique activée' };
-      case '/api/pipeline/analyse':
-        return { success: true, message: 'Analyse de performance effectuée' };
-      case '/api/pipeline/optimisation':
-        return { success: true, message: 'Optimisation IA appliquée' };
-      default:
-        return { success: true, message: 'Action effectuée avec succès' };
-    }
-  } catch (error) {
-    console.error('❌ Erreur API:', error);
-    throw error;
-  }
+export interface ApiActionResult {
+  success: boolean;
+  /** true quand l'action n'a pas de backend câblé (à griser/desactiver côté UI). */
+  notImplemented?: boolean;
+  message: string;
+  data?: unknown;
+}
+
+// Fonction utilitaire pour les appels d'action de dashboard.
+//
+// SÉCURITÉ / HONNÊTETÉ PRODUIT : ces actions (sync CRM, boost, relances, exports…)
+// n'ont AUCUN backend câblé. L'ancienne implémentation renvoyait un succès simulé,
+// ce qui trompait l'utilisateur (rien n'était réellement exécuté). On renvoie
+// désormais un échec explicite « non disponible » : l'UI doit griser le bouton ou
+// afficher un message honnête plutôt que prétendre que l'action a réussi.
+export const apiCall = async (
+  _method: string,
+  _endpoint: string,
+  _data?: unknown,
+): Promise<ApiActionResult> => {
+  return {
+    success: false,
+    notImplemented: true,
+    message: "Cette action n'est pas encore disponible (fonctionnalité en cours d'intégration).",
+  };
 };
 
 // Fonction pour afficher les notifications
@@ -154,45 +118,66 @@ export const showNotification = (type: 'success' | 'error' | 'info' | 'warning',
   window.dispatchEvent(event);
 };
 
-// Fonction pour envoyer des messages (SMS, Email, etc.)
-export const sendMessage = async (type: 'SMS' | 'EMAIL' | 'TEAM', recipient: string, content: string) => {
-  try {
-    console.log(`📤 Envoi ${type} à ${recipient}: ${content}`);
-    
-    // Simulation de l'envoi
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    return { success: true, message: `${type} envoyé avec succès` };
-  } catch (error) {
-    console.error('❌ Erreur envoi message:', error);
-    throw error;
-  }
+// Envoi de messages (SMS, Email, Team). Aucun fournisseur n'est câblé côté client :
+// on ne simule plus un envoi réussi (l'utilisateur croyait relancer un client).
+export const sendMessage = async (
+  type: 'SMS' | 'EMAIL' | 'TEAM',
+  _recipient: string,
+  _content: string,
+): Promise<ApiActionResult> => {
+  return {
+    success: false,
+    notImplemented: true,
+    message: `L'envoi ${type} n'est pas encore disponible.`,
+  };
 };
 
-// Fonction pour exporter des données
-export const exportData = async (data: any, filename: string, format: 'excel' | 'pdf' | 'csv') => {
-  try {
-    console.log(`📊 Export ${format}: ${filename}`, data);
-    
-    // Simulation de l'export
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Créer un lien de téléchargement simulé
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    return { success: true, message: `Export ${format} réussi` };
-  } catch (error) {
-    console.error('❌ Erreur export:', error);
-    throw error;
+function toCsv(rows: Array<Record<string, unknown>>): string {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const headers = Array.from(
+    rows.reduce<Set<string>>((set, row) => {
+      Object.keys(row || {}).forEach((k) => set.add(k));
+      return set;
+    }, new Set<string>()),
+  );
+  const escape = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.join(',')];
+  for (const row of rows) lines.push(headers.map((h) => escape((row || {})[h])).join(','));
+  return lines.join('\n');
+}
+
+function triggerDownload(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Export honnête : CSV réel pour les données tabulaires. On ne renomme plus du JSON
+// en « .excel » / « .pdf » (ce qui produisait un fichier illisible). Excel/PDF ne
+// sont pas encore implémentés et le signalent explicitement.
+export const exportData = async (
+  data: unknown,
+  filename: string,
+  format: 'excel' | 'pdf' | 'csv',
+): Promise<ApiActionResult> => {
+  if (format === 'csv' && Array.isArray(data)) {
+    triggerDownload(toCsv(data as Array<Record<string, unknown>>), `${filename}.csv`, 'text/csv;charset=utf-8;');
+    return { success: true, message: 'Export CSV réussi' };
   }
+  return {
+    success: false,
+    notImplemented: true,
+    message: `L'export ${format.toUpperCase()} n'est pas encore disponible.`,
+  };
 };
 
 // Service API unifié

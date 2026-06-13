@@ -25,12 +25,26 @@ import UpdatePassword from './pages/UpdatePassword';
 import ChatWidget from './components/ChatWidget';
 import FinancingRequest from './pages/FinancingRequest';
 import ProtectedRoute from './components/ProtectedRoute';
+import RequireSubscription from './components/RequireSubscription';
+import type { SubscriptionType } from './utils/api/subscription';
 
 const PageLoader = () => (
   <div className="flex flex-col items-center justify-center min-h-[45vh] gap-3 text-gray-600">
     <div className="animate-spin rounded-full h-10 w-10 border-2 border-orange-500 border-t-transparent" />
     <span className="text-sm">Chargement du module…</span>
   </div>
+);
+
+/**
+ * Garde une route payante : session requise (ProtectedRoute) ET abonnement actif
+ * du bon niveau, vérifié CÔTÉ SERVEUR (RequireSubscription → pro_clients via RLS).
+ * Remplace l'ancien gating localStorage falsifiable (findings #5 / routes payantes
+ * sans vérification d'abonnement).
+ */
+const paidRoute = (level: SubscriptionType, element: React.ReactNode): React.ReactNode => (
+  <ProtectedRoute>
+    <RequireSubscription level={level}>{element}</RequireSubscription>
+  </ProtectedRoute>
 );
 
 const SellEquipment = lazy(() => import('./pages/SellEquipment'));
@@ -203,54 +217,57 @@ function AppContent() {
         return <SectorMachines />;
 
       case 'pro':
-        return <ProDashboard />;
+        return paidRoute('pro', <ProDashboard />);
 
       case 'entreprise':
         return <EnterpriseService />;
 
       case 'dashboard-entreprise':
-        return <DashboardConfigurator />;
+        return paidRoute('enterprise', <DashboardConfigurator />);
 
       case 'dashboard-entreprise-display': {
         const activeMetier = localStorage.getItem('lastActiveMetier') || 'vendeur';
-        switch (activeMetier) {
-          case 'loueur': return <EnterpriseDashboardLoueurDisplay />;
-          case 'mecanicien': return <EnterpriseDashboardMecanicienDisplay />;
-          case 'transporteur': return <EnterpriseDashboardTransporteurDisplay />;
-          case 'transitaire': return <EnterpriseDashboardTransitaireDisplay />;
-          case 'logisticien': return <EnterpriseDashboardLogisticienDisplay />;
-          case 'investisseur': return <EnterpriseDashboardInvestisseurDisplay />;
-          case 'courtier': return <EnterpriseDashboardCourtierDisplay />;
-          default: return <EnterpriseDashboardVendeurDisplay />;
-        }
+        const display = (() => {
+          switch (activeMetier) {
+            case 'loueur': return <EnterpriseDashboardLoueurDisplay />;
+            case 'mecanicien': return <EnterpriseDashboardMecanicienDisplay />;
+            case 'transporteur': return <EnterpriseDashboardTransporteurDisplay />;
+            case 'transitaire': return <EnterpriseDashboardTransitaireDisplay />;
+            case 'logisticien': return <EnterpriseDashboardLogisticienDisplay />;
+            case 'investisseur': return <EnterpriseDashboardInvestisseurDisplay />;
+            case 'courtier': return <EnterpriseDashboardCourtierDisplay />;
+            default: return <EnterpriseDashboardVendeurDisplay />;
+          }
+        })();
+        return paidRoute('enterprise', display);
       }
 
       case 'dashboard-loueur-display':
-        return <EnterpriseDashboardLoueurDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardLoueurDisplay />);
 
       case 'dashboard-mecanicien-display':
-        return <EnterpriseDashboardMecanicienDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardMecanicienDisplay />);
 
       case 'dashboard-transporteur-display':
-        return <EnterpriseDashboardTransporteurDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardTransporteurDisplay />);
 
       case 'dashboard-transitaire-display':
-        return <EnterpriseDashboardTransitaireDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardTransitaireDisplay />);
 
       case 'dashboard-logisticien-display':
-        return <EnterpriseDashboardLogisticienDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardLogisticienDisplay />);
 
       case 'dashboard-investisseur-display':
-        return <EnterpriseDashboardInvestisseurDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardInvestisseurDisplay />);
 
       case 'dashboard-courtier-display':
-        return <EnterpriseDashboardCourtierDisplay />;
+        return paidRoute('enterprise', <EnterpriseDashboardCourtierDisplay />);
 
       case 'premium-dashboard':
-        return <PremiumDashboard />;
+        return paidRoute('premium', <PremiumDashboard />);
 
       case 'dashboard-configurator':
-        return <DashboardConfigurator />;
+        return paidRoute('enterprise', <DashboardConfigurator />);
 
       case 'dashboard-vendeur-legacy':
         return <VendeurDashboardLegacy />;
@@ -280,13 +297,13 @@ function AppContent() {
         return <AssistantIA />;
 
       case 'api-docs':
-        return <ApiDocs />;
+        return paidRoute('pro', <ApiDocs />);
 
       case 'priority-support':
-        return <PrioritySupport />;
+        return paidRoute('premium', <PrioritySupport />);
 
       case 'multi-user-management':
-        return <MultiUserManagement />;
+        return paidRoute('enterprise', <MultiUserManagement />);
 
       case 'global-monitor':
         return (
