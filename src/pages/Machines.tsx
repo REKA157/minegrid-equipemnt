@@ -333,7 +333,16 @@ useEffect(() => {
         filterCondition === 'all' ? true : machine.condition === filterCondition;
 
       const matchSearch = deferredSearch
-        ? machine.name?.toLowerCase().includes(deferredSearch.toLowerCase())
+        ? [
+            machine.name,
+            (machine as { brand?: string }).brand,
+            (machine as { model?: string }).model,
+            (machine as { description?: string }).description,
+            machine.type,
+            machine.category,
+          ]
+            .filter(Boolean)
+            .some((field) => String(field).toLowerCase().includes(deferredSearch.toLowerCase()))
         : true;
 
       const matchPrice =

@@ -511,6 +511,7 @@ export default function PublicationRapide() {
         description: formData.description,
         location: formData.location,
         specifications: formData.specifications,
+        total_hours: formData.total_hours,
         seller_id: user.id
       };
 
