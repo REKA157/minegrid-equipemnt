@@ -205,6 +205,104 @@ interface Promotion {
   status: 'active' | 'inactive' | 'expired';
 }
 
+interface EngagementMetrics {
+  views: number;
+  contacts: number;
+}
+
+/**
+ * Métriques d'engagement RÉELLES par machine, agrégées depuis Supabase :
+ * - vues     = nb de lignes machine_views pour la machine ;
+ * - contacts = offres reçues (offers.machine_id) + messages liés (messages.machine_id).
+ * Tolérant aux tables absentes (retourne 0, jamais d'aléatoire ni de mock).
+ * Remplace l'ancien Math.random du widget stock.
+ */
+async function loadEngagementByMachine(
+  machineIds: string[],
+  userId: string,
+): Promise<Map<string, EngagementMetrics>> {
+  const map = new Map<string, EngagementMetrics>();
+  if (!machineIds.length) return map;
+  for (const id of machineIds) map.set(String(id), { views: 0, contacts: 0 });
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('machine_views')
+      .select('machine_id')
+      .in('machine_id', machineIds)
+      .limit(50000);
+    if (!error && data) {
+      for (const row of data as { machine_id?: string }[]) {
+        const cur = map.get(String(row.machine_id ?? ''));
+        if (cur) cur.views += 1;
+      }
+    }
+  } catch (e) {
+    logger.info('machine_views indisponible (widget stock):', e);
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('offers')
+      .select('machine_id')
+      .eq('seller_id', userId)
+      .limit(50000);
+    if (!error && data) {
+      for (const row of data as { machine_id?: string }[]) {
+        const cur = map.get(String(row.machine_id ?? ''));
+        if (cur) cur.contacts += 1;
+      }
+    }
+  } catch (e) {
+    logger.info('offers indisponible (widget stock):', e);
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('messages')
+      .select('machine_id')
+      .or(`receiver_id.eq.${userId},seller_id.eq.${userId}`)
+      .limit(50000);
+    if (!error && data) {
+      for (const row of data as { machine_id?: string }[]) {
+        const key = String(row.machine_id ?? '');
+        if (!key) continue;
+        const cur = map.get(key);
+        if (cur) cur.contacts += 1;
+      }
+    }
+  } catch (e) {
+    logger.info('messages indisponible (widget stock):', e);
+  }
+
+  return map;
+}
+
+/**
+ * Score de visibilité DÉTERMINISTE calculé à partir d'attributs réels de
+ * l'annonce (qualité de fiche + engagement réel). Remplace l'ancien
+ * Math.random — aucune valeur aléatoire, résultat reproductible.
+ */
+function computeVisibilityScore(input: {
+  views: number;
+  contacts: number;
+  daysInStock: number;
+  photosCount: number;
+  hasDescription: boolean;
+  hasPrice: boolean;
+}): number {
+  let score = 35;
+  if (input.photosCount >= 3) score += 20;
+  else if (input.photosCount >= 1) score += 10;
+  if (input.hasDescription) score += 10;
+  if (input.hasPrice) score += 5;
+  score += Math.min(20, input.views);
+  score += Math.min(10, input.contacts * 3);
+  if (input.daysInStock > 90) score -= 20;
+  else if (input.daysInStock > 60) score -= 10;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 const StockStatusWidget = () => {
   // Montrer des données de démo immédiatement pour éviter l'état "0/0"
   // tant que les appels Supabase ne sont pas terminés (ou en cas d'erreur réseau).
@@ -478,18 +576,35 @@ const StockStatusWidget = () => {
       const realInsights = insightsRes.status === 'fulfilled' ? insightsRes.value : [];
       logger.info("✅ Promotions réelles récupérées:", realPromotions.length);
       logger.info("✅ Insights réels récupérés:", realInsights.length);
-      
+
+      // Métriques d'engagement RÉELLES par machine (vues / offres / messages)
+      // — remplace l'ancien Math.random.
+      const sellerMachineIds = (userMachines || [])
+        .map((m) => String((m as { id?: unknown }).id ?? ''))
+        .filter(Boolean);
+      const engagementByMachine = await loadEngagementByMachine(sellerMachineIds, user.id);
+
       // Convertir les équipements réels au format attendu par le widget
       const formattedEquipments = (userMachines || []).map(equipment => {
         // Calculer les métriques de base
-        const daysInStock = equipment.created_at ? 
+        const daysInStock = equipment.created_at ?
           Math.floor((Date.now() - new Date(equipment.created_at).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-        
-        const visibilityScore = Math.floor(Math.random() * 100); // Temporaire pour le test
-        const views = Math.floor(Math.random() * 200);
-        const clicks = Math.floor(views * 0.15);
-        const contacts = Math.floor(Math.random() * 10);
-        
+
+        const machineUuid = String(equipment.id);
+        const engagement = engagementByMachine.get(machineUuid) ?? { views: 0, contacts: 0 };
+        const views = engagement.views;
+        const contacts = engagement.contacts;
+        const clicks = 0; // pas de tracking de clics distinct des vues (machine_views = vues)
+        const visibilityScore = computeVisibilityScore({
+          views,
+          contacts,
+          daysInStock,
+          photosCount: Array.isArray(equipment.photos) ? equipment.photos.length : 0,
+          hasDescription:
+            typeof equipment.description === 'string' && equipment.description.trim().length > 80,
+          hasPrice: typeof equipment.price === 'number' && equipment.price > 0,
+        });
+
         const mappedCategory = mapEquipmentCategory({
           category: equipment.category,
           name: equipment.name,
@@ -498,7 +613,6 @@ const StockStatusWidget = () => {
         
         logger.info(`🔍 Équipement "${equipment.name}": catégorie originale="${equipment.category}", mappée="${mappedCategory}"`);
         
-        const machineUuid = String(equipment.id);
         return {
           id: stableNumericIdFromUuid(machineUuid),
           machineUuid,
