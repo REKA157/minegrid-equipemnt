@@ -3,6 +3,7 @@ import type { Machine } from '../types';
 import { MapPin, Star, Calendar, Wrench } from 'lucide-react';
 import Price from './Price';
 import supabase from '../utils/supabaseClient';
+import MachineCardTrustStrip from '../nextgen/integration/MachineCardTrustStrip';
 import {
   buildSrcSet,
   getOptimizedImageUrl,
@@ -135,6 +136,8 @@ export default function MachineCard({ machine }: MachineCardProps) {
               <span>{machine.seller?.rating ?? '-'}</span>
             </div>
           </div>
+
+          <MachineCardTrustStrip />
 
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
   <div className="text-center sm:text-left">

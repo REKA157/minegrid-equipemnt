@@ -6,6 +6,7 @@ import {
 import type { Machine, MachineWithPremium } from '../types';
 import { isSeller, isOwner } from '../utils/auth';
 import supabase from '../utils/supabaseClient';
+import MachineTrustPanel from '../nextgen/integration/MachineTrustPanel';
 import { MACHINE_LIST_COLUMNS } from '../constants/machineQueryFields';
 import { recordMachineView } from '../utils/api';
 import {
@@ -808,6 +809,18 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               </div>
               <div className="flex items-center text-gray-600"><Scale className="h-5 w-5 mr-2" /><span>{machineData.specifications.weight ? machineData.specifications.weight.toLocaleString() : '0'} kg</span></div>
             </div>
+
+            <MachineTrustPanel
+              machineId={machineId}
+              sellerId={machineData.seller?.id ? String(machineData.seller.id) : null}
+              price={machineData.price ? Number(machineData.price) : null}
+              year={machineData.year}
+              brand={(machineData as { brand?: string }).brand ?? null}
+              model={(machineData as { model?: string }).model ?? null}
+              category={(machineData as { category?: string }).category ?? null}
+              country={machineData.seller?.location ?? null}
+              hasImages={Array.isArray((machineData as { images?: unknown[] }).images) && ((machineData as { images?: unknown[] }).images?.length ?? 0) > 0}
+            />
 
             <div className="space-y-4">
               <button onClick={() => setShowContactForm(!showContactForm)} className="w-full bg-orange-600 text-white px-6 py-3 rounded-md hover:bg-orange-700 transition-colors flex items-center justify-center">
