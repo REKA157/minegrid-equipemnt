@@ -6,7 +6,7 @@ import {
 import type { Machine, MachineWithPremium } from '../types';
 import { isSeller, isOwner } from '../utils/auth';
 import supabase from '../utils/supabaseClient';
-import MachineTrustPanel from '../nextgen/integration/MachineTrustPanel';
+import { SellerTrustInline, PriceVsMarketInline, FraudInline, InspectionInlineButton } from '../nextgen/integration/inline';
 import TransactionOptionsPanel from '../nextgen/integration/TransactionOptionsPanel';
 import RecommendedMachines from '../nextgen/integration/RecommendedMachines';
 import { MACHINE_LIST_COLUMNS } from '../constants/machineQueryFields';
@@ -796,13 +796,32 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               <p className="mb-3 text-sm text-green-600">{shareFeedback}</p>
             )}
 
-            <div className="text-3xl font-bold text-orange-600 mb-6">
+            <div className="text-3xl font-bold text-orange-600 mb-1">
               {machineData.price ? (
                 <Price amount={machineData.price} showOriginal className="text-3xl font-bold text-orange-600" />
               ) : (
                 '0 €'
               )}
             </div>
+            <PriceVsMarketInline
+              price={machineData.price ? Number(machineData.price) : null}
+              brand={(machineData as { brand?: string }).brand ?? null}
+              model={(machineData as { model?: string }).model ?? null}
+              year={machineData.year}
+              category={(machineData as { category?: string }).category ?? null}
+              country={machineData.seller?.location ?? null}
+            />
+            <FraudInline
+              price={machineData.price ? Number(machineData.price) : null}
+              sellerId={machineData.seller?.id ? String(machineData.seller.id) : null}
+              brand={(machineData as { brand?: string }).brand ?? null}
+              model={(machineData as { model?: string }).model ?? null}
+              year={machineData.year}
+              category={(machineData as { category?: string }).category ?? null}
+              country={machineData.seller?.location ?? null}
+              hasImages={Array.isArray((machineData as { images?: unknown[] }).images) && ((machineData as { images?: unknown[] }).images?.length ?? 0) > 0}
+            />
+            <div className="mb-6" />
 
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="flex items-center text-gray-600"><Calendar className="h-5 w-5 mr-2" /><span>{machineData.year}</span></div>
@@ -819,17 +838,10 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               <div className="flex items-center text-gray-600"><Scale className="h-5 w-5 mr-2" /><span>{machineData.specifications.weight ? machineData.specifications.weight.toLocaleString() : '0'} kg</span></div>
             </div>
 
-            <MachineTrustPanel
-              machineId={machineId}
-              sellerId={machineData.seller?.id ? String(machineData.seller.id) : null}
-              price={machineData.price ? Number(machineData.price) : null}
-              year={machineData.year}
-              brand={(machineData as { brand?: string }).brand ?? null}
-              model={(machineData as { model?: string }).model ?? null}
-              category={(machineData as { category?: string }).category ?? null}
-              country={machineData.seller?.location ?? null}
-              hasImages={Array.isArray((machineData as { images?: unknown[] }).images) && ((machineData as { images?: unknown[] }).images?.length ?? 0) > 0}
-            />
+            <div className="flex items-center gap-2 mb-4 text-sm text-gray-600">
+              <span>Vendeur :</span>
+              <SellerTrustInline sellerId={machineData.seller?.id ? String(machineData.seller.id) : null} />
+            </div>
 
             <div className="space-y-4">
               <button onClick={() => setShowContactForm(!showContactForm)} className="w-full bg-orange-600 text-white px-6 py-3 rounded-md hover:bg-orange-700 transition-colors flex items-center justify-center">
@@ -846,6 +858,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               >
                 Demander un devis
               </button>
+              <InspectionInlineButton machineId={machineId} location={machineData.seller?.location ?? null} />
               <button className="w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-md hover:bg-gray-50 flex items-center justify-center" onClick={downloadTechSheet}>
                 <Download className="h-5 w-5 mr-2" />
                 Télécharger la fiche technique

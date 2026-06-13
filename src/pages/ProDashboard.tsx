@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import ProTrustSummary from '../nextgen/integration/ProTrustSummary';
+import { MyTrustInline } from '../nextgen/integration/inline';
 import {
   Activity,
   Package, 
@@ -281,7 +281,10 @@ export default function ProDashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ProTrustSummary />
+        <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+          <span>Votre niveau de confiance :</span>
+          <MyTrustInline />
+        </div>
         {activeTab === 'overview' && <OverviewTab stats={stats} />}
         {activeTab === 'equipment' && <EquipmentTab equipment={equipment} userMachines={userMachines} onRefresh={loadDashboardData} />}
         {activeTab === 'orders' && <OrdersTab orders={orders} onRefresh={loadDashboardData} />}

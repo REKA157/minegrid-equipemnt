@@ -4,7 +4,6 @@ import ProjectMap from '../components/global-monitor/ProjectMap';
 import ProjectList from '../components/global-monitor/ProjectList';
 import ProjectDetails from '../components/global-monitor/ProjectDetails';
 import ProjectFiltersPanel from '../components/global-monitor/ProjectFilters';
-import MarketIntelligencePanel from '../nextgen/integration/MarketIntelligencePanel';
 import AlertsPanel from '../components/global-monitor/AlertsPanel';
 import type { LayerKey } from '../components/global-monitor/LayersToggle';
 import type { MonitorProject, MonitorProjectDetail, ProjectFilters, ProjectContact } from '../types/monitor';
@@ -379,7 +378,6 @@ export default function GlobalMonitor() {
       </div>
 
       <div className="max-w-[1800px] mx-auto px-4 lg:px-6 py-4">
-        <MarketIntelligencePanel />
         <div className="grid grid-cols-12 gap-4 h-[calc(100vh-140px)] min-h-[550px]">
           <div className="col-span-12 md:col-span-3 flex flex-col gap-4 overflow-hidden">
             <ProjectFiltersPanel filters={filters} onChange={setFilters} />
