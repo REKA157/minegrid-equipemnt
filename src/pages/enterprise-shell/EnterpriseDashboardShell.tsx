@@ -272,10 +272,24 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
     );
   };
 
+  // Accès démo (backdoor gardé volontairement) : flag posé uniquement par
+  // DemoEntrepriseAccess. On l'affiche honnêtement au lieu de le masquer.
+  const isDemoAccess =
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem('widgetsTemporaryAccess') === 'granted';
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <NotificationContainer />
       <div className="max-w-6xl mx-auto">
+        {isDemoAccess && (
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+            <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold">
+              Mode démo
+            </span>
+            Accès entreprise temporaire (démonstration). Les données et actions ne reflètent pas un abonnement actif.
+          </div>
+        )}
         {renderServices()}
 
         <div className="flex justify-between items-center mb-4">
