@@ -11,11 +11,57 @@ import {
 import { getEquipmentAvailability } from '../../../utils/enterpriseApi/equipment';
 import { buildCorrelatedRentalActions } from '../../../utils/buildCorrelatedRentalActions';
 import {
+  getPreventiveMaintenance,
+  getUrgentInterventions,
+} from '../../../utils/enterpriseApi/interventions';
+import { getRepairsStatus } from '../../../utils/enterpriseApi/repairs';
+import { getInventoryStatus } from '../../../utils/enterpriseApi/inventory';
+import { getTechniciansWorkload } from '../../../utils/enterpriseApi/technicians';
+import {
+  getActiveDeliveries,
+  getDriversList,
+  getVehiclesList,
+  getDriverSchedule,
+  getTransportCosts,
+} from '../../../utils/enterpriseApi/transport';
+import {
+  getCreditApplications,
+  getInsurancePolicies,
+  getCommissionTracking,
+  getClientPortfolio,
+  getPerformanceAnalytics,
+} from '../../../utils/enterpriseApi/courtier';
+import {
+  getPortfolioValue,
+  getInvestmentOpportunities,
+  getOpportunitiesScore,
+  getRiskAssessment,
+} from '../../../utils/enterpriseApi/investisseur';
+import {
+  getWarehouseOccupancyMetrics,
+  getRouteTrackingRows,
+  getLogisticsStockAlertsList,
+  getSupplyChainKpisChart,
+} from '../../../utils/enterpriseApi/logisticien';
+import {
+  getCustomsClearanceMetrics,
+  getContainerTrackingRows,
+  getFreightDocumentsForList,
+} from '../../../utils/enterpriseApi/transitaire';
+import { listAccessibleTransactionCases } from '../../../utils/api/transactionCases';
+import {
   buildVendeurCockpit,
   type CockpitSummaryData,
   type CockpitSignal,
 } from './buildVendeurCockpit';
 import { buildLoueurCockpit } from './buildLoueurCockpit';
+import { buildMecanicienCockpit } from './buildMecanicienCockpit';
+import { buildTransporteurCockpit } from './buildTransporteurCockpit';
+import { buildCourtierCockpit } from './buildCourtierCockpit';
+import { buildInvestisseurCockpit } from './buildInvestisseurCockpit';
+import { buildLogisticienCockpit } from './buildLogisticienCockpit';
+import { buildTransitaireCockpit } from './buildTransitaireCockpit';
+import { buildFinancierCockpit } from './buildFinancierCockpit';
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -26,6 +72,181 @@ const EMPTY_STATS: DashboardStats = {
   weeklyGrowth: 0,
   monthlyGrowth: 0,
 };
+
+/** Valeur d'un fetch (allSettled) ou fallback si rejet. `any` volontaire : les builders sont défensifs. */
+function pick(r: PromiseSettledResult<any>, fb: any): any {
+  return r.status === 'fulfilled' ? r.value : fb;
+}
+
+// ---------------------------------------------------------------------------
+// LOADERS par rôle : fetch des services RÉELS (allSettled tolérant) -> builder pur.
+// Définis au niveau module = références stables (pas de re-render inutile).
+// ---------------------------------------------------------------------------
+
+async function loadVendeur(): Promise<CockpitSummaryData> {
+  const [leads, stats] = await Promise.allSettled([
+    RealPipelineService.getLeads(),
+    getDashboardStats(),
+  ]);
+  return buildVendeurCockpit(pick(leads, []), pick(stats, EMPTY_STATS));
+}
+
+async function loadLoueur(): Promise<CockpitSummaryData> {
+  const [rev, actions, equip, up, pipe] = await Promise.allSettled([
+    getRentalRevenue(),
+    buildCorrelatedRentalActions(),
+    getEquipmentAvailability(),
+    getUpcomingRentals(),
+    getRentalPipelineLeads(),
+  ]);
+  const equipmentStats =
+    equip.status === 'fulfilled' && equip.value?.stats
+      ? equip.value.stats
+      : { total: 0, available: 0, rented: 0, maintenance: 0 };
+  return buildLoueurCockpit({
+    revenue: pick(rev, { revenue: 0, count: 0, growth: 0 }),
+    actions: pick(actions, []),
+    equipmentStats,
+    upcomingRentals: pick(up, []),
+    pipelineLeads: pick(pipe, []),
+  });
+}
+
+async function loadMecanicien(): Promise<CockpitSummaryData> {
+  const [interventions, urgent, repairs, inventory, technicians] = await Promise.allSettled([
+    getPreventiveMaintenance(),
+    getUrgentInterventions(),
+    getRepairsStatus(),
+    getInventoryStatus(),
+    getTechniciansWorkload(),
+  ]);
+  return buildMecanicienCockpit({
+    interventions: pick(interventions, { interventions: [], stats: {} }),
+    urgent: pick(urgent, []),
+    repairs: pick(repairs, []),
+    inventory: pick(inventory, []),
+    technicians: pick(technicians, []),
+  });
+}
+
+async function loadTransporteur(): Promise<CockpitSummaryData> {
+  const [deliveries, drivers, vehicles, schedule, costs] = await Promise.allSettled([
+    getActiveDeliveries(),
+    getDriversList(),
+    getVehiclesList(),
+    getDriverSchedule(),
+    getTransportCosts(),
+  ]);
+  return buildTransporteurCockpit({
+    deliveries: pick(deliveries, { total: 0, rows: [] }),
+    drivers: pick(drivers, []),
+    vehicles: pick(vehicles, []),
+    schedule: pick(schedule, []),
+    costs: pick(costs, []),
+  });
+}
+
+async function loadCourtier(): Promise<CockpitSummaryData> {
+  const [credits, policies, commissions, clients] = await Promise.allSettled([
+    getCreditApplications(),
+    getInsurancePolicies(),
+    getCommissionTracking(),
+    getClientPortfolio(),
+  ]);
+  return buildCourtierCockpit({
+    credits: pick(credits, []),
+    policies: pick(policies, []),
+    commissions: pick(commissions, { monthCommission: 0, totalCommission: 0 }),
+    clients: pick(clients, []),
+  });
+}
+
+async function loadInvestisseur(): Promise<CockpitSummaryData> {
+  const [portfolio, opportunities, oppScore, risk] = await Promise.allSettled([
+    getPortfolioValue(),
+    getInvestmentOpportunities(),
+    getOpportunitiesScore(),
+    getRiskAssessment(),
+  ]);
+  return buildInvestisseurCockpit({
+    portfolio: pick(portfolio, {}),
+    opportunities: pick(opportunities, []),
+    oppScore: pick(oppScore, {}),
+    risk: pick(risk, {}),
+  });
+}
+
+async function loadLogisticien(): Promise<CockpitSummaryData> {
+  const [warehouses, routes, alerts, kpis, cases] = await Promise.allSettled([
+    getWarehouseOccupancyMetrics(),
+    getRouteTrackingRows(),
+    getLogisticsStockAlertsList(),
+    getSupplyChainKpisChart(),
+    listAccessibleTransactionCases(),
+  ]);
+  return buildLogisticienCockpit({
+    warehouses: pick(warehouses, {}),
+    routes: pick(routes, []),
+    alerts: pick(alerts, []),
+    kpis: pick(kpis, {}),
+    cases: pick(cases, []),
+  });
+}
+
+async function loadTransitaire(): Promise<CockpitSummaryData> {
+  const [customs, containers, documents] = await Promise.allSettled([
+    getCustomsClearanceMetrics(),
+    getContainerTrackingRows(),
+    getFreightDocumentsForList(),
+  ]);
+  return buildTransitaireCockpit({
+    customs: pick(customs, {}),
+    containers: pick(containers, []),
+    documents: pick(documents, []),
+  });
+}
+
+async function loadFinancier(): Promise<CockpitSummaryData> {
+  const [rentalRevenue, upcomingRentals, pipeline, commissions, credits, policies, clients, performance, cases] =
+    await Promise.allSettled([
+      getRentalRevenue(),
+      getUpcomingRentals(),
+      getRentalPipelineLeads(),
+      getCommissionTracking(),
+      getCreditApplications(),
+      getInsurancePolicies(),
+      getClientPortfolio(),
+      getPerformanceAnalytics(),
+      listAccessibleTransactionCases(),
+    ]);
+  return buildFinancierCockpit({
+    rentalRevenue: pick(rentalRevenue, { revenue: 0, count: 0, growth: 0 }),
+    upcomingRentals: pick(upcomingRentals, []),
+    pipeline: pick(pipeline, []),
+    commissions: pick(commissions, { monthCommission: 0, totalCommission: 0 }),
+    credits: pick(credits, []),
+    policies: pick(policies, []),
+    clients: pick(clients, []),
+    performance: pick(performance, []),
+    cases: pick(cases, []),
+  });
+}
+
+const LOADERS: Record<string, () => Promise<CockpitSummaryData>> = {
+  vendeur: loadVendeur,
+  loueur: loadLoueur,
+  mecanicien: loadMecanicien,
+  transporteur: loadTransporteur,
+  courtier: loadCourtier,
+  investisseur: loadInvestisseur,
+  logisticien: loadLogisticien,
+  transitaire: loadTransitaire,
+  financier: loadFinancier,
+};
+
+// ---------------------------------------------------------------------------
+// Présentation
+// ---------------------------------------------------------------------------
 
 function dotClass(tone: CockpitSignal['tone']): string {
   if (tone === 'urgent') return 'bg-red-500';
@@ -112,7 +333,7 @@ function CockpitView({ data }: { data: CockpitSummaryData }) {
         <CockpitCard icon={<Target className="h-3.5 w-3.5" />} title="Priorités du jour" accent="text-orange-700">
           <SignalList
             signals={data.priorities}
-            emptyText="Aucune action en attente — alimentez votre pipeline."
+            emptyText="Aucune action prioritaire détectée."
           />
         </CockpitCard>
 
@@ -137,26 +358,24 @@ function CockpitLoading() {
   );
 }
 
-function useVendeurCockpit() {
+function useCockpit(loader: () => Promise<CockpitSummaryData>) {
   const [data, setData] = useState<CockpitSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    const run = async () => {
       setLoading(true);
-      const [leadsR, statsR] = await Promise.allSettled([
-        RealPipelineService.getLeads(),
-        getDashboardStats(),
-      ]);
-      const leads = leadsR.status === 'fulfilled' ? leadsR.value : [];
-      const stats = statsR.status === 'fulfilled' ? statsR.value : EMPTY_STATS;
-      if (!cancelled) {
-        setData(buildVendeurCockpit(leads, stats));
-        setLoading(false);
+      try {
+        const d = await loader();
+        if (!cancelled) setData(d);
+      } catch {
+        if (!cancelled) setData(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
-    void load();
-    const onRefresh = () => void load();
+    void run();
+    const onRefresh = () => void run();
     window.addEventListener('pipeline:refresh', onRefresh);
     window.addEventListener('focus', onRefresh);
     return () => {
@@ -164,61 +383,12 @@ function useVendeurCockpit() {
       window.removeEventListener('pipeline:refresh', onRefresh);
       window.removeEventListener('focus', onRefresh);
     };
-  }, []);
+  }, [loader]);
   return { data, loading };
 }
 
-function useLoueurCockpit() {
-  const [data, setData] = useState<CockpitSummaryData | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      const [revR, actionsR, equipR, upR, pipeR] = await Promise.allSettled([
-        getRentalRevenue(),
-        buildCorrelatedRentalActions(),
-        getEquipmentAvailability(),
-        getUpcomingRentals(),
-        getRentalPipelineLeads(),
-      ]);
-      const revenue = revR.status === 'fulfilled' ? revR.value : { revenue: 0, count: 0, growth: 0 };
-      const actions = actionsR.status === 'fulfilled' ? actionsR.value : [];
-      const equipmentStats =
-        equipR.status === 'fulfilled' && equipR.value?.stats
-          ? equipR.value.stats
-          : { total: 0, available: 0, rented: 0, maintenance: 0 };
-      const upcomingRentals = upR.status === 'fulfilled' ? upR.value : [];
-      const pipelineLeads = pipeR.status === 'fulfilled' ? pipeR.value : [];
-      if (!cancelled) {
-        setData(
-          buildLoueurCockpit({ revenue, actions, equipmentStats, upcomingRentals, pipelineLeads }),
-        );
-        setLoading(false);
-      }
-    };
-    void load();
-    const onRefresh = () => void load();
-    window.addEventListener('pipeline:refresh', onRefresh);
-    window.addEventListener('focus', onRefresh);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('pipeline:refresh', onRefresh);
-      window.removeEventListener('focus', onRefresh);
-    };
-  }, []);
-  return { data, loading };
-}
-
-function VendeurCockpit() {
-  const { data, loading } = useVendeurCockpit();
-  if (loading && !data) return <CockpitLoading />;
-  if (!data) return null;
-  return <CockpitView data={data} />;
-}
-
-function LoueurCockpit() {
-  const { data, loading } = useLoueurCockpit();
+function RoleCockpit({ loader }: { loader: () => Promise<CockpitSummaryData> }) {
+  const { data, loading } = useCockpit(loader);
   if (loading && !data) return <CockpitLoading />;
   if (!data) return null;
   return <CockpitView data={data} />;
@@ -226,12 +396,12 @@ function LoueurCockpit() {
 
 /**
  * Cockpit décisionnel « Que dois-je faire aujourd'hui ? » en tête de dashboard.
- * Implémenté pour vendeur et loueur (données les plus riches) ; les autres rôles
- * rendent `null` tant que leur cockpit n'est pas branché (anti-façade — pas de
- * cockpit vide). Extensible rôle par rôle.
+ * Implémenté pour les 9 rôles métier (vendeur, loueur, mécanicien, transporteur,
+ * courtier, investisseur, logisticien, transitaire, financier), chacun sur ses
+ * données RÉELLES. États vides honnêtes (anti-façade) ; rôle inconnu => null.
  */
 export default function CockpitSummary({ role }: { role: string }) {
-  if (role === 'vendeur') return <VendeurCockpit />;
-  if (role === 'loueur') return <LoueurCockpit />;
-  return null;
+  const loader = LOADERS[role];
+  if (!loader) return null;
+  return <RoleCockpit loader={loader} />;
 }
