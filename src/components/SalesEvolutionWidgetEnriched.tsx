@@ -18,7 +18,7 @@ import { getSalesEvolutionSeriesData } from '../utils/api';
 import { madToDisplayAmount, formatDisplayMoney, formatMadMoney } from '../utils/madMoneyDisplay';
 import { useCurrencyStore } from '../stores/currencyStore';
 import { aiWidgetService } from '../services/aiWidgetService';
-import type { AIPrediction, AISalesBenchmark } from '../services/aiWidgetService';
+import type { AIPrediction, AISalesBenchmark, AIRecommendation } from '../services/aiWidgetService';
 
 ChartJS.register(
   CategoryScale,
@@ -75,6 +75,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+  const [aiSuggestionsSource, setAiSuggestionsSource] = useState<'monitor' | 'local' | null>(null);
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
@@ -117,33 +118,39 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
     setNotifications(notifications);
   };
 
-  const generateAISuggestions = () => {
-    const suggestions: AISuggestion[] = [
-      {
-        id: '1',
-        type: 'optimization',
-        title: 'Optimiser les prix de vente',
-        description: 'L\'IA suggère une augmentation de 5% des prix pour maximiser les marges',
-        impact: 'high'
-      },
-      {
-        id: '2',
-        type: 'opportunity',
-        title: 'Cibler les clients premium',
-        description: 'Focus sur les clients avec un panier moyen > 50k€',
-        impact: 'medium'
-      },
-      {
-        id: '3',
-        type: 'alert',
-        title: 'Réduire les stocks',
-        description: 'Liquidité recommandée pour les équipements en stock > 6 mois',
-        impact: 'low'
-      }
-    ];
-
-    setAiSuggestions(suggestions);
+  // Suggestions RÉELLES : recommandations IA serveur (monitor) ou, à défaut,
+  // analyse locale calculée sur les vraies annonces du vendeur. Le bloc reste
+  // masqué s'il n'y a aucune recommandation (anti-façade : plus de texte codé en dur).
+  const recommendationType = (c: AIRecommendation['category']): AISuggestion['type'] => {
+    if (c === 'marketing' || c === 'inventory') return 'optimization';
+    if (c === 'performance') return 'alert';
+    return 'opportunity';
   };
+
+  const loadAISuggestions = React.useCallback(async () => {
+    try {
+      const { data: auth } = await supabaseClient.auth.getSession();
+      const userId = auth.session?.user?.id;
+      if (!userId) {
+        setAiSuggestions([]);
+        setAiSuggestionsSource(null);
+        return;
+      }
+      const { items, source } = await aiWidgetService.getAIRecommendationsWithSource(userId);
+      const mapped: AISuggestion[] = items.slice(0, 4).map((r) => ({
+        id: r.id,
+        type: recommendationType(r.category),
+        title: r.title,
+        description: r.description,
+        impact: r.impact,
+      }));
+      setAiSuggestions(mapped);
+      setAiSuggestionsSource(mapped.length ? source : null);
+    } catch {
+      setAiSuggestions([]);
+      setAiSuggestionsSource(null);
+    }
+  }, []);
 
   const loadSalesData = React.useCallback(async () => {
     try {
@@ -157,7 +164,6 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
       }));
       setSalesData(normalized);
       generateNotifications(normalized);
-      generateAISuggestions();
       const last = normalized[normalized.length - 1]?.sales ?? 0;
       const mean =
         normalized.length > 0
@@ -186,8 +192,13 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
   }, [loadSalesData]);
 
   useEffect(() => {
+    void loadAISuggestions();
+  }, [loadAISuggestions]);
+
+  useEffect(() => {
     const onRefresh = () => {
       void loadSalesData();
+      void loadAISuggestions();
     };
     window.addEventListener('pipeline:refresh', onRefresh);
     window.addEventListener('focus', onRefresh);
@@ -646,7 +657,14 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
       {/* Suggestions IA */}
       {aiSuggestions.length > 0 && (
         <div className="mb-6">
-          <h4 className="font-semibold text-gray-900 mb-3">Suggestions IA</h4>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h4 className="font-semibold text-gray-900">Suggestions IA</h4>
+            {aiSuggestionsSource && (
+              <span className="text-xs font-medium text-orange-800 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+                {aiSuggestionsSource === 'monitor' ? 'À jour · serveur' : 'À jour · analyse locale'}
+              </span>
+            )}
+          </div>
           <div className="space-y-3">
             {aiSuggestions.map((suggestion) => (
               <div key={suggestion.id} className="p-3 bg-gray-50 rounded-lg">
