@@ -64,6 +64,7 @@ import { buildLogisticienCockpit } from './buildLogisticienCockpit';
 import { buildTransitaireCockpit } from './buildTransitaireCockpit';
 import { buildFinancierCockpit } from './buildFinancierCockpit';
 import { buildQuoteSignals } from './correlations/quoteCorrelation';
+import { buildDossierStageSignals } from './correlations/caseCorrelation';
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -86,15 +87,19 @@ function pick(r: PromiseSettledResult<any>, fb: any): any {
 // ---------------------------------------------------------------------------
 
 async function loadVendeur(): Promise<CockpitSummaryData> {
-  const [leads, stats, quotes] = await Promise.allSettled([
+  const [leads, stats, quotes, cases] = await Promise.allSettled([
     RealPipelineService.getLeads(),
     getDashboardStats(),
     getQuoteRequests('all'),
+    listAccessibleTransactionCases(),
   ]);
   const cockpit = buildVendeurCockpit(pick(leads, []), pick(stats, EMPTY_STATS));
   // M1 — devis → action (+ dossier) : signaux cross-module quote_requests × transaction_cases.
   const q = buildQuoteSignals(pick(quotes, []));
-  cockpit.priorities = [...q.priorities, ...cockpit.priorities];
+  // M2 — dossier transaction → action d'avancement par étape (transaction_cases, RLS).
+  const d = buildDossierStageSignals(pick(cases, []));
+  cockpit.priorities = [...q.priorities, ...d.priorities, ...cockpit.priorities];
+  cockpit.risks = [...d.risks, ...cockpit.risks];
   cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities];
   return cockpit;
 }
