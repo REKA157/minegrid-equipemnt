@@ -6,6 +6,7 @@ import type { TrustProfile } from '../trust/types';
 import { estimateMachinePrice } from '../data/priceService';
 import { fraudSignals } from '../ai/fraudSignals';
 import { requestInspection } from '../inspection/inspectionService';
+import { monthlyPayment } from '../finance/monthlyPayment';
 
 // Intégrations INLINE (pas de panneau) : chaque composant se greffe à côté d'un
 // élément existant et rend `null` quand il n'a pas de donnée → invisible par défaut.
@@ -50,6 +51,18 @@ export function MyTrustInline() {
   return profile
     ? <TrustBadge tier={profile.trust_tier} score={profile.trust_score} size="sm" />
     : <span className="text-xs text-gray-400">Profil non vérifié</span>;
+}
+
+/** Financement indicatif INLINE (remplace le widget simulateur), à placer près du prix. */
+export function FinancingInline({ price }: { price?: number | null }) {
+  if (!price || price <= 0) return null;
+  const r = monthlyPayment({ amount: price, downPayment: Math.round(price * 0.2), annualRatePct: 12, termMonths: 48 });
+  return (
+    <p className="text-sm text-gray-500">
+      Financement : à partir de ~{Math.round(r.monthlyPayment).toLocaleString('fr-FR')} €/mois{' '}
+      <span className="text-gray-400">(indicatif · 20 % d'apport sur 48 mois)</span>
+    </p>
+  );
 }
 
 /** Estimation marché, à placer sous le prix. Invisible si pas assez de données. */

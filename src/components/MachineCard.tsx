@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Machine } from '../types';
-import { MapPin, Star, Calendar, Wrench } from 'lucide-react';
+import { MapPin, Calendar, Wrench } from 'lucide-react';
 import Price from './Price';
 import supabase from '../utils/supabaseClient';
 import {
@@ -125,15 +125,9 @@ export default function MachineCard({ machine }: MachineCardProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center text-sm text-gray-600">
-              <MapPin className="h-4 w-4 mr-1" />
-              <span>{machine.seller?.location ?? 'Localisation inconnue'}</span>
-            </div>
-            <div className="flex items-center text-sm">
-              <Star className="h-4 w-4 text-yellow-400 mr-1" />
-              <span>{machine.seller?.rating ?? '-'}</span>
-            </div>
+          <div className="flex items-center text-sm text-gray-600 mb-4">
+            <MapPin className="h-4 w-4 mr-1" />
+            <span>{machine.seller?.location ?? 'Localisation inconnue'}</span>
           </div>
 
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

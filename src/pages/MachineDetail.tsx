@@ -6,7 +6,7 @@ import {
 import type { Machine, MachineWithPremium } from '../types';
 import { isSeller, isOwner } from '../utils/auth';
 import supabase from '../utils/supabaseClient';
-import { SellerTrustInline, PriceVsMarketInline, FraudInline, InspectionInlineButton } from '../nextgen/integration/inline';
+import { SellerTrustInline, PriceVsMarketInline, FraudInline, FinancingInline, InspectionInlineButton } from '../nextgen/integration/inline';
 import TransactionOptionsPanel from '../nextgen/integration/TransactionOptionsPanel';
 import RecommendedMachines from '../nextgen/integration/RecommendedMachines';
 import { MACHINE_LIST_COLUMNS } from '../constants/machineQueryFields';
@@ -17,10 +17,8 @@ import {
   handleImageErrorFallback,
 } from '../utils/imageOptimization';
 import LogisticsSimulator from '../components/LogisticsSimulator';
-import TransportCard from '../components/TransportCard';
 import PremiumBadge from '../components/PremiumBadge';
 import PremiumServices from '../components/PremiumServices';
-import FinancingSimulator from '../components/FinancingSimulator';
 import Price from '../components/Price';
 import { useCurrencyStore } from '../stores/currencyStore';
 import { toast } from '../utils/toast';
@@ -821,6 +819,7 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               country={machineData.seller?.location ?? null}
               hasImages={Array.isArray((machineData as { images?: unknown[] }).images) && ((machineData as { images?: unknown[] }).images?.length ?? 0) > 0}
             />
+            <FinancingInline price={machineData.price ? Number(machineData.price) : null} />
             <div className="mb-6" />
 
             <div className="grid grid-cols-2 gap-4 mb-6">
@@ -844,19 +843,15 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             </div>
 
             <div className="space-y-4">
-              <button onClick={() => setShowContactForm(!showContactForm)} className="w-full bg-orange-600 text-white px-6 py-3 rounded-md hover:bg-orange-700 transition-colors flex items-center justify-center">
-                <Mail className="h-5 w-5 mr-2" />
-                Contacter le vendeur
-              </button>
               <button
-                type="button"
                 onClick={() => {
                   setShowContactForm(true);
                   trackEvent('quote_cta_click', { origin: 'machine_detail' });
                 }}
-                className="w-full border border-orange-300 text-orange-700 px-6 py-3 rounded-md hover:bg-orange-50 transition-colors flex items-center justify-center"
+                className="w-full bg-orange-600 text-white px-6 py-3 rounded-md hover:bg-orange-700 transition-colors flex items-center justify-center"
               >
-                Demander un devis
+                <Mail className="h-5 w-5 mr-2" />
+                Contacter le vendeur / demander un devis
               </button>
               <InspectionInlineButton machineId={machineId} location={machineData.seller?.location ?? null} />
               <button className="w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-md hover:bg-gray-50 flex items-center justify-center" onClick={downloadTechSheet}>
@@ -1091,17 +1086,6 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
               isOwner={true}
             />
           )}
-
-          {/* Carte de transport rapide */}
-          <TransportCard 
-            machineWeight={machineData.specifications.weight ? machineData.specifications.weight / 1000 : undefined}
-            machineVolume={getDimensionsVolume(machineData.specifications.dimensions)}
-          />
-
-          {/* Simulateur de financement */}
-          <FinancingSimulator
-            machinePrice={machineData.price || 0}
-          />
 
           <RecommendedMachines
             machineId={machineId}
