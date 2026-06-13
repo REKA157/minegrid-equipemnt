@@ -2302,8 +2302,12 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           />
         );
       }
+      // Hors loueur (ex. vendeur) : DailyActionsPriorityWidget charge LUI-MÊME ses
+      // actions réelles (leads Kanban + messages + offres + stats, via
+      // buildCorrelatedDailyActions). Le prop `data` n'est qu'un fallback legacy —
+      // on passe [] volontairement (aucun mock, pas de Math.random).
       return (
-        <DailyActionsPriorityWidget 
+        <DailyActionsPriorityWidget
           data={[]}
           widgetSize={widgetSize as any}
           onAction={handleWidgetAction}
