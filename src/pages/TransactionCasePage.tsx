@@ -36,12 +36,72 @@ import {
   type TransportRequestRow,
 } from '../utils/api/transactionPlatform';
 
+import { advanceTransactionCaseStep, type ChainStep } from '../utils/api/transactionChain';
+
 export interface TransactionCasePageProps {
   caseId: string;
 }
 
+const STEP_ACTIONS: Array<{ step: ChainStep; label: string }> = [
+  { step: 'inspection', label: 'Demander une inspection' },
+  { step: 'financing', label: 'Demander un financement' },
+  { step: 'transport', label: 'Demander un transport' },
+  { step: 'customs', label: 'Ouvrir un dossier douane' },
+  { step: 'payment', label: 'Mettre en escrow (après inspection)' },
+];
+
+/**
+ * Actions contrôlées d'avancement du dossier (write-side L3/L4). Appelle les RPC
+ * SECURITY DEFINER via transactionChain ; feedback honnête (créé / non déployé /
+ * non autorisé). Crée les lignes de chaîne qui rendent visibles les cartes cockpit M4-M7.
+ */
+function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: () => void }) {
+  const [pending, setPending] = useState<ChainStep | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const run = async (step: ChainStep) => {
+    setPending(step);
+    setMsg(null);
+    const r = await advanceTransactionCaseStep(caseId, step);
+    setPending(null);
+    if (r.ok) {
+      setMsg('Étape enregistrée. Si aucun partenaire n’est disponible, elle reste « à assigner / en attente partenaire ».');
+      onDone();
+    } else if (r.reason === 'not_deployed') {
+      setMsg('Workflow dossier non déployé sur cet environnement (RPC absente). Appliquez sql/2026-06_transaction_chain_write_side.sql.');
+    } else if (r.reason === 'forbidden') {
+      setMsg('Action non autorisée : vous devez être partie prenante de ce dossier.');
+    } else {
+      setMsg('Action impossible pour le moment.');
+    }
+  };
+
+  return (
+    <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-gray-900 mb-1">Faire avancer le dossier</h2>
+      <p className="text-xs text-gray-500 mb-3">
+        Crée l’étape correspondante (inspection, financement, transport, douane, escrow). Idempotent : pas de doublon.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {STEP_ACTIONS.map((a) => (
+          <button
+            key={a.step}
+            type="button"
+            disabled={pending !== null}
+            onClick={() => void run(a.step)}
+            className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-800 transition hover:bg-orange-100 disabled:opacity-50"
+          >
+            {pending === a.step ? 'Envoi…' : a.label}
+          </button>
+        ))}
+      </div>
+      {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
+    </div>
+  );
+}
+
 /** Affiche données secondaires après chargement du dossier (RLS décide les lignes visibles). */
-function useTransactionCaseBundles(caseRow: TransactionCaseRow | null) {
+function useTransactionCaseBundles(caseRow: TransactionCaseRow | null, refreshToken: number) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<TransactionDocumentRow[]>([]);
@@ -135,7 +195,7 @@ function useTransactionCaseBundles(caseRow: TransactionCaseRow | null) {
     return () => {
       cancelled = true;
     };
-  }, [caseRow?.id]);
+  }, [caseRow?.id, refreshToken]);
 
   return {
     loading,
@@ -161,7 +221,8 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
   const [participants, setParticipants] = useState<TransactionParticipantRow[]>([]);
   const [events, setEvents] = useState<TransactionEventRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const bundle = useTransactionCaseBundles(caseRow ?? null);
+  const [actionTick, setActionTick] = useState(0);
+  const bundle = useTransactionCaseBundles(caseRow ?? null, actionTick);
 
   useEffect(() => {
     let cancelled = false;
@@ -287,6 +348,8 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
           <p className="mt-4 text-sm text-gray-700 whitespace-pre-wrap">{caseRow.notes}</p>
         )}
       </header>
+
+      <TransactionCaseActions caseId={caseRow.id} onDone={() => setActionTick((t) => t + 1)} />
 
       {bundle.loading && (
         <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
