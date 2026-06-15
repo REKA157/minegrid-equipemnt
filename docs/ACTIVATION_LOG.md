@@ -41,6 +41,8 @@
 
 **Déploiement** : `SQL_A_APPLIQUER/7_pont_escrow.sql` (idempotent). Validation : tsc + 254 tests + build OK.
 
+**MAJ 2026-06-15 — DÉPLOYÉ EN PROD** ✅ : prérequis `0_prerequis_escrow_prix.sql` (escrow_transactions/escrow_events/price_observations — la couche nextgen n'était PAS déployée, cf. `ETAT_DEPLOIEMENT_REPO_VS_PROD.md`) + `7_pont_escrow.sql` appliqués. Sonde confirme tables + RPC `open_case_escrow`/`link_case_to_escrow`. UI : bouton « Ouvrir le séquestre (escrow réel) » câblé sur la page dossier. Diagnostic : `9_validation_pont_escrow.sql`. Démo : `10_preparer_dossier_demo_escrow.sql`.
+
 ---
 
 ## Priorité 5 — DATA FLYWHEEL PRIX ✅ (code livré)
