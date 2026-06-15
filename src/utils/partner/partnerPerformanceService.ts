@@ -10,6 +10,7 @@ import { computePartnerKpis, type ChainAssignment, type PartnerKpis, type Accept
 import { computePartnerScore, type PartnerScore } from './partnerScore';
 import { computePartnerTrust, trustTierLabel, type PartnerTrust } from './partnerTrust';
 import { rankPartners, type PartnerCandidate } from './partnerMatching';
+import { buildNetworkRanking, type NetworkPartner, type NetworkRanking } from './partnerNetwork';
 import {
   inspectionService,
   transportRequestService,
@@ -201,3 +202,46 @@ export async function loadPartnerRankingForRole(role: PartnerRole): Promise<Part
     return [];
   }
 }
+
+/** Construit les partenaires « réseau » (trust + charge) d'un rôle depuis les rows réels. */
+function networkPartnersFromRows(role: PartnerRole, rows: AssigneeRow[]): NetworkPartner[] {
+  const cfg = ROLE_CONFIG[role];
+  const byPartner = new Map<string, ChainAssignment[]>();
+  for (const r of rows) {
+    if (!r.partnerId) continue;
+    const list = byPartner.get(r.partnerId) ?? [];
+    list.push({ status: r.status, createdAt: r.createdAt, completedAt: r.completedAt, dueAt: r.dueAt });
+    byPartner.set(r.partnerId, list);
+  }
+  const partners: NetworkPartner[] = [];
+  byPartner.forEach((assignments, partnerId) => {
+    const kpis = computePartnerKpis(assignments, cfg);
+    const score = computePartnerScore(kpis, EMPTY_ACCEPTANCE);
+    const trust = computePartnerTrust(kpis, EMPTY_ACCEPTANCE, score);
+    partners.push({ partnerId, trust, openLoad: kpis.open, total: kpis.volume });
+  });
+  return partners;
+}
+
+/**
+ * Réseau partenaire d'un rôle : meilleur DISPONIBLE (confiance + charge), saturés,
+ * à éviter. Tout est dérivé de données réelles ; [] si rien de mesuré.
+ */
+export async function buildNetworkForRole(role: PartnerRole): Promise<NetworkRanking> {
+  try {
+    const rows = await fetchRoleAssignments(role);
+    return buildNetworkRanking(networkPartnersFromRows(role, rows));
+  } catch {
+    return { best: null, ranked: [], saturated: [], toAvoid: [] };
+  }
+}
+
+/** Meilleur partenaire disponible par chantier (assignation / automatisation). */
+export const bestPartnerForInspection = (): Promise<NetworkPartner | null> =>
+  buildNetworkForRole('mechanic').then((r) => r.best);
+export const bestPartnerForTransport = (): Promise<NetworkPartner | null> =>
+  buildNetworkForRole('carrier').then((r) => r.best);
+export const bestPartnerForCustoms = (): Promise<NetworkPartner | null> =>
+  buildNetworkForRole('forwarder').then((r) => r.best);
+export const bestPartnerForFinancing = (): Promise<NetworkPartner | null> =>
+  buildNetworkForRole('broker').then((r) => r.best);

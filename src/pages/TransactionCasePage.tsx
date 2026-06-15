@@ -47,8 +47,9 @@ import {
   type PartnerRole,
 } from '../utils/api/transactionChain';
 import { openCaseEscrow } from '../utils/api/escrowBridge';
-import { loadPartnerRankingForRole } from '../utils/partner/partnerPerformanceService';
-import type { PartnerCandidate } from '../utils/partner/partnerMatching';
+import { buildNetworkForRole } from '../utils/partner/partnerPerformanceService';
+import { trustTierLabel } from '../utils/partner/partnerTrust';
+import type { NetworkRanking } from '../utils/partner/partnerNetwork';
 
 export interface TransactionCasePageProps {
   caseId: string;
@@ -168,17 +169,18 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
-  // Matching P6 : meilleur partenaire du rôle par performance réelle (anti-façade : rien si pas de donnée).
-  const [suggestion, setSuggestion] = useState<PartnerCandidate | null>(null);
+  // Matching intelligent (B/F) : meilleur partenaire DISPONIBLE + à éviter + saturés,
+  // par confiance & charge réelles (anti-façade : rien si pas de donnée).
+  const [network, setNetwork] = useState<NetworkRanking | null>(null);
   useEffect(() => {
     const RANKABLE = ['mechanic', 'carrier', 'broker', 'forwarder'];
     if (!RANKABLE.includes(role)) {
-      setSuggestion(null);
+      setNetwork(null);
       return;
     }
     let cancelled = false;
-    void loadPartnerRankingForRole(role as 'mechanic' | 'carrier' | 'broker' | 'forwarder').then((ranked) => {
-      if (!cancelled) setSuggestion(ranked[0] ?? null);
+    void buildNetworkForRole(role as 'mechanic' | 'carrier' | 'broker' | 'forwarder').then((n) => {
+      if (!cancelled) setNetwork(n);
     });
     return () => {
       cancelled = true;
@@ -260,11 +262,20 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
           {busy ? 'Envoi…' : 'Assigner'}
         </button>
       </div>
-      {suggestion && suggestion.score.score != null && (
+      {network?.best && network.best.trust.trustScore != null && (
         <p className="mt-2 text-xs text-emerald-700">
-          💡 Meilleur {role} par performance (dossiers réels) :{' '}
-          <span className="font-mono">{suggestion.partnerId.slice(0, 8)}…</span> · score {suggestion.score.score}/100.
+          💡 Meilleur {role} disponible :{' '}
+          <span className="font-mono">{network.best.partnerId.slice(0, 8)}…</span> · confiance{' '}
+          {trustTierLabel(network.best.trust.tier)} ({network.best.trust.trustScore}/100, charge {network.best.openLoad}).
         </p>
+      )}
+      {network && network.toAvoid.length > 0 && (
+        <p className="mt-1 text-xs text-amber-700">
+          ⚠️ {network.toAvoid.length} partenaire(s) à fiabilité faible (taux d’échec élevé) écarté(s).
+        </p>
+      )}
+      {network && network.saturated.length > 0 && (
+        <p className="mt-1 text-xs text-gray-500">⏳ {network.saturated.length} partenaire(s) saturé(s) (charge élevée).</p>
       )}
       {msg && (
         <p className={`mt-2 text-xs ${msg.tone === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</p>
