@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Filter, RefreshCw, Info, ChevronDown, ChevronUp, Mail, FolderOpen } from 'lucide-react';
-import { getQuoteRequests, updateQuoteRequestStatus } from '../utils/api/quoteRequests';
+import {
+  getQuoteRequests,
+  updateQuoteRequestStatus,
+  ensureTransactionCaseForQuote,
+} from '../utils/api/quoteRequests';
 import type { QuoteRequestRow, QuoteRequestStatus } from '../utils/api/quoteRequests';
 import { useAuth } from '../hooks/useAuth';
 import { trackEvent } from '../utils/analytics';
@@ -58,6 +62,26 @@ export default function LeadsInbox() {
     if (!user) return;
     void loadRows(statusFilter);
   }, [statusFilter, user]);
+
+  // Rattrapage : crée le dossier transaction d'un devis sans dossier lié (RPC existante).
+  const [creatingCase, setCreatingCase] = useState<string | null>(null);
+  const handleCreateDossier = async (quoteRequestId: string) => {
+    setCreatingCase(quoteRequestId);
+    setError(null);
+    const r = await ensureTransactionCaseForQuote(quoteRequestId);
+    setCreatingCase(null);
+    if (r.ok && r.caseId) {
+      setRows((prev) =>
+        prev.map((row) => (row.id === quoteRequestId ? { ...row, transaction_case_id: r.caseId } : row)),
+      );
+    } else if (r.reason === 'not_deployed') {
+      setError('RPC ensure_transaction_case_for_quote_request absente : appliquez sql/rpc_ensure_transaction_case_for_quote_request.sql.');
+    } else if (r.reason === 'forbidden') {
+      setError('Création du dossier refusée (droits). Vérifiez que l’acheteur est bien relié à la ligne.');
+    } else {
+      setError('Création du dossier impossible pour le moment.');
+    }
+  };
 
   const groupedCount = useMemo(() => {
     return rows.reduce<Record<string, number>>((acc, row) => {
@@ -419,10 +443,20 @@ export default function LeadsInbox() {
                     >
                       Ouvrir
                     </a>
+                  ) : row.buyer_user_id ? (
+                    <button
+                      type="button"
+                      disabled={creatingCase === row.id}
+                      onClick={() => void handleCreateDossier(row.id)}
+                      className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-orange-50 px-2 py-1 text-xs font-medium text-orange-800 transition hover:bg-orange-100 disabled:opacity-50"
+                      title="Créer le dossier transaction lié à ce devis (acheteur relié)."
+                    >
+                      {creatingCase === row.id ? 'Création…' : 'Créer le dossier'}
+                    </button>
                   ) : (
                     <span
                       className="text-gray-400 text-sm"
-                      title="Pas encore de dossier transaction lié à cette ligne (voir l’aide ci-dessus)."
+                      title="Acheteur non relié : dossier transaction automatique impossible (voir l’aide ci-dessus)."
                     >
                       —
                     </span>

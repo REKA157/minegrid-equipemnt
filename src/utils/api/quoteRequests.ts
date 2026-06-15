@@ -349,3 +349,37 @@ export async function updateQuoteRequestStatus(
     { label: 'updateQuoteRequestStatus' },
   );
 }
+
+export type EnsureCaseReason = 'created' | 'not_deployed' | 'forbidden' | 'error';
+
+/**
+ * Crée (ou retrouve) le dossier transaction d'un devis via la RPC existante
+ * `ensure_transaction_case_for_quote_request` — déjà appelée à la soumission, ici
+ * exposée pour le rattrapage manuel depuis LeadsInbox (devis sans dossier lié).
+ * Anti-façade : retour honnête, aucun dossier fictif.
+ */
+export async function ensureTransactionCaseForQuote(
+  quoteRequestId: string,
+): Promise<{ ok: boolean; caseId: string | null; reason: EnsureCaseReason }> {
+  try {
+    const { data, error } = await supabase.rpc('ensure_transaction_case_for_quote_request', {
+      p_quote_request_id: quoteRequestId,
+    });
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('function') && (msg.includes('does not exist') || msg.includes('schema cache'))) {
+        return { ok: false, caseId: null, reason: 'not_deployed' };
+      }
+      if (msg.includes('forbidden') || msg.includes('denied') || msg.includes('row-level security')) {
+        return { ok: false, caseId: null, reason: 'forbidden' };
+      }
+      logger.warn('[ensureTransactionCaseForQuote]', error);
+      return { ok: false, caseId: null, reason: 'error' };
+    }
+    const id = data == null || data === '' ? null : String(data);
+    return id ? { ok: true, caseId: id, reason: 'created' } : { ok: false, caseId: null, reason: 'error' };
+  } catch (e) {
+    logger.warn('[ensureTransactionCaseForQuote]', e);
+    return { ok: false, caseId: null, reason: 'error' };
+  }
+}
