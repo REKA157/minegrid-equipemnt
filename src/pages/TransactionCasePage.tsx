@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, FolderOpen, Loader2, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Check, FolderOpen, Loader2, UserPlus, X } from 'lucide-react';
+import supabase from '../utils/supabaseClient';
 import {
   getTransactionCase,
   listTransactionEvents,
@@ -40,6 +41,8 @@ import {
   advanceTransactionCaseStep,
   assignTransactionPartner,
   revokeTransactionPartner,
+  acceptTransactionInvitation,
+  declineTransactionInvitation,
   type ChainStep,
   type PartnerRole,
 } from '../utils/api/transactionChain';
@@ -356,6 +359,31 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
     [caseId, refreshMeta],
   );
 
+  // Utilisateur courant : pour décider quelles invitations sont actionnables par lui.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setCurrentUserId(data.user?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const [invAction, setInvAction] = useState<string | null>(null);
+  const handleInvitation = useCallback(
+    async (participantId: string, accept: boolean) => {
+      setInvAction(participantId);
+      const r = accept
+        ? await acceptTransactionInvitation(participantId)
+        : await declineTransactionInvitation(participantId);
+      setInvAction(null);
+      if (r.ok) await refreshMeta();
+    },
+    [refreshMeta],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -508,21 +536,62 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
                   const isPartner = ['mechanic', 'broker', 'carrier', 'forwarder', 'logistician', 'investor'].includes(
                     p.role,
                   );
+                  const status = p.revoked_at ? 'revoked' : p.accepted_at ? 'accepted' : 'pending';
+                  const isMyPendingInvite = isPartner && p.user_id === currentUserId && status === 'pending';
+                  const badge =
+                    !isPartner
+                      ? null
+                      : status === 'accepted'
+                        ? { text: 'Accepté', cls: 'bg-green-100 text-green-800' }
+                        : status === 'revoked'
+                          ? { text: 'Révoqué', cls: 'bg-gray-100 text-gray-500' }
+                          : { text: 'En attente', cls: 'bg-amber-100 text-amber-800' };
                   return (
                     <li key={p.id} className="px-3 py-2 flex items-center justify-between gap-2">
                       <span className="font-medium text-gray-800">{p.role}</span>
                       <span className="flex items-center gap-2 min-w-0">
-                        <span className="text-gray-500 font-mono text-xs truncate">{p.user_id}</span>
-                        {isPartner && (
-                          <button
-                            type="button"
-                            title="Révoquer ce partenaire"
-                            disabled={revoking === p.id}
-                            onClick={() => void handleRevoke(p.id)}
-                            className="shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                        {badge && (
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.cls}`}
                           >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                            {badge.text}
+                          </span>
+                        )}
+                        <span className="text-gray-500 font-mono text-xs truncate">{p.user_id}</span>
+                        {isMyPendingInvite ? (
+                          <span className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              title="Accepter l’invitation"
+                              disabled={invAction === p.id}
+                              onClick={() => void handleInvitation(p.id, true)}
+                              className="rounded p-0.5 text-gray-400 transition hover:bg-green-50 hover:text-green-600 disabled:opacity-40"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Refuser l’invitation"
+                              disabled={invAction === p.id}
+                              onClick={() => void handleInvitation(p.id, false)}
+                              className="rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        ) : (
+                          isPartner &&
+                          status !== 'revoked' && (
+                            <button
+                              type="button"
+                              title="Révoquer ce partenaire"
+                              disabled={revoking === p.id}
+                              onClick={() => void handleRevoke(p.id)}
+                              className="shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )
                         )}
                       </span>
                     </li>
