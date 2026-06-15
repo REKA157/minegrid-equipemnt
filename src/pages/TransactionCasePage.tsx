@@ -50,6 +50,7 @@ import { openCaseEscrow } from '../utils/api/escrowBridge';
 import { buildNetworkForRole } from '../utils/partner/partnerPerformanceService';
 import { trustTierLabel } from '../utils/partner/partnerTrust';
 import type { NetworkRanking } from '../utils/partner/partnerNetwork';
+import { computeTransactionRisk } from '../utils/risk/transactionRisk';
 
 export interface TransactionCasePageProps {
   caseId: string;
@@ -583,6 +584,36 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
           <p className="mt-4 text-sm text-gray-700 whitespace-pre-wrap">{caseRow.notes}</p>
         )}
       </header>
+
+      {(() => {
+        // Chantier E — risque dossier (faits réels). Anti-façade : rien si risque 'low'.
+        const risk = computeTransactionRisk({
+          events: events.map((e) => ({ event_type: e.event_type })),
+          payments: bundle.payments.map((p) => ({
+            status: p.status,
+            amount: p.amount ?? null,
+            payment_type: p.payment_type,
+          })),
+          inspections: bundle.inspections.map((i) => ({ status: i.status })),
+        });
+        if (risk.level === 'low') return null;
+        const cls =
+          risk.level === 'high'
+            ? 'border-red-200 bg-red-50 text-red-800'
+            : 'border-amber-200 bg-amber-50 text-amber-900';
+        return (
+          <div className={`mt-6 rounded-lg border px-4 py-3 text-sm ${cls}`}>
+            <div className="font-semibold">
+              {risk.level === 'high' ? '⛔ Risque élevé' : '⚠️ Risque à surveiller'} (score {risk.score}/100)
+            </div>
+            <ul className="mt-1 list-disc list-inside text-xs space-y-0.5">
+              {risk.signals.map((s) => (
+                <li key={s.code}>{s.label}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       <TransactionCaseActions caseId={caseRow.id} onDone={() => setActionTick((t) => t + 1)} />
       <AssignPartnerPanel caseId={caseRow.id} onChanged={() => void refreshMeta()} />
