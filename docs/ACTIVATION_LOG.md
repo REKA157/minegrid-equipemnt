@@ -40,3 +40,33 @@
 - `git revert` des 2 commits `feat(escrow bridge)`, ou en base : `drop trigger if exists trg_escrow_sync_payment on public.escrow_transactions;` + `drop function if exists public.open_case_escrow, public.link_case_to_escrow, public._tc_sync_payment_from_escrow, public._escrow_status_to_payment;` (les colonnes nullables peuvent rester sans effet).
 
 **Déploiement** : `SQL_A_APPLIQUER/7_pont_escrow.sql` (idempotent). Validation : tsc + 254 tests + build OK.
+
+---
+
+## Priorité 5 — DATA FLYWHEEL PRIX ✅ (code livré)
+
+**Actif concerné :** `escrow_transactions` (vente réelle) → `price_observations` (déjà présente, vide, deny-par-défaut). **Connexion**, pas de module neuf.
+
+**Avant → Après** : aucune vente n'alimentait l'intelligence prix. Désormais, un escrow **`released`** (vente conclue) insère automatiquement une `price_observation` **`source='sale'`** (prix réel + marque/modèle/année de la machine) via trigger `trg_escrow_to_price_observation` (SECURITY DEFINER, idempotent, traçable par `escrow_transaction_id`).
+
+**Impacts** — **Business/Data** : démarre le flywheel prix (meilleure estimation `estimatePrice` au fil des ventes, signal `'sale'` >> `'listing'`) ; **Investisseur** : data propriétaire cumulative (moat prix). **Anti-façade** : uniquement des ventes réelles, jamais d'observation inventée.
+
+**Risques** : devise hétérogène (escrow EUR/MAD) dans `price_observations` — à normaliser plus tard. **Rollback** : `drop trigger trg_escrow_to_price_observation` + `drop function _escrow_to_price_observation`.
+
+**Déploiement** : `sql/2026-06_price_flywheel.sql`. Dépend du pont escrow (P1) pour relier les ventes aux dossiers.
+
+---
+
+## Priorité 4 — ACTIVER LES SOUS-EXPLOITÉS (1/n) ✅ : CTA « Créer le dossier »
+
+**Actif concerné :** RPC existante `ensure_transaction_case_for_quote_request` (déjà appelée à la soumission d'un devis) + page `LeadsInbox`. **Exposition** d'un actif déjà là.
+
+**Avant → Après** : un devis dont l'acheteur est relié mais **sans dossier** (RLS/réseau au moment de la soumission) n'offrait qu'un état désactivé « — » renvoyant à un backfill SQL. Désormais : **bouton « Créer le dossier »** sur ces lignes → appelle la RPC → le lien « Ouvrir » apparaît. Service `ensureTransactionCaseForQuote` + 4 tests.
+
+**Impacts** — **Métier/UX** : le vendeur transforme un lead en dossier en 1 clic (amorce devis→dossier complétée) ; **Business** : plus de dossiers ouverts = plus de chaîne transactionnelle activée. **Anti-façade** : retours honnêtes (`not_deployed`/`forbidden`), aucun dossier fictif.
+
+**Rollback** : `git revert` du commit `feat(activation P4)`.
+
+**Validation cumulée** : tsc + **258 tests** + build OK.
+
+> Reste de P4 (prochaines itérations, mêmes principes) : `InspectionBadge` (réveil `getCertifiedReport` dead), badge `machine_views`, rendre `FraudInline` visible/mesuré, hooks `platform_events`/`ai_predictions`.
