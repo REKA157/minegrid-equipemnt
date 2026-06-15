@@ -1,0 +1,79 @@
+========================================================
+  SCRIPTS SQL À APPLIQUER SUR SUPABASE — MineGrid
+========================================================
+
+Tous les scripts se lancent pareil :
+  Supabase > SQL Editor > New query > coller le contenu > Run.
+Ils sont SANS RISQUE (ré-exécutables, ils n'effacent pas tes données).
+
+
+--------------------------------------------------------
+  MISE À JOUR (nouvelle fonctionnalité : invitation / acceptation)
+--------------------------------------------------------
+
+Le partenaire reçoit maintenant une INVITATION qu'il doit ACCEPTER
+avant qu'on lui attribue des étapes. Pour activer ça, applique
+DANS CET ORDRE :
+
+  1_write_side_chaine_dossier.sql   <-- RÉ-APPLIQUER (modifié)
+  2_assignation_partenaire.sql      <-- RÉ-APPLIQUER (modifié)
+  5_invitation_accepter_refuser.sql <-- NOUVEAU
+
+(Les n° 1 et 2 ont été mis à jour ; les relancer ne casse rien.)
+
+IMPORTANT — à savoir : à partir de maintenant, une étape (inspection,
+financement, transport, douane) n'est attribuée à un partenaire QUE
+s'il a accepté son invitation. Tes dossiers déjà existants où un
+partenaire avait été ajouté SANS accepter verront donc les NOUVELLES
+étapes rester « à assigner » jusqu'à l'acceptation. C'est voulu.
+
+Optionnel — si tu veux que les partenaires DÉJÀ présents soient
+considérés comme « ayant accepté » (zéro changement visible sur les
+anciens dossiers), lance UNE fois ceci dans le SQL Editor :
+
+  update public.transaction_participants
+     set accepted_at = invited_at
+   where revoked_at is null and accepted_at is null;
+
+
+--------------------------------------------------------
+  PHASE ACTIVATION — escrow + prix (P1 & P5)
+--------------------------------------------------------
+
+IMPORTANT : la couche escrow/prix n'etait PAS deployee en prod
+(voir docs/ETAT_DEPLOIEMENT_REPO_VS_PROD.md). Pour activer le pont
+escrow et le flywheel prix, deploie DANS CET ORDRE :
+
+  0_prerequis_escrow_prix.sql   <-- cree les tables (escrow + price_observations)
+  7_pont_escrow.sql             <-- relie payment_records <-> escrow_transactions
+  8_price_flywheel.sql          <-- vente escrow -> price_observations
+
+(Tables neuves, sans conflit avec l'existant. Idempotents.)
+Ne deploie PAS sql/nextgen/0001 (trust) sans traiter d'abord la
+dette de schema inspection_requests/customs_cases (P7).
+
+
+--------------------------------------------------------
+  SCRIPTS DE TEST (facultatifs)
+--------------------------------------------------------
+
+  3_creer_dossier_test.sql     -> crée un dossier de test (mets ton email)
+  4_acces_entreprise_test.sql  -> te donne l'accès aux cockpits métier
+
+
+--------------------------------------------------------
+  TESTER L'ACCEPTATION (après avoir appliqué 1, 2, 5)
+--------------------------------------------------------
+
+1. Ouvre ton dossier de test.
+2. Dans « Assigner un partenaire » : rôle Mécanicien + ton email + Assigner.
+   -> message « Invitation envoyée. Le partenaire doit l'accepter… »
+   -> dans la liste Participants, la ligne « mechanic » a un badge « En attente »
+      et, comme c'est TON invitation, 2 boutons : ✓ (accepter) / ✗ (refuser).
+3. Clique ✓ : le badge passe à « Accepté ».
+4. MAINTENANT clique « Demander une inspection » :
+   -> l'inspection sort en statut « assigned » (attribuée au mécanicien).
+   (Avant acceptation, elle serait restée « à assigner ».)
+5. Cockpit Mécanicien (#dashboard-mecanicien-display) :
+   -> tant que pas accepté, une carte « 1 invitation en attente — Accepter/Refuser ».
+   -> une fois accepté + inspection demandée, la carte d'inspection apparaît.
