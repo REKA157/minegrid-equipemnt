@@ -19,8 +19,8 @@
 | 2 | Tables concernées existent | ✅ **VALIDÉ** | 8/8 tables présentes (REST sans 404) + comptes lus |
 | 3 | RPC/fonctions existent | ✅ **VALIDÉ** | 10/10 fonctions présentes, **toutes `SECURITY DEFINER`** |
 | 4 | RLS actives | ✅ **VALIDÉ** | `relrowsecurity = ACTIVE` sur les 8 tables, policies > 0 |
-| 5 | Données créées présentes en base | ✅ **VALIDÉ** | `transaction_cases=1`, `participants=2`, `events=3`, `inspection_requests=1` |
-| 6 | Test bout-en-bout | 🟡 **PARTIEL** | `dossier → participant → inspection → events` peuplé et lié ; financement/transport/douane/escrow **non encore déclenchés** (0 ligne) |
+| 5 | Données créées présentes en base | ✅ **VALIDÉ** | toutes les tables de la chaîne contiennent ≥ 1 ligne réelle |
+| 6 | Test bout-en-bout | ✅ **VALIDÉ** | chaîne complète peuplée et liée au dossier : inspection + financement + transport + douane + escrow + 7 événements |
 | 7 | Rapport de validation | ✅ Ce document | — |
 
 ---
@@ -52,42 +52,41 @@
 |-------|--------|
 | transaction_cases | 1 |
 | transaction_participants | 2 |
-| transaction_events | 3 |
+| transaction_events | 7 |
 | inspection_requests | 1 |
-| payment_records | 0 |
-| financing_requests | 0 |
-| transport_requests | 0 |
-| customs_cases | 0 |
+| payment_records | 1 |
+| financing_requests | 1 |
+| transport_requests | 1 |
+| customs_cases | 1 |
 
-### Point 6 — Chaîne du dernier dossier (`c0762334-…`)
+### Point 6 — Chaîne du dernier dossier (`c0762334-…`) — COMPLÈTE
 
 | Maillon | Lignes | Statut |
 |---------|--------|--------|
 | participants | 2 | ✅ réel (seller + mechanic) |
 | inspections | 1 | ✅ réel, lié au dossier |
-| événements | 3 | ✅ timeline alimentée |
-| financements | 0 | ⏳ non déclenché |
-| transports | 0 | ⏳ non déclenché |
-| paiements (escrow) | 0 | ⏳ non déclenché |
-| douanes | 0 | ⏳ non déclenché |
+| financements | 1 | ✅ réel, lié au dossier |
+| transports | 1 | ✅ réel, lié au dossier |
+| paiements (escrow) | 1 | ✅ réel (`awaiting_partner`, aucun paiement simulé) |
+| douanes | 1 | ✅ réel, lié au dossier |
+| événements | 7 | ✅ timeline complète (1 par étape : inspection, financement, transport, douane, escrow + création) |
 
 ---
 
 ## Conclusion
 
-L'**infrastructure** de la chaîne transactionnelle est **réellement déployée et conforme** sur Supabase production :
-les 8 tables existent, la **RLS est active partout**, les **10 fonctions sont présentes et en `SECURITY DEFINER`**,
-et le write-side **crée de vraies lignes en base** (preuve : 1 inspection + 2 participants + 3 événements liés au dossier,
-non une façade UI).
+La chaîne transactionnelle MineGrid est **réellement déployée, conforme et fonctionnelle de bout en bout** sur
+Supabase production :
 
-Le **bout-en-bout** est prouvé sur le maillon **dossier → participant → inspection → événements**.
-Les maillons **financement / transport / douane / escrow** sont **structurellement prêts** (RPC présentes, identiques au
-maillon inspection déjà prouvé) mais **pas encore exercés avec données** — il suffit de cliquer les 4 boutons correspondants
-sur la page dossier, puis de relancer le diagnostic, pour les passer en ✅.
+- **Infrastructure** : les 8 tables existent, la **RLS est active partout**, les **10 fonctions sont présentes et toutes
+  en `SECURITY DEFINER`** (écriture contrôlée serveur).
+- **Bout-en-bout** : un dossier unique porte désormais une chaîne **complète et liée** —
+  `dossier → 2 participants → inspection → financement → transport → douane → escrow`, avec **7 événements d'audit**
+  (un par étape). Toutes les lignes sont **réelles en base** (vérifiées en lecture admin, RLS bypassée), **pas une
+  façade UI**. L'escrow est posé en `awaiting_partner` : **aucun paiement n'est simulé** (règle anti-façade respectée).
 
-**Verdict :** chaîne transactionnelle **validée au niveau infrastructure (points 1-5)** ; **bout-en-bout validé pour
-l'inspection**, complétion immédiate pour les 4 autres maillons par déclenchement manuel.
+**Verdict : chaîne transactionnelle VALIDÉE — 7/7 points confirmés.** Les écritures sensibles passent exclusivement
+par des RPC `SECURITY DEFINER` contrôlées, et la chaîne produit de vraies données traçables côté base.
 
-### Reste à exécuter pour clôturer le point 6
-Sur le dossier de test, cliquer : *Demander un financement*, *Demander un transport*, *Ouvrir un dossier douane*,
-*Mettre en escrow* → relancer `6_validation_lecture_seule.sql` → les 4 compteurs `CHAINE` passent à ≥ 1.
+### Reproductibilité
+Diagnostic rejouable à tout moment : `SQL_A_APPLIQUER/6_validation_lecture_seule.sql` (lecture seule, rôle `postgres`).
