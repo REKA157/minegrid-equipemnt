@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, FolderOpen, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, FolderOpen, Loader2, UserPlus, X } from 'lucide-react';
 import {
   getTransactionCase,
   listTransactionEvents,
@@ -36,7 +36,13 @@ import {
   type TransportRequestRow,
 } from '../utils/api/transactionPlatform';
 
-import { advanceTransactionCaseStep, type ChainStep } from '../utils/api/transactionChain';
+import {
+  advanceTransactionCaseStep,
+  assignTransactionPartner,
+  revokeTransactionPartner,
+  type ChainStep,
+  type PartnerRole,
+} from '../utils/api/transactionChain';
 
 export interface TransactionCasePageProps {
   caseId: string;
@@ -96,6 +102,106 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
         ))}
       </div>
       {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
+    </div>
+  );
+}
+
+const PARTNER_ROLES: Array<{ role: PartnerRole; label: string }> = [
+  { role: 'mechanic', label: 'Mécanicien (inspection)' },
+  { role: 'broker', label: 'Courtier (financement)' },
+  { role: 'carrier', label: 'Transporteur' },
+  { role: 'forwarder', label: 'Transitaire (douane)' },
+  { role: 'logistician', label: 'Logisticien' },
+  { role: 'investor', label: 'Investisseur' },
+];
+
+/**
+ * Réseau partenaire (write-side) : assigne un partenaire réel (par email) à un rôle
+ * du dossier. C'est ce qui rend les étapes de chaîne « assignées » plutôt que « à
+ * assigner » → leur cockpit (mécanicien, courtier, transporteur, transitaire…) voit
+ * enfin la carte. Anti-façade : un email inconnu renvoie « introuvable », jamais un
+ * acteur fictif.
+ */
+function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: () => void }) {
+  const [role, setRole] = useState<PartnerRole>('mechanic');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  const submit = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setMsg({ tone: 'err', text: 'Indiquez l’email du partenaire.' });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    const r = await assignTransactionPartner(caseId, role, trimmed);
+    setBusy(false);
+    if (r.ok) {
+      setEmail('');
+      setMsg({ tone: 'ok', text: 'Partenaire assigné. Les nouvelles étapes de ce rôle lui seront attribuées.' });
+      onChanged();
+    } else if (r.reason === 'partner_not_found') {
+      setMsg({ tone: 'err', text: 'Aucun utilisateur avec cet email. Le partenaire doit avoir un compte MineGrid.' });
+    } else if (r.reason === 'not_deployed') {
+      setMsg({ tone: 'err', text: 'Module non déployé : appliquez sql/2026-06_transaction_participant_assign.sql.' });
+    } else if (r.reason === 'forbidden') {
+      setMsg({ tone: 'err', text: 'Seuls le vendeur, l’acheteur ou un délégué du dossier peuvent assigner un partenaire.' });
+    } else {
+      setMsg({ tone: 'err', text: 'Assignation impossible pour le moment.' });
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
+        <UserPlus className="h-4 w-4 text-orange-600" />
+        Assigner un partenaire
+      </h2>
+      <p className="text-xs text-gray-500 mb-3">
+        Rattachez un partenaire (par email) à un rôle du dossier. Ses étapes lui seront attribuées et apparaîtront dans son cockpit.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-gray-600">Rôle</span>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as PartnerRole)}
+            disabled={busy}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-800 disabled:opacity-50"
+          >
+            {PARTNER_ROLES.map((r) => (
+              <option key={r.role} value={r.role}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 flex-1 min-w-[200px]">
+          <span className="text-xs text-gray-600">Email du partenaire</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !busy && void submit()}
+            disabled={busy}
+            placeholder="partenaire@exemple.com"
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-800 disabled:opacity-50"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={busy}
+          className="inline-flex items-center gap-1 rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-orange-700 disabled:opacity-50"
+        >
+          {busy ? 'Envoi…' : 'Assigner'}
+        </button>
+      </div>
+      {msg && (
+        <p className={`mt-2 text-xs ${msg.tone === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</p>
+      )}
     </div>
   );
 }
@@ -224,6 +330,32 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
   const [actionTick, setActionTick] = useState(0);
   const bundle = useTransactionCaseBundles(caseRow ?? null, actionTick);
 
+  /** Recharge participants + timeline (après assignation/révocation de partenaire). */
+  const refreshMeta = useCallback(async () => {
+    try {
+      const [p, e] = await Promise.all([
+        listTransactionParticipants(caseId),
+        listTransactionEvents(caseId),
+      ]);
+      setParticipants(p);
+      setEvents(e);
+    } catch {
+      /* lecture best-effort : on garde l'affichage courant en cas d'échec */
+    }
+    setActionTick((t) => t + 1);
+  }, [caseId]);
+
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const handleRevoke = useCallback(
+    async (participantId: string) => {
+      setRevoking(participantId);
+      const r = await revokeTransactionPartner(caseId, participantId);
+      setRevoking(null);
+      if (r.ok || r.reason === 'revoked') await refreshMeta();
+    },
+    [caseId, refreshMeta],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -350,6 +482,7 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
       </header>
 
       <TransactionCaseActions caseId={caseRow.id} onDone={() => setActionTick((t) => t + 1)} />
+      <AssignPartnerPanel caseId={caseRow.id} onChanged={() => void refreshMeta()} />
 
       {bundle.loading && (
         <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
@@ -371,12 +504,30 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
               <p className="text-sm text-gray-500">Aucune ligne participant (droits élargis via acheteur / vendeur).</p>
             ) : (
               <ul className="rounded-lg border border-gray-200 divide-y divide-gray-100 bg-white text-sm">
-                {participants.map((p) => (
-                  <li key={p.id} className="px-3 py-2 flex justify-between gap-2">
-                    <span className="font-medium text-gray-800">{p.role}</span>
-                    <span className="text-gray-500 font-mono text-xs truncate">{p.user_id}</span>
-                  </li>
-                ))}
+                {participants.map((p) => {
+                  const isPartner = ['mechanic', 'broker', 'carrier', 'forwarder', 'logistician', 'investor'].includes(
+                    p.role,
+                  );
+                  return (
+                    <li key={p.id} className="px-3 py-2 flex items-center justify-between gap-2">
+                      <span className="font-medium text-gray-800">{p.role}</span>
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="text-gray-500 font-mono text-xs truncate">{p.user_id}</span>
+                        {isPartner && (
+                          <button
+                            type="button"
+                            title="Révoquer ce partenaire"
+                            disabled={revoking === p.id}
+                            onClick={() => void handleRevoke(p.id)}
+                            className="shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

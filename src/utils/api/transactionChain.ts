@@ -91,3 +91,81 @@ export function createCustomsStep(
 export function advanceTransactionCaseStep(caseId: string, step: ChainStep): Promise<ChainStepResult> {
   return callStepRpc('advance_transaction_case_step', { p_case_id: caseId, p_step: step });
 }
+
+/* -------------------------------------------------------------------------
+ * Réseau partenaire — assignation d'un partenaire au dossier
+ * (cf. sql/2026-06_transaction_participant_assign.sql).
+ * Sans participant du rôle requis, les étapes de chaîne restent « à assigner »
+ * et les cartes cockpit M4-M7 n'apparaissent pas chez le partenaire.
+ * ---------------------------------------------------------------------- */
+
+/** Rôles partenaire assignables (liste blanche, alignée sur la RPC). */
+export type PartnerRole = 'mechanic' | 'broker' | 'carrier' | 'forwarder' | 'logistician' | 'investor';
+
+export type PartnerAssignReason =
+  | 'assigned'
+  | 'revoked'
+  | 'not_deployed'
+  | 'forbidden'
+  | 'partner_not_found'
+  | 'error';
+
+export interface PartnerAssignResult {
+  ok: boolean;
+  id: string | null;
+  reason: PartnerAssignReason;
+}
+
+/** Assigne un partenaire (résolu par email) à un rôle du dossier. Idempotent côté serveur. */
+export async function assignTransactionPartner(
+  caseId: string,
+  role: PartnerRole,
+  email: string,
+): Promise<PartnerAssignResult> {
+  try {
+    const { data, error } = await supabase.rpc('assign_transaction_partner', {
+      p_case_id: caseId,
+      p_role: role,
+      p_partner_email: email,
+    });
+    if (error) {
+      if (isMissingFunction(error)) return { ok: false, id: null, reason: 'not_deployed' };
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('partner_not_found')) return { ok: false, id: null, reason: 'partner_not_found' };
+      if (msg.includes('forbidden')) return { ok: false, id: null, reason: 'forbidden' };
+      logger.warn('[transactionChain:assign_transaction_partner]', error);
+      return { ok: false, id: null, reason: 'error' };
+    }
+    const id = data == null || data === '' ? null : String(data);
+    return id ? { ok: true, id, reason: 'assigned' } : { ok: false, id: null, reason: 'error' };
+  } catch (e) {
+    logger.warn('[transactionChain:assign_transaction_partner]', e);
+    return { ok: false, id: null, reason: 'error' };
+  }
+}
+
+/** Révoque un partenaire du dossier (réversible côté serveur : pose revoked_at). */
+export async function revokeTransactionPartner(
+  caseId: string,
+  participantId: string,
+): Promise<PartnerAssignResult> {
+  try {
+    const { data, error } = await supabase.rpc('revoke_transaction_partner', {
+      p_case_id: caseId,
+      p_participant_id: participantId,
+    });
+    if (error) {
+      if (isMissingFunction(error)) return { ok: false, id: null, reason: 'not_deployed' };
+      if ((error.message || '').toLowerCase().includes('forbidden')) {
+        return { ok: false, id: null, reason: 'forbidden' };
+      }
+      logger.warn('[transactionChain:revoke_transaction_partner]', error);
+      return { ok: false, id: null, reason: 'error' };
+    }
+    const id = data == null || data === '' ? null : String(data);
+    return { ok: id != null, id, reason: 'revoked' };
+  } catch (e) {
+    logger.warn('[transactionChain:revoke_transaction_partner]', e);
+    return { ok: false, id: null, reason: 'error' };
+  }
+}

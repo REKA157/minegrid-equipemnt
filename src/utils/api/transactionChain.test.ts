@@ -11,6 +11,8 @@ import {
   createTransportStep,
   createCustomsStep,
   advanceTransactionCaseStep,
+  assignTransactionPartner,
+  revokeTransactionPartner,
 } from './transactionChain';
 
 describe('transactionChain — write-side dossier (L3/L4)', () => {
@@ -83,5 +85,66 @@ describe('transactionChain — write-side dossier (L3/L4)', () => {
     rpc.mockResolvedValue({ data: 'x', error: null });
     await advanceTransactionCaseStep('c', 'transport');
     expect(rpc).toHaveBeenCalledWith('advance_transaction_case_step', { p_case_id: 'c', p_step: 'transport' });
+  });
+});
+
+describe('transactionChain — réseau partenaire', () => {
+  beforeEach(() => rpc.mockReset());
+
+  it('assignTransactionPartner appelle la RPC avec rôle + email et renvoie assigned', async () => {
+    rpc.mockResolvedValue({ data: 'part-1', error: null });
+    const r = await assignTransactionPartner('case-1', 'mechanic', 'meca@exemple.com');
+    expect(rpc).toHaveBeenCalledWith('assign_transaction_partner', {
+      p_case_id: 'case-1',
+      p_role: 'mechanic',
+      p_partner_email: 'meca@exemple.com',
+    });
+    expect(r).toEqual({ ok: true, id: 'part-1', reason: 'assigned' });
+  });
+
+  it('email inconnu -> partner_not_found (anti-façade, aucun acteur fictif)', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'partner_not_found' } });
+    const r = await assignTransactionPartner('c', 'broker', 'absent@exemple.com');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('partner_not_found');
+    expect(r.id).toBeNull();
+  });
+
+  it('appelant non autorisé -> forbidden', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'forbidden' } });
+    expect((await assignTransactionPartner('c', 'carrier', 'x@y.z')).reason).toBe('forbidden');
+  });
+
+  it('RPC non déployée -> not_deployed', async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'function public.assign_transaction_partner(uuid, text, text) does not exist' },
+    });
+    expect((await assignTransactionPartner('c', 'forwarder', 'x@y.z')).reason).toBe('not_deployed');
+  });
+
+  it('idempotence : ré-assigner le même partenaire renvoie le même id', async () => {
+    rpc.mockResolvedValue({ data: 'part-1', error: null });
+    const a = await assignTransactionPartner('c', 'mechanic', 'm@e.co');
+    const b = await assignTransactionPartner('c', 'mechanic', 'm@e.co');
+    expect(a.id).toBe('part-1');
+    expect(b.id).toBe('part-1');
+  });
+
+  it('revokeTransactionPartner appelle la RPC et renvoie revoked', async () => {
+    rpc.mockResolvedValue({ data: 'part-1', error: null });
+    const r = await revokeTransactionPartner('case-1', 'part-1');
+    expect(rpc).toHaveBeenCalledWith('revoke_transaction_partner', {
+      p_case_id: 'case-1',
+      p_participant_id: 'part-1',
+    });
+    expect(r).toEqual({ ok: true, id: 'part-1', reason: 'revoked' });
+  });
+
+  it('révoquer une ligne déjà révoquée (data null) -> ok=false sans erreur', async () => {
+    rpc.mockResolvedValue({ data: null, error: null });
+    const r = await revokeTransactionPartner('c', 'p');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('revoked');
   });
 });

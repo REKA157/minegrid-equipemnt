@@ -163,6 +163,18 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 | Services client | `src/utils/api/transactionChain.ts` | wrappers RPC, retour honnête (`not_deployed`/`forbidden`/`created`) |
 | Déclencheur UI | `src/pages/TransactionCasePage.tsx` | panneau « Faire avancer le dossier » → crée les lignes |
 
-> **Sécurité** : `payment_records` n'est jamais écrit côté client (escrow en `awaiting_partner`, jamais de paiement simulé) ; assignation partenaire absente → `à assigner`. **Reste à faire** : (1) appliquer la migration SQL en prod ; (2) ajouter les **participants partenaires** (mécanicien/courtier/transporteur/transitaire) au dossier pour que leurs cockpits voient les cartes assignées — réseau partenaire = prochaine étape.
+> **Sécurité** : `payment_records` n'est jamais écrit côté client (escrow en `awaiting_partner`, jamais de paiement simulé) ; sans participant du rôle requis → `à assigner`.
+
+### Réseau partenaire (assignation) — livré (code)
+
+| Élément | Fichier | Rôle |
+|---|---|---|
+| RPC `SECURITY DEFINER` | `sql/2026-06_transaction_participant_assign.sql` | `assign_transaction_partner(case, role, email)` + `revoke_transaction_partner` + helper `_tc_can_invite` ; invitation réservée vendeur/acheteur/admin_delegate, partenaire résolu par email dans `auth.users` (anti-façade), idempotent (clé `case+user+role`) |
+| Services client | `src/utils/api/transactionChain.ts` | `assignTransactionPartner` / `revokeTransactionPartner`, retour honnête (`assigned`/`revoked`/`not_deployed`/`forbidden`/`partner_not_found`) |
+| UI | `src/pages/TransactionCasePage.tsx` | panneau « Assigner un partenaire » (rôle + email) + bouton révoquer sur chaque partenaire |
+
+> Effet : dès qu'un partenaire d'un rôle est assigné, l'étape de chaîne correspondante lui est **attribuée** (au lieu de « à assigner ») et apparaît dans son cockpit (M4 mécanicien, M5/M6 financier/courtier, M7 transporteur/logisticien, transitaire douane).
+>
+> **Reste à faire** : appliquer les **deux migrations SQL** sur la base (dans l'ordre) — `sql/2026-06_transaction_chain_write_side.sql` puis `sql/2026-06_transaction_participant_assign.sql` — pour activer le bout-en-bout. Étape suivante possible : invitation/acceptation par le partenaire (`accepted_at`) + notification.
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
