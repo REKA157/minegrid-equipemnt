@@ -46,6 +46,7 @@ import {
   type ChainStep,
   type PartnerRole,
 } from '../utils/api/transactionChain';
+import { openCaseEscrow } from '../utils/api/escrowBridge';
 
 export interface TransactionCasePageProps {
   caseId: string;
@@ -67,6 +68,7 @@ const STEP_ACTIONS: Array<{ step: ChainStep; label: string }> = [
 function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: () => void }) {
   const [pending, setPending] = useState<ChainStep | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [escrowPending, setEscrowPending] = useState(false);
 
   const run = async (step: ChainStep) => {
     setPending(step);
@@ -82,6 +84,30 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
       setMsg('Action non autorisée : vous devez être partie prenante de ce dossier.');
     } else {
       setMsg('Action impossible pour le moment.');
+    }
+  };
+
+  // Pont escrow : ouvre un séquestre RÉEL (statut 'created' = non financé) lié au dossier.
+  const openEscrow = async () => {
+    setEscrowPending(true);
+    setMsg(null);
+    const r = await openCaseEscrow(caseId);
+    setEscrowPending(false);
+    if (r.ok) {
+      setMsg('Séquestre ouvert (non financé). Le miroir paiement du dossier reflètera l’état réel du PSP.');
+      onDone();
+    } else if (r.reason === 'not_deployed') {
+      setMsg('Pont escrow non déployé : appliquez 0_prerequis_escrow_prix.sql puis 7_pont_escrow.sql.');
+    } else if (r.reason === 'buyer_required') {
+      setMsg('Escrow impossible : ce dossier n’a pas d’acheteur relié (anti-façade : aucun escrow fictif).');
+    } else if (r.reason === 'amount_required') {
+      setMsg('Escrow impossible : le montant du dossier (total_amount) doit être renseigné.');
+    } else if (r.reason === 'machine_required') {
+      setMsg('Escrow impossible : aucune machine liée au dossier.');
+    } else if (r.reason === 'forbidden') {
+      setMsg('Seuls le vendeur ou l’acheteur du dossier peuvent ouvrir un séquestre.');
+    } else {
+      setMsg('Ouverture du séquestre impossible pour le moment.');
     }
   };
 
@@ -103,6 +129,15 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
             {pending === a.step ? 'Envoi…' : a.label}
           </button>
         ))}
+        <button
+          type="button"
+          disabled={escrowPending || pending !== null}
+          onClick={() => void openEscrow()}
+          title="Ouvre un séquestre réel (PSP) lié au dossier — statut 'créé', non financé."
+          className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+        >
+          {escrowPending ? 'Ouverture…' : 'Ouvrir le séquestre (escrow réel)'}
+        </button>
       </div>
       {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
     </div>
