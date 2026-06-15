@@ -5,6 +5,7 @@ import {
   buildTransportCaseSignals,
   buildCustomsCaseSignals,
   buildPaymentCaseSignals,
+  buildPendingInvitationSignals,
 } from './chainCorrelation';
 
 describe('chainCorrelation (M4-M7 chaîne dossier)', () => {
@@ -34,6 +35,23 @@ describe('chainCorrelation (M4-M7 chaîne dossier)', () => {
   it('M5 escrow : seulement les paiements en attente', () => {
     expect(buildPaymentCaseSignals([{ status: 'released' } as any])).toHaveLength(0);
     expect(buildPaymentCaseSignals([{ status: 'held' } as any])[0]?.id).toBe('corr:case-payment');
+  });
+
+  it('invitations en attente : aucune ligne → aucune carte ; sinon carte warn vers #dossiers', () => {
+    expect(buildPendingInvitationSignals([])).toHaveLength(0);
+    const out = buildPendingInvitationSignals([
+      { role: 'mechanic', case_title: 'Dossier A' } as any,
+      { role: 'broker', case_title: null } as any,
+    ]);
+    expect(out[0]?.id).toBe('corr:pending-invitations');
+    expect(out[0]?.tone).toBe('warn');
+    expect(out[0]?.href).toBe('#dossiers');
+    expect(out[0]?.label).toContain('2');
+  });
+
+  it('invitation unique : le titre du dossier est repris dans le détail', () => {
+    const out = buildPendingInvitationSignals([{ role: 'mechanic', case_title: 'Pelle 320D' } as any]);
+    expect(out[0]?.detail).toContain('Pelle 320D');
   });
 
   it('statuts du write-side reconnus par le read-side (cartes visibles)', () => {

@@ -5,6 +5,7 @@ import type {
   CustomsCaseRow,
   PaymentRecordRow,
 } from '../../../../utils/api/transactionPlatform';
+import type { PendingInvitationRow } from '../../../../utils/api/transactionCases';
 import type { CockpitSignal } from '../buildVendeurCockpit';
 
 /**
@@ -89,6 +90,29 @@ export function buildCustomsCaseSignals(rows: CustomsCaseRow[]): CockpitSignal[]
       detail: 'Compléter les documents manquants pour dédouaner',
       href: '#dossiers',
       tone: 'urgent',
+    },
+  ];
+}
+
+/**
+ * Invitations partenaire EN ATTENTE (accepted_at NULL) reçues par l'utilisateur.
+ * Le filtre est fait côté requête (listPendingInvitationsWithCase) ; on fait
+ * confiance aux lignes reçues, comme les autres corrélations. Anti-façade : [] si aucune.
+ */
+export function buildPendingInvitationSignals(rows: PendingInvitationRow[]): CockpitSignal[] {
+  if (!rows.length) return [];
+  const first = rows[0];
+  const detail =
+    rows.length === 1 && first.case_title
+      ? `Dossier « ${first.case_title} » — confirmez votre participation`
+      : 'Confirmez ou déclinez votre participation au dossier';
+  return [
+    {
+      id: 'corr:pending-invitations',
+      label: `${rows.length} invitation(s) en attente — Accepter/Refuser`,
+      detail,
+      href: '#dossiers',
+      tone: 'warn',
     },
   ];
 }

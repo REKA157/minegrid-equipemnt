@@ -48,7 +48,10 @@ import {
   getContainerTrackingRows,
   getFreightDocumentsForList,
 } from '../../../utils/enterpriseApi/transitaire';
-import { listAccessibleTransactionCases } from '../../../utils/api/transactionCases';
+import {
+  listAccessibleTransactionCases,
+  listPendingInvitationsWithCase,
+} from '../../../utils/api/transactionCases';
 import { getQuoteRequests } from '../../../utils/api/quoteRequests';
 import { getMessages } from '../../../utils/api/messages';
 import {
@@ -82,7 +85,23 @@ import {
   buildTransportCaseSignals,
   buildCustomsCaseSignals,
   buildPaymentCaseSignals,
+  buildPendingInvitationSignals,
 } from './correlations/chainCorrelation';
+
+/**
+ * Invitations partenaire en attente reçues par l'utilisateur (tous rôles partenaire).
+ * Prepend en tête des priorités d'un cockpit partenaire : l'invité voit l'invitation
+ * dès qu'il ouvre son espace, sans dépendre d'un système de notifications dédié.
+ */
+async function withPendingInvitations(cockpit: CockpitSummaryData): Promise<CockpitSummaryData> {
+  try {
+    const invites = await listPendingInvitationsWithCase();
+    cockpit.priorities = [...buildPendingInvitationSignals(invites), ...cockpit.priorities];
+  } catch {
+    /* lecture best-effort : pas d'invitation affichée si indisponible (anti-façade) */
+  }
+  return cockpit;
+}
 
 const EMPTY_STATS: DashboardStats = {
   totalViews: 0,
@@ -190,7 +209,7 @@ async function loadMecanicien(): Promise<CockpitSummaryData> {
   // M4 — inspection de dossier → intervention prioritaire (gated jusqu'au peuplement).
   const inspections = await caseRows(pick(casesR, []), inspectionService.listRequestsByCase);
   cockpit.priorities = [...buildInspectionCaseSignals(inspections), ...cockpit.priorities];
-  return cockpit;
+  return withPendingInvitations(cockpit);
 }
 
 async function loadTransporteur(): Promise<CockpitSummaryData> {
@@ -212,7 +231,7 @@ async function loadTransporteur(): Promise<CockpitSummaryData> {
   // M7 — mission transport de dossier (gated jusqu'au peuplement de transport_requests).
   const transports = await caseRows(pick(casesR, []), transportRequestService.listByCase);
   cockpit.priorities = [...buildTransportCaseSignals(transports), ...cockpit.priorities];
-  return cockpit;
+  return withPendingInvitations(cockpit);
 }
 
 async function loadCourtier(): Promise<CockpitSummaryData> {
@@ -232,7 +251,7 @@ async function loadCourtier(): Promise<CockpitSummaryData> {
   // M6 — financement de dossier à monter (gated jusqu'au peuplement de financing_requests).
   const financings = await caseRows(pick(casesR, []), financingRequestService.listByCase);
   cockpit.priorities = [...buildFinancingCaseSignals(financings), ...cockpit.priorities];
-  return cockpit;
+  return withPendingInvitations(cockpit);
 }
 
 async function loadInvestisseur(): Promise<CockpitSummaryData> {
@@ -242,12 +261,13 @@ async function loadInvestisseur(): Promise<CockpitSummaryData> {
     getOpportunitiesScore(),
     getRiskAssessment(),
   ]);
-  return buildInvestisseurCockpit({
+  const cockpit = buildInvestisseurCockpit({
     portfolio: pick(portfolio, {}),
     opportunities: pick(opportunities, []),
     oppScore: pick(oppScore, {}),
     risk: pick(risk, {}),
   });
+  return withPendingInvitations(cockpit);
 }
 
 async function loadLogisticien(): Promise<CockpitSummaryData> {
@@ -268,7 +288,7 @@ async function loadLogisticien(): Promise<CockpitSummaryData> {
   // M7 — transport de dossier à coordonner (gated jusqu'au peuplement de transport_requests).
   const transports = await caseRows(pick(cases, []), transportRequestService.listByCase);
   cockpit.priorities = [...buildTransportCaseSignals(transports), ...cockpit.priorities];
-  return cockpit;
+  return withPendingInvitations(cockpit);
 }
 
 async function loadTransitaire(): Promise<CockpitSummaryData> {
@@ -286,7 +306,7 @@ async function loadTransitaire(): Promise<CockpitSummaryData> {
   // Douane de dossier → action documentaire (gated jusqu'au peuplement de customs_cases).
   const customsCases = await caseRows(pick(casesR, []), customsCaseService.listByCase);
   cockpit.priorities = [...buildCustomsCaseSignals(customsCases), ...cockpit.priorities];
-  return cockpit;
+  return withPendingInvitations(cockpit);
 }
 
 async function loadFinancier(): Promise<CockpitSummaryData> {
