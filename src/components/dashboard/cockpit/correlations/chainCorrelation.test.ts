@@ -37,6 +37,15 @@ describe('chainCorrelation (M4-M7 chaîne dossier)', () => {
     expect(buildPaymentCaseSignals([{ status: 'held' } as any])[0]?.id).toBe('corr:case-payment');
   });
 
+  it('pont escrow : statuts propagés depuis escrow_transactions reconnus', () => {
+    // ouverts (le financier doit agir) : held (fonds séquestrés), disputed (litige)
+    expect(buildPaymentCaseSignals([{ status: 'held' } as any])).toHaveLength(1);
+    expect(buildPaymentCaseSignals([{ status: 'disputed' } as any])).toHaveLength(1);
+    // terminaux (aucune action) : released / refunded / cancelled
+    expect(buildPaymentCaseSignals([{ status: 'refunded' } as any])).toHaveLength(0);
+    expect(buildPaymentCaseSignals([{ status: 'cancelled' } as any])).toHaveLength(0);
+  });
+
   it('invitations en attente : aucune ligne → aucune carte ; sinon carte warn vers #dossiers', () => {
     expect(buildPendingInvitationSignals([])).toHaveLength(0);
     const out = buildPendingInvitationSignals([

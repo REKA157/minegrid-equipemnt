@@ -117,7 +117,9 @@ export function buildPendingInvitationSignals(rows: PendingInvitationRow[]): Coc
   ];
 }
 
-const PAYMENT_PENDING = new Set(['pending', 'held', 'in_escrow', 'awaiting', 'awaiting_partner', 'escrow']);
+// Statuts escrow « ouverts » côté dossier (payment_records), incl. ceux propagés
+// depuis escrow_transactions par le pont escrow (held = fonds séquestrés, disputed = litige à traiter).
+const PAYMENT_PENDING = new Set(['pending', 'held', 'in_escrow', 'awaiting', 'awaiting_partner', 'escrow', 'disputed']);
 export function buildPaymentCaseSignals(rows: PaymentRecordRow[]): CockpitSignal[] {
   const pending = rows.filter((r) => PAYMENT_PENDING.has(lc(r.status)));
   if (!pending.length) return [];
