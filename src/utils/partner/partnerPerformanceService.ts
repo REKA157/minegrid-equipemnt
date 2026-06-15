@@ -118,13 +118,18 @@ export function buildPerformanceSignals(perf: PartnerPerformance): CockpitSignal
       },
     ];
   }
+  // open === 0 : tout est terminal. Ne JAMAIS afficher un succès vert si rien n'a
+  // réellement abouti (anti-façade : un 'good' suppose une vraie réussite).
+  const realSuccess = kpis.completedSuccess > 0 && kpis.completionRate >= 0.5;
   return [
     {
       id: 'perf:partner-score',
       label: `Performance : score ${pct} (${kpis.completedSuccess} traités)`,
-      detail: `Complétion ${comp}%, délai moyen ${delay}. Accepte vite tes prochaines invitations pour rester bien classé.`,
+      detail: realSuccess
+        ? `Complétion ${comp}%, délai moyen ${delay}. Accepte vite tes prochaines invitations pour rester bien classé.`
+        : `Complétion ${comp}% — ${kpis.volume - kpis.completedSuccess} dossier(s) non aboutis. Améliore ton taux de complétion pour remonter ton score.`,
       href: '#dossiers',
-      tone: 'good',
+      tone: realSuccess ? 'good' : 'warn',
     },
   ];
 }

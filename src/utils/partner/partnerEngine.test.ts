@@ -95,6 +95,41 @@ describe('partnerScore — n agrège que le mesurable (anti-façade)', () => {
     expect(s.components).toHaveLength(0);
   });
 
+  it('volume seul (100% open, 0 livré) -> hasData false, JAMAIS un score (anti-façade)', () => {
+    const k = computePartnerKpis(
+      [
+        { status: 'assigned', createdAt: '2026-06-01T00:00:00Z', completedAt: null, dueAt: null },
+        { status: 'a_assigner', createdAt: '2026-06-01T00:00:00Z', completedAt: null, dueAt: null },
+      ],
+      ROLE_CONFIG.mechanic,
+    );
+    const s = computePartnerScore(k, {
+      invited: 0,
+      accepted: 0,
+      declinedOrRevoked: 0,
+      acceptanceRate: 0,
+      avgAcceptanceHours: null,
+    });
+    expect(s.hasData).toBe(false);
+    expect(s.score).toBeNull(); // « être assigné » n'est pas « avoir performé »
+  });
+
+  it('toutes étapes échouées -> score bas mais mesuré (fiabilité=0), pas un faux 100', () => {
+    const k = computePartnerKpis(
+      [{ status: 'cancelled', createdAt: '2026-06-01T00:00:00Z', completedAt: '2026-06-02T00:00:00Z', dueAt: null }],
+      ROLE_CONFIG.mechanic,
+    );
+    const s = computePartnerScore(k, {
+      invited: 0,
+      accepted: 0,
+      declinedOrRevoked: 0,
+      acceptanceRate: 0,
+      avgAcceptanceHours: null,
+    });
+    expect(s.hasData).toBe(true); // fiabilité mesurée (terminal) -> score réel
+    expect(s.score).toBeLessThan(30); // mais bas (0 succès)
+  });
+
   it('score 0..100 calculé sur les seules composantes mesurées', () => {
     const s = computePartnerScore(
       { volume: 5, open: 1, completedSuccess: 4, completionRate: 1, avgProcessingDays: 0, lateRate: 0 },

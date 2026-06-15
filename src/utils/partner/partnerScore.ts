@@ -68,7 +68,13 @@ export function computePartnerScore(kpis: PartnerKpis, acc: AcceptanceKpis): Par
     components.push({ key: 'volume', label: 'Volume traité', value: clamp01(kpis.volume / VOLUME_TARGET), weight: 0.1 });
   }
 
-  if (components.length === 0) {
+  // Anti-façade : le VOLUME (nb d'assignations) ne constitue PAS une performance.
+  // On n'attribue un score que si au moins une composante de performance RÉELLE
+  // est mesurée (fiabilité/acceptation/traitement/ponctualité). Sinon -> pas de score
+  // (un partenaire qui n'a fait qu'« être assigné » n'a rien prouvé).
+  const PERF_KEYS = new Set<ScoreComponent['key']>(['fiabilite', 'acceptation', 'traitement', 'ponctualite']);
+  const hasPerf = components.some((c) => PERF_KEYS.has(c.key));
+  if (!hasPerf) {
     return { hasData: false, score: null, components: [] };
   }
 
