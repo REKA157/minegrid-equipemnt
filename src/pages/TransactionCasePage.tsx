@@ -143,7 +143,10 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
     setBusy(false);
     if (r.ok) {
       setEmail('');
-      setMsg({ tone: 'ok', text: 'Partenaire assigné. Les nouvelles étapes de ce rôle lui seront attribuées.' });
+      setMsg({
+        tone: 'ok',
+        text: 'Invitation envoyée. Le partenaire doit l’accepter dans son espace avant de recevoir les étapes de ce rôle.',
+      });
       onChanged();
     } else if (r.reason === 'partner_not_found') {
       setMsg({ tone: 'err', text: 'Aucun utilisateur avec cet email. Le partenaire doit avoir un compte MineGrid.' });
@@ -163,7 +166,8 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
         Assigner un partenaire
       </h2>
       <p className="text-xs text-gray-500 mb-3">
-        Rattachez un partenaire (par email) à un rôle du dossier. Ses étapes lui seront attribuées et apparaîtront dans son cockpit.
+        Rattachez un partenaire (par email) à un rôle du dossier. Il reçoit une invitation à accepter ;
+        une fois acceptée, les étapes de ce rôle lui sont attribuées et apparaissent dans son cockpit.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
