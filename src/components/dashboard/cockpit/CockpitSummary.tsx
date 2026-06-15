@@ -88,6 +88,16 @@ import {
   buildPendingInvitationSignals,
 } from './correlations/chainCorrelation';
 
+import {
+  getCurrentUserId,
+  computeMyPerformance,
+  buildPerformanceSignals,
+  adaptInspections,
+  adaptTransports,
+  adaptFinancings,
+  adaptCustoms,
+} from '../../../utils/partner/partnerPerformanceService';
+
 /**
  * Invitations partenaire en attente reçues par l'utilisateur (tous rôles partenaire).
  * Prepend en tête des priorités d'un cockpit partenaire : l'invité voit l'invitation
@@ -209,6 +219,9 @@ async function loadMecanicien(): Promise<CockpitSummaryData> {
   // M4 — inspection de dossier → intervention prioritaire (gated jusqu'au peuplement).
   const inspections = await caseRows(pick(casesR, []), inspectionService.listRequestsByCase);
   cockpit.priorities = [...buildInspectionCaseSignals(inspections), ...cockpit.priorities];
+  // P6 — Ma performance (mécanicien) depuis mes inspections assignées.
+  const perf = computeMyPerformance('mechanic', adaptInspections(inspections), await getCurrentUserId());
+  cockpit.priorities = [...buildPerformanceSignals(perf), ...cockpit.priorities];
   return withPendingInvitations(cockpit);
 }
 
@@ -231,6 +244,9 @@ async function loadTransporteur(): Promise<CockpitSummaryData> {
   // M7 — mission transport de dossier (gated jusqu'au peuplement de transport_requests).
   const transports = await caseRows(pick(casesR, []), transportRequestService.listByCase);
   cockpit.priorities = [...buildTransportCaseSignals(transports), ...cockpit.priorities];
+  // P6 — Ma performance (transporteur) depuis mes transports assignés.
+  const perf = computeMyPerformance('carrier', adaptTransports(transports), await getCurrentUserId());
+  cockpit.priorities = [...buildPerformanceSignals(perf), ...cockpit.priorities];
   return withPendingInvitations(cockpit);
 }
 
@@ -251,6 +267,9 @@ async function loadCourtier(): Promise<CockpitSummaryData> {
   // M6 — financement de dossier à monter (gated jusqu'au peuplement de financing_requests).
   const financings = await caseRows(pick(casesR, []), financingRequestService.listByCase);
   cockpit.priorities = [...buildFinancingCaseSignals(financings), ...cockpit.priorities];
+  // P6 — Ma performance (courtier) depuis mes financements assignés.
+  const perf = computeMyPerformance('broker', adaptFinancings(financings), await getCurrentUserId());
+  cockpit.priorities = [...buildPerformanceSignals(perf), ...cockpit.priorities];
   return withPendingInvitations(cockpit);
 }
 
@@ -306,6 +325,9 @@ async function loadTransitaire(): Promise<CockpitSummaryData> {
   // Douane de dossier → action documentaire (gated jusqu'au peuplement de customs_cases).
   const customsCases = await caseRows(pick(casesR, []), customsCaseService.listByCase);
   cockpit.priorities = [...buildCustomsCaseSignals(customsCases), ...cockpit.priorities];
+  // P6 — Ma performance (transitaire) depuis mes dossiers douane assignés.
+  const perf = computeMyPerformance('forwarder', adaptCustoms(customsCases), await getCurrentUserId());
+  cockpit.priorities = [...buildPerformanceSignals(perf), ...cockpit.priorities];
   return withPendingInvitations(cockpit);
 }
 
@@ -344,6 +366,9 @@ async function loadFinancier(): Promise<CockpitSummaryData> {
     ...buildFinancingCaseSignals(financings),
     ...cockpit.priorities,
   ];
+  // P6 — Ma performance (financier, volet financement) depuis mes financements assignés.
+  const perf = computeMyPerformance('broker', adaptFinancings(financings), await getCurrentUserId());
+  cockpit.priorities = [...buildPerformanceSignals(perf), ...cockpit.priorities];
   return cockpit;
 }
 
