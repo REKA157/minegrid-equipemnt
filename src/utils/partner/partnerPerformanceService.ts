@@ -9,12 +9,17 @@ import { ROLE_CONFIG, type PartnerRole } from './partnerEvents';
 import { computePartnerKpis, type ChainAssignment, type PartnerKpis, type AcceptanceKpis } from './partnerKpis';
 import { computePartnerScore, type PartnerScore } from './partnerScore';
 import { rankPartners, type PartnerCandidate } from './partnerMatching';
-import type {
-  InspectionRequestRow,
-  TransportRequestRow,
-  FinancingRequestRow,
-  CustomsCaseRow,
+import {
+  inspectionService,
+  transportRequestService,
+  financingRequestService,
+  customsCaseService,
+  type InspectionRequestRow,
+  type TransportRequestRow,
+  type FinancingRequestRow,
+  type CustomsCaseRow,
 } from '../api/transactionPlatform';
+import { listAccessibleTransactionCases } from '../api/transactionCases';
 
 const EMPTY_ACCEPTANCE: AcceptanceKpis = {
   invited: 0,
@@ -148,5 +153,41 @@ export async function getCurrentUserId(): Promise<string | null> {
     return data.user?.id ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Agrège les lignes d'un rôle sur tous les dossiers accessibles (RLS). Tolérant. */
+async function fetchRoleAssignments(role: PartnerRole): Promise<AssigneeRow[]> {
+  const cases = await listAccessibleTransactionCases();
+  const ids = (Array.isArray(cases) ? cases : []).slice(0, 50).map((c) => c.id);
+  if (!ids.length) return [];
+  const settled = await Promise.allSettled(
+    ids.map((id) => {
+      switch (role) {
+        case 'mechanic':
+          return inspectionService.listRequestsByCase(id).then(adaptInspections);
+        case 'carrier':
+          return transportRequestService.listByCase(id).then(adaptTransports);
+        case 'broker':
+          return financingRequestService.listByCase(id).then(adaptFinancings);
+        case 'forwarder':
+          return customsCaseService.listByCase(id).then(adaptCustoms);
+        default:
+          return Promise.resolve([] as AssigneeRow[]);
+      }
+    }),
+  );
+  return settled.flatMap((s) => (s.status === 'fulfilled' && s.value ? s.value : []));
+}
+
+/**
+ * Matching : classe les partenaires d'un rôle par score réel (sur les dossiers
+ * accessibles). Renvoie [] si aucune donnée — jamais de recommandation à vide.
+ */
+export async function loadPartnerRankingForRole(role: PartnerRole): Promise<PartnerCandidate[]> {
+  try {
+    return rankPartnersFromRows(role, await fetchRoleAssignments(role));
+  } catch {
+    return [];
   }
 }
