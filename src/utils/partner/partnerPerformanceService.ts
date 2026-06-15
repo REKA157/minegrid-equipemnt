@@ -8,6 +8,7 @@ import type { CockpitSignal } from '../../components/dashboard/cockpit/buildVend
 import { ROLE_CONFIG, type PartnerRole } from './partnerEvents';
 import { computePartnerKpis, type ChainAssignment, type PartnerKpis, type AcceptanceKpis } from './partnerKpis';
 import { computePartnerScore, type PartnerScore } from './partnerScore';
+import { computePartnerTrust, trustTierLabel, type PartnerTrust } from './partnerTrust';
 import { rankPartners, type PartnerCandidate } from './partnerMatching';
 import {
   inspectionService,
@@ -74,9 +75,10 @@ export interface PartnerPerformance {
   role: PartnerRole;
   kpis: PartnerKpis;
   score: PartnerScore;
+  trust: PartnerTrust;
 }
 
-/** Performance de l'utilisateur courant sur SES étapes assignées (uid filtré). */
+/** Performance + trust de l'utilisateur courant sur SES étapes assignées (uid filtré). */
 export function computeMyPerformance(
   role: PartnerRole,
   rows: AssigneeRow[],
@@ -92,7 +94,8 @@ export function computeMyPerformance(
   }));
   const kpis = computePartnerKpis(assignments, cfg);
   const score = computePartnerScore(kpis, EMPTY_ACCEPTANCE);
-  return { role, kpis, score };
+  const trust = computePartnerTrust(kpis, EMPTY_ACCEPTANCE, score);
+  return { role, kpis, score, trust };
 }
 
 /**
@@ -100,19 +103,21 @@ export function computeMyPerformance(
  * Mène toujours à une action (traiter les dossiers ouverts) ou est un signal positif.
  */
 export function buildPerformanceSignals(perf: PartnerPerformance): CockpitSignal[] {
-  const { kpis, score } = perf;
+  const { kpis, score, trust } = perf;
   if (kpis.volume === 0) return []; // aucune donnée -> aucune carte
   const pct = score.score != null ? `${score.score}/100` : '—';
   const comp = Math.round(kpis.completionRate * 100);
   const delay = kpis.avgProcessingDays != null ? `${kpis.avgProcessingDays.toFixed(1)} j` : '—';
+  // Mention du tier de confiance seulement s'il est mesuré (anti-façade).
+  const trustTxt = trust.hasData ? ` · confiance ${trustTierLabel(trust.tier)}` : '';
 
   if (kpis.open > 0) {
     const lateTxt = kpis.lateRate != null ? ` · retard ${Math.round(kpis.lateRate * 100)}%` : '';
     return [
       {
         id: 'perf:partner-open',
-        label: `${kpis.open} dossier(s) à traiter — score ${pct}, complétion ${comp}%`,
-        detail: `Délai moyen ${delay}${lateTxt}. Traite tes dossiers ouverts pour améliorer ton score.`,
+        label: `${kpis.open} dossier(s) à traiter — score ${pct}${trustTxt}`,
+        detail: `Complétion ${comp}%, délai moyen ${delay}${lateTxt}. Traite tes dossiers ouverts pour améliorer ta confiance.`,
         href: '#dossiers',
         tone: kpis.lateRate != null && kpis.lateRate > 0.2 ? 'urgent' : 'warn',
       },
@@ -124,10 +129,10 @@ export function buildPerformanceSignals(perf: PartnerPerformance): CockpitSignal
   return [
     {
       id: 'perf:partner-score',
-      label: `Performance : score ${pct} (${kpis.completedSuccess} traités)`,
+      label: `Confiance ${trust.hasData ? trustTierLabel(trust.tier) : '—'} — score ${pct} (${kpis.completedSuccess} traités)`,
       detail: realSuccess
-        ? `Complétion ${comp}%, délai moyen ${delay}. Accepte vite tes prochaines invitations pour rester bien classé.`
-        : `Complétion ${comp}% — ${kpis.volume - kpis.completedSuccess} dossier(s) non aboutis. Améliore ton taux de complétion pour remonter ton score.`,
+        ? `Complétion ${comp}%, délai moyen ${delay}. Accepte vite tes prochaines invitations pour progresser vers le niveau supérieur.`
+        : `Complétion ${comp}% — ${kpis.volume - kpis.completedSuccess} dossier(s) non aboutis. Améliore ton taux de complétion pour remonter.`,
       href: '#dossiers',
       tone: realSuccess ? 'good' : 'warn',
     },
