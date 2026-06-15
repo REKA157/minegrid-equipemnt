@@ -175,6 +175,6 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 
 > Effet : dès qu'un partenaire d'un rôle est assigné, l'étape de chaîne correspondante lui est **attribuée** (au lieu de « à assigner ») et apparaît dans son cockpit (M4 mécanicien, M5/M6 financier/courtier, M7 transporteur/logisticien, transitaire douane).
 >
-> **Reste à faire** : appliquer les **deux migrations SQL** sur la base (dans l'ordre) — `sql/2026-06_transaction_chain_write_side.sql` puis `sql/2026-06_transaction_participant_assign.sql` — pour activer le bout-en-bout. Étape suivante possible : invitation/acceptation par le partenaire (`accepted_at`) + notification.
+> ✅ **Migrations appliquées et vérifiées le 2026-06-15** : les 8 RPC répondent en prod (`P0001 not authenticated` quand on appelle sans session = garde-fou serveur exécuté). Le write-side dossier est actif de bout en bout. Étape suivante possible : invitation/acceptation par le partenaire (`accepted_at`) + notification.
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.
