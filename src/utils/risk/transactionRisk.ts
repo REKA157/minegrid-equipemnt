@@ -30,7 +30,11 @@ export interface RiskInputs {
 }
 
 const lc = (s: string | null | undefined) => (s || '').trim().toLowerCase();
-const PAYMENT_OPEN = new Set(['held', 'awaiting_partner', 'pending', 'in_escrow', 'escrow', 'funded']);
+// Fonds RÉELLEMENT séquestrés chez le PSP (escrow funded/inspection_passed/delivered -> 'held' ;
+// cf. _escrow_status_to_payment dans sql/2026-06_escrow_bridge.sql). On EXCLUT 'awaiting_partner'
+// et 'pending' : ce sont des escrows OUVERTS mais NON financés (aucun argent engagé), donc l'état
+// NORMAL après create_payment_step — jamais un risque en soi (anti-faux-positif).
+const FUNDS_HELD = new Set(['held', 'funded', 'in_escrow']);
 const INSPECTION_PASSED = new Set(['completed', 'done', 'inspection_passed']);
 
 /** Calcule le risque d'un dossier (faits réels uniquement, explicable). */
@@ -46,21 +50,23 @@ export function computeTransactionRisk(inp: RiskInputs): TransactionRisk {
     score += 45;
   }
 
-  // 2) Fonds engagés AVANT inspection validée -> risque élevé (cœur anti-arnaque).
-  const hasOpenPayment = payments.some((p) => PAYMENT_OPEN.has(lc(p.status)));
+  // 2) Fonds RÉELLEMENT séquestrés AVANT inspection validée -> risque élevé (cœur anti-arnaque).
+  //    NB : un escrow 'awaiting_partner' (ouvert, non financé) n'est PAS un risque -> exclu.
+  const hasFundsHeld = payments.some((p) => FUNDS_HELD.has(lc(p.status)));
   const hasPassedInspection = inp.inspections.some((i) => INSPECTION_PASSED.has(lc(i.status)));
-  if (hasOpenPayment && inp.inspections.length > 0 && !hasPassedInspection) {
+  if (hasFundsHeld && inp.inspections.length > 0 && !hasPassedInspection) {
     signals.push({
       code: 'payment_before_inspection',
-      label: 'Paiement/escrow en cours sans inspection validée.',
+      label: 'Fonds séquestrés sans inspection validée.',
       severity: 'high',
     });
     score += 30;
   }
 
-  // 3) Montant escrow non confirmé (0) -> risque moyen.
-  if (payments.some((p) => PAYMENT_OPEN.has(lc(p.status)) && (p.amount == null || p.amount <= 0))) {
-    signals.push({ code: 'amount_unconfirmed', label: 'Montant de paiement non confirmé (0).', severity: 'medium' });
+  // 3) Fonds séquestrés mais montant non confirmé (0) -> risque moyen (anomalie : on ne
+  //    bloque pas 0). Exclut 'awaiting_partner'/'pending' (montant 0 = état initial normal).
+  if (payments.some((p) => FUNDS_HELD.has(lc(p.status)) && (p.amount == null || p.amount <= 0))) {
+    signals.push({ code: 'amount_unconfirmed', label: 'Fonds séquestrés au montant non confirmé (0).', severity: 'medium' });
     score += 20;
   }
 

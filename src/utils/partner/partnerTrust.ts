@@ -77,7 +77,12 @@ export function computePartnerTrust(
 
   // Tier de base par score + volume.
   let tier: TrustTier;
-  if (kpis.volume < MIN_VOLUME_FOR_TIER) {
+  if (terminal === 0) {
+    // Anti-faux-trust : sans AUCUN dossier mené au bout, la confiance ne peut se
+    // mériter (même si la réactivité d'acceptation est bonne) -> plafond « nouveau ».
+    tier = 'new';
+    reasons.push('Aucun dossier terminé — confiance « nouveau » tant que rien n’est mené à bien.');
+  } else if (kpis.volume < MIN_VOLUME_FOR_TIER) {
     tier = 'new';
     reasons.push(`Historique récent (${kpis.volume} dossier(s)) — confiance « nouveau ».`);
   } else if (score.score >= 80 && kpis.volume >= GOLD_MIN_VOLUME) {

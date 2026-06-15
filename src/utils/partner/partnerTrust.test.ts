@@ -42,6 +42,17 @@ describe('partnerTrust — confiance dynamique explicable (anti-façade)', () =>
     expect(t.tier).toBe('new');
   });
 
+  it('score présent mais 0 dossier terminé -> tier plafonné à « new » (anti-faux-trust)', () => {
+    // Garde-fou : même un score élevé (hypothétiquement via acceptation rapide) ne donne
+    // pas de confiance tant qu'AUCUN dossier n'est mené au bout.
+    const t = computePartnerTrust(
+      kpis({ volume: 10, open: 10, completedSuccess: 0, completionRate: 0 }),
+      ACC0,
+      score(true, 90),
+    );
+    expect(t.tier).toBe('new');
+  });
+
   it('score élevé + volume suffisant -> gold', () => {
     const t = computePartnerTrust(
       kpis({ volume: 6, open: 0, completedSuccess: 6, completionRate: 1 }),

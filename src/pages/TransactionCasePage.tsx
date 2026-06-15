@@ -263,11 +263,13 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
           {busy ? 'Envoi…' : 'Assigner'}
         </button>
       </div>
+      {/* Indice calculé sur VOS dossiers accessibles (RLS) — pas une disponibilité absolue. */}
       {network?.best && network.best.trust.trustScore != null && (
         <p className="mt-2 text-xs text-emerald-700">
-          💡 Meilleur {role} disponible :{' '}
+          💡 Suggéré (d’après vos dossiers) :{' '}
           <span className="font-mono">{network.best.partnerId.slice(0, 8)}…</span> · confiance{' '}
-          {trustTierLabel(network.best.trust.tier)} ({network.best.trust.trustScore}/100, charge {network.best.openLoad}).
+          {trustTierLabel(network.best.trust.tier)} ({network.best.trust.trustScore}/100, {network.best.openLoad} en
+          cours chez vous).
         </p>
       )}
       {network && network.toAvoid.length > 0 && (
@@ -276,7 +278,9 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
         </p>
       )}
       {network && network.saturated.length > 0 && (
-        <p className="mt-1 text-xs text-gray-500">⏳ {network.saturated.length} partenaire(s) saturé(s) (charge élevée).</p>
+        <p className="mt-1 text-xs text-gray-500">
+          ⏳ {network.saturated.length} partenaire(s) chargé(s) sur vos dossiers.
+        </p>
       )}
       {msg && (
         <p className={`mt-2 text-xs ${msg.tone === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</p>

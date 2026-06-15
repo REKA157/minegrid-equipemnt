@@ -167,7 +167,13 @@ export async function getCurrentUserId(): Promise<string | null> {
   }
 }
 
-/** Agrège les lignes d'un rôle sur tous les dossiers accessibles (RLS). Tolérant. */
+/**
+ * Agrège les lignes d'un rôle sur les dossiers ACCESSIBLES au spectateur (RLS).
+ * ⚠️ Portée : `openLoad`/`saturated`/`best` qui en dérivent sont relatifs à la
+ * visibilité du spectateur (pas une charge globale absolue). L'UI le signale
+ * explicitement (« sur vos dossiers »). Une charge globale objective nécessiterait
+ * une RPC serveur agrégée (SECURITY DEFINER) — hors périmètre ici.
+ */
 async function fetchRoleAssignments(role: PartnerRole): Promise<AssigneeRow[]> {
   const cases = await listAccessibleTransactionCases();
   const ids = (Array.isArray(cases) ? cases : []).slice(0, 50).map((c) => c.id);

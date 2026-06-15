@@ -20,7 +20,7 @@ describe('transactionRisk — risque dossier (faits réels, anti-faux-positif)',
     expect(r.signals.some((s) => s.code === 'payment_disputed')).toBe(true);
   });
 
-  it('paiement engagé sans inspection validée -> high (cœur anti-arnaque)', () => {
+  it('FONDS SÉQUESTRÉS (held) sans inspection validée -> high (cœur anti-arnaque)', () => {
     const r = computeTransactionRisk({
       events: [],
       payments: [{ status: 'held', amount: 5000, payment_type: 'escrow' }],
@@ -28,6 +28,17 @@ describe('transactionRisk — risque dossier (faits réels, anti-faux-positif)',
     });
     expect(r.level).toBe('high');
     expect(r.signals.some((s) => s.code === 'payment_before_inspection')).toBe(true);
+  });
+
+  it('FLUX NORMAL : escrow awaiting_partner (non financé) + inspection en cours -> AUCUN risque', () => {
+    // create_payment_step crée 'awaiting_partner' (aucun argent) ; ne doit PAS être un faux positif.
+    const r = computeTransactionRisk({
+      events: [],
+      payments: [{ status: 'awaiting_partner', amount: 0, payment_type: 'escrow' }],
+      inspections: [{ status: 'a_assigner' }],
+    });
+    expect(r.level).toBe('low');
+    expect(r.signals).toHaveLength(0);
   });
 
   it('paiement engagé APRÈS inspection validée -> pas ce signal', () => {
@@ -39,13 +50,20 @@ describe('transactionRisk — risque dossier (faits réels, anti-faux-positif)',
     expect(r.signals.some((s) => s.code === 'payment_before_inspection')).toBe(false);
   });
 
-  it('montant non confirmé (0) -> signal medium', () => {
-    const r = computeTransactionRisk({
+  it('fonds séquestrés (held) au montant 0 -> anomalie medium ; awaiting_partner 0 -> rien', () => {
+    const held0 = computeTransactionRisk({
+      events: [],
+      payments: [{ status: 'held', amount: 0, payment_type: 'escrow' }],
+      inspections: [{ status: 'completed' }], // inspection ok pour isoler le signal montant
+    });
+    expect(held0.signals.some((s) => s.code === 'amount_unconfirmed')).toBe(true);
+
+    const awaiting0 = computeTransactionRisk({
       events: [],
       payments: [{ status: 'awaiting_partner', amount: 0, payment_type: 'escrow' }],
       inspections: [],
     });
-    expect(r.signals.some((s) => s.code === 'amount_unconfirmed')).toBe(true);
+    expect(awaiting0.signals.some((s) => s.code === 'amount_unconfirmed')).toBe(false);
   });
 
   it('partenaires désengagés (refus/révocation) -> signal medium explicite', () => {

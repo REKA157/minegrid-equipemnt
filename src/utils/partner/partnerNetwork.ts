@@ -47,7 +47,9 @@ export function buildNetworkRanking(
   const ranked = withData.slice().sort((a, b) => {
     const diff = (b.trust.trustScore ?? 0) - (a.trust.trustScore ?? 0);
     if (diff !== 0) return diff;
-    return a.openLoad - b.openLoad; // à confiance égale, le moins chargé d'abord
+    const load = a.openLoad - b.openLoad; // à confiance égale, le moins chargé d'abord
+    if (load !== 0) return load;
+    return a.partnerId.localeCompare(b.partnerId); // tie-break déterministe
   });
 
   const saturated = withData.filter((p) => p.openLoad >= sat);
