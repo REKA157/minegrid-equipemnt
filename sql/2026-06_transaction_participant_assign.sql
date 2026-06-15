@@ -94,10 +94,12 @@ begin
   if v_partner is null then raise exception 'partner_not_found'; end if;
 
   -- Idempotence : (case_id, user_id, role) est unique. On réactive si révoqué.
+  -- accepted_at est remis à NULL : toute (ré)invitation repart « en attente »
+  -- (un partenaire révoqué puis ré-invité doit ré-accepter).
   insert into public.transaction_participants (case_id, user_id, role, invited_by, invited_at, revoked_at)
   values (p_case_id, v_partner, p_role, v_uid, now(), null)
   on conflict (case_id, user_id, role)
-  do update set revoked_at = null, invited_by = excluded.invited_by, invited_at = now()
+  do update set revoked_at = null, accepted_at = null, invited_by = excluded.invited_by, invited_at = now()
   returning id into v_id;
 
   insert into public.transaction_events (case_id, actor_user_id, event_type, payload)
