@@ -5,6 +5,26 @@
 
 ---
 
+## PHASE 2 — chantiers A/B/F/E (2026-06-15)
+
+> Règle anti-façade appliquée à la stratégie : on **n'exécute que ce qui a des données réelles déployées**. Les chantiers dépendant de tables non déployées/vides sont **explicitement bloqués** (pas falsifiés).
+
+| Chantier | État | Détail |
+|---|---|---|
+| **A — Partner Trust dynamique** | ✅ livré | `src/utils/partner/partnerTrust.ts` — trust par rôle dérivé du Performance Engine ; tiers explicables (insufficient_data/new/bronze/silver/gold) ; le volume seul ne crée pas de confiance ; les annulations plafonnent le tier ; affiché dans 5 cockpits. **Impact investisseur** : moat confiance fondé sur l'exécution réelle. |
+| **B+F — Matching intelligent + réseau** | ✅ livré | `src/utils/partner/partnerNetwork.ts` — combine **confiance + charge** ; `best`=meilleur disponible (non saturé/non à éviter), `saturated`, `toAvoid` ; `bestPartnerForInspection/Transport/Customs/Financing` ; surfacé au panneau d'assignation. |
+| **E — Fraud & Risk (transaction)** | ✅ livré | `src/utils/risk/transactionRisk.ts` — risque dossier explicable (litige, paiement-avant-inspection, montant 0, partenaire désengagé) ; bannière page dossier ; **aucun faux positif** (signal = fait réel). |
+| **C — Global Monitor business** | ⛔ **bloqué data** | `market_projects` **non déployée et vide** → générer des opportunités = inventer. À débloquer : déployer + ingérer `market_projects` (`monitor-service`). |
+| **D — Price Intelligence** | 🟡 **partiel** | `price_observations` déployée mais **vide** (aucune vente `released`) → `[]` honnête jusqu'aux vraies ventes (flywheel P5 déjà branché). `machine_views` réel exploitable (vélocité de consultation) — activable. |
+| **G — Cockpit optimizer** | ⏸️ différé | suppression de cartes = exige preuve par carte ; à faire prudemment, pas en masse. |
+| **H — Automatisations** | ⏸️ partiel possible | suggestions dérivées d'événements réels (ex: inspection validée → proposer financement) faisables en corrélations ; déclencheurs DB = prudence prod. |
+| **I — Investor moat** | ✅ implicite | A (trust) + B/F (réseau) + E (risque) **SONT** les flywheels partenaires/confiance — implémentés, pas un rapport. |
+| **J — Tests/qualité** | ✅ permanent | +18 tests (trust 6, network 6, risk 6) ; revue adversariale parallèle après chaque lot. |
+
+**Validation cumulée Phase 2** : tsc + **288 tests** + build ✅. 3 commits (A · B+F · E). Anti-façade vérifié par revue multi-agents.
+
+---
+
 ## Priorité 1 — PONT ESCROW ✅ (code livré)
 
 **Actif concerné :** les deux systèmes d'escrow déjà présents — `escrow_transactions` (système A, PSP/Stripe, alimente le trust) et `payment_records` (système B, miroir dossier). **Aucun nouveau module** : on relie l'existant.
