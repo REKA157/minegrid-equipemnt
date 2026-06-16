@@ -75,9 +75,12 @@ export default function TrustScoreWidget() {
     (p) => p.partnerId !== net?.best?.partnerId && !avoidIds.has(p.partnerId) && !satIds.has(p.partnerId),
   );
 
-  const assignCta = (
+  // Action CONCRÈTE contextuelle aux données réelles : « Relancer » si le partenaire a
+  // déjà des dossiers en cours (openLoad > 0), sinon « Assigner ». (« Contacter » n'est
+  // pas proposé : le moteur réseau ne porte pas de coordonnées — on ne fabrique pas de lien.)
+  const actionFor = (p: NetworkPartner) => (
     <a href="#dossiers" className="text-xs font-medium text-orange-700 hover:underline">
-      → Assigner sur un dossier
+      {p.openLoad > 0 ? '→ Relancer ses dossiers' : '→ Assigner sur un dossier'}
     </a>
   );
 
@@ -115,7 +118,7 @@ export default function TrustScoreWidget() {
             <div className="rounded-lg border border-emerald-200 bg-emerald-50">
               <div className="px-3 pt-2 text-xs font-semibold text-emerald-800">✅ Recommandé (meilleur disponible)</div>
               <ul>
-                <PartnerRow p={net!.best} action={assignCta} />
+                <PartnerRow p={net!.best} action={actionFor(net!.best)} />
               </ul>
             </div>
           )}
@@ -125,7 +128,7 @@ export default function TrustScoreWidget() {
               <div className="text-xs font-semibold text-gray-700 mb-1">Autres disponibles</div>
               <ul className="rounded-lg border border-gray-200 divide-y divide-gray-100 bg-white">
                 {others.map((p) => (
-                  <PartnerRow key={p.partnerId} p={p} action={assignCta} />
+                  <PartnerRow key={p.partnerId} p={p} action={actionFor(p)} />
                 ))}
               </ul>
             </div>

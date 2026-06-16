@@ -37,14 +37,23 @@ describe('TrustScoreWidget — outil de décision réseau (anti-façade)', () =>
     expect(screen.queryByText(/charge \d/)).toBeNull(); // aucune ligne partenaire (qui afficherait « charge N »)
   });
 
-  it('partenaire réel -> recommandé + RAISON + ACTION assigner', async () => {
-    const p = partner('aaaaaaaa-1111-2222-3333-444444444444', 90, 'gold', 1);
+  it('partenaire réel LIBRE -> recommandé + RAISON + ACTION « Assigner »', async () => {
+    const p = partner('aaaaaaaa-1111-2222-3333-444444444444', 90, 'gold', 0); // charge 0 = libre
     buildNetworkForRole.mockResolvedValue({ best: p, ranked: [p], saturated: [], toAvoid: [] });
     render(<TrustScoreWidget />);
     await waitFor(() => expect(screen.getByText(/meilleur disponible/)).toBeInTheDocument());
     expect(screen.getByText(/90\/100/)).toBeInTheDocument(); // score RÉEL (pas saisi)
     expect(screen.getByText(/Complétion 80%/)).toBeInTheDocument(); // raison du classement
     expect(screen.getByText(/Assigner sur un dossier/)).toBeInTheDocument(); // action concrète
+  });
+
+  it('partenaire avec dossiers en cours -> action « Relancer » (contextuelle à la charge réelle)', async () => {
+    const p = partner('cccccccc-9999-aaaa-bbbb-cccccccccccc', 75, 'silver', 3); // charge 3 = dossiers en cours
+    buildNetworkForRole.mockResolvedValue({ best: p, ranked: [p], saturated: [], toAvoid: [] });
+    render(<TrustScoreWidget />);
+    await waitFor(() => expect(screen.getByText(/meilleur disponible/)).toBeInTheDocument());
+    expect(screen.getByText(/Relancer ses dossiers/)).toBeInTheDocument();
+    expect(screen.queryByText(/Assigner sur un dossier/)).toBeNull(); // pas « assigner » s'il est déjà chargé
   });
 
   it('partenaire à éviter affiché distinctement avec sa raison', async () => {
