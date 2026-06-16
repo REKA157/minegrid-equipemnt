@@ -5,7 +5,6 @@ import DailyActionsPriorityWidget from '../../../components/dashboard/widgets/Da
 import { getDailyActionsData } from './getDailyActionsData';
 import { SalesPipelineWidget } from './SalesPipelineWidget';
 import DashboardSalesPerformanceScoreWidget from '../../../components/dashboard/widgets/SalesPerformanceScoreWidget';
-import { DailyActionsWidget } from './DailyActionsWidget';
 import { NotificationsWidget } from './NotificationsWidget';
 import { getNotificationsData } from './getNotificationsData';
 import { AdvancedKPIsWidget } from './AdvancedKPIsWidget';
@@ -66,7 +65,7 @@ export const renderWidgetContent = (widget: any, widgetSize: 'small' | 'normal' 
 
   // Cas spécial pour le widget "Actions prioritaires du jour"
   if (widget.id === 'daily-priority-actions') {
-    return <DailyActionsWidget data={getListData(widget.id)} />;
+    return <DailyActionsPriorityWidget data={getListData(widget.id)} widgetSize={dailyActionsWidgetSize(widgetSize)} />;
   }
 
   // Cas spécial pour le widget "Actions commerciales prioritaires"

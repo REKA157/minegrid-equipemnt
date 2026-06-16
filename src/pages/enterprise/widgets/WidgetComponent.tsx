@@ -36,7 +36,7 @@ import { getEquipmentAvailabilityData } from './getEquipmentAvailabilityData';
 import { PreventiveMaintenanceWidget } from './PreventiveMaintenanceWidget';
 import { getMaintenanceData } from './getMaintenanceData';
 import DashboardSalesPerformanceScoreWidget from '../../../components/dashboard/widgets/SalesPerformanceScoreWidget';
-import { DailyActionsPriorityWidget } from '../../DailyActionsWidgetFixed';
+import DailyActionsPriorityWidget from '../../../components/dashboard/widgets/DailyActionsPriorityWidget';
 import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const WidgetComponent = ({

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { DailyActionsPriorityWidget } from './DailyActionsWidgetFixed';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -98,7 +97,6 @@ import supabase from '../utils/supabaseClient';
 import { VendeurWidgets } from './widgets/VendeurWidgets';
 import { PlanningWidget } from "./enterprise/widgets/PlanningWidget";
 import { EquipmentAvailabilityWidget } from "./enterprise/widgets/EquipmentAvailabilityWidget";
-import { DailyActionsWidget } from "./enterprise/widgets/DailyActionsWidget";
 import { PreventiveMaintenanceWidget } from "./enterprise/widgets/PreventiveMaintenanceWidget";
 import { getChartData } from "./enterprise/widgets/getChartData";
 import { SalesPipelineWidget } from "./enterprise/widgets/SalesPipelineWidget";

@@ -76,7 +76,6 @@ import ChartWidget from './widgets/ChartWidget';
 import ListWidget from './widgets/ListWidget';
 import { InventoryStatusWidget } from '../../pages/enterprise/widgets/InventoryStatusWidget';
 import PerformanceWidget from './widgets/PerformanceWidget';
-import DailyActionsWidget from './widgets/DailyActionsWidget';
 import StockStatusWidget from './widgets/StockStatusWidget';
 import EquipmentAvailabilityWidget from './widgets/EquipmentAvailabilityWidget';
 import UpcomingRentalsWidget from './widgets/UpcomingRentalsWidget';
