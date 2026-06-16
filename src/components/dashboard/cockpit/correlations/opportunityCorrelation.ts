@@ -6,8 +6,11 @@ import {
 } from '../../../../utils/leads/leadConvergence';
 
 /**
- * Agent D/E — surface les opportunités issues de la CONVERGENCE des leads
- * (annonces / monitor / besoins pro) en signaux cockpit actionnables.
+ * Agent D/E — surface les opportunités issues des leads (convergence) en signaux
+ * cockpit actionnables. Aujourd'hui seuls les leads 'marketplace' (message/offre/
+ * manuel) existent ; l'infrastructure de convergence accepte déjà monitor et besoins
+ * pro (cf. classifyEntryEngine) dès qu'ils peupleront la table `leads` — ces segments
+ * restent à 0 tant qu'aucun lead source='monitor'/'pro_demand' n'existe.
  * Anti-façade : aucune carte si aucune opportunité chaude réelle.
  */
 export function buildOpportunitySignals(leads: LeadInput[], now?: string): CockpitSignal[] {

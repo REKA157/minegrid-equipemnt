@@ -1,9 +1,16 @@
 /**
  * Agent D — Lead Convergence Engine (PUR, testable).
  *
- * Fait CONVERGER les leads des moteurs d'entrée (Marketplace / Global Monitor /
- * Besoins pro) vers une typologie + un scoring + une priorisation uniques, pour
- * surfacer « quelle opportunité saisir ». Tout dérive de champs RÉELS du lead.
+ * Fait CONVERGER les leads des moteurs d'entrée vers une typologie + un scoring +
+ * une priorisation uniques, pour surfacer « quelle opportunité saisir ».
+ *
+ * ÉTAT RÉEL (honnêteté) : aujourd'hui la table `leads` n'est peuplée qu'avec
+ * source ∈ {message, offer, manual} -> tout converge vers 'marketplace'. Les
+ * branches 'monitor' et 'pro_demand' de classifyEntryEngine sont PRÊTES
+ * architecturalement mais non encore alimentées (les leads issus du Global Monitor
+ * sont actuellement insérés avec source:'manual'). engineBreakdown renvoie donc 0
+ * honnêtement pour ces moteurs tant qu'aucun lead correspondant n'existe.
+ *
  * Anti-façade : pas de lead inventé ; champs absents -> contribution neutre, jamais
  * un chiffre fabriqué ; les leads terminaux (Conclu/Perdu) ne sont pas des opportunités.
  */
@@ -84,6 +91,11 @@ function daysBetween(fromIso: string | null | undefined, nowIso: string): number
 const STALE_DAYS = 14;
 const VALUE_TARGET = 500000;
 
+// Poids de scoring (somme = 1.0). `heat` (avancement du stage) domine car il décide si
+// le lead est actionnable ; `staleness` et `dossierGap` pèsent fort car ils déclenchent
+// une action concrète (relancer / créer le dossier) ; `value`/`prob` affinent sans piloter.
+const W = { heat: 0.3, value: 0.15, prob: 0.15, staleness: 0.2, dossierGap: 0.2 } as const;
+
 /**
  * Score un lead (0..100) à partir de signaux RÉELS. `now` (date de référence ISO)
  * est injectable pour le déterminisme des tests ; par défaut = maintenant.
@@ -105,7 +117,8 @@ export function scoreLead(lead: LeadInput, now?: string): ScoredLead | null {
   const dossierGap = hotStage && !hasDossier ? 1 : 0;
 
   const score = Math.round(
-    (heat * 0.3 + valueNorm * 0.15 + probNorm * 0.15 + staleness * 0.2 + dossierGap * 0.2) * 100,
+    (heat * W.heat + valueNorm * W.value + probNorm * W.prob + staleness * W.staleness + dossierGap * W.dossierGap) *
+      100,
   );
   const priority: LeadPriority = score >= 70 ? 'urgent' : score >= 40 ? 'high' : 'normal';
 

@@ -174,9 +174,10 @@ async function loadVendeur(): Promise<CockpitSummaryData> {
   const m = buildMonitorSignals(leadList, monitorMap);
   // M12 — messages non lus → prochaine action (table messages, RLS).
   const msg = buildMessageSignals(pick(messagesR, []));
-  // Agent D/E — opportunités issues de la convergence des leads (annonces/monitor/besoins pro).
+  // Agent D/E — opportunités issues de la convergence des leads. Placées APRÈS devis/dossier/
+  // messages pour ne pas masquer un signal 'urgent' (devis neuf) par une opportunité 'warn'.
   const opp = buildOpportunitySignals(leadList);
-  cockpit.priorities = [...opp, ...q.priorities, ...d.priorities, ...msg.priorities, ...cockpit.priorities];
+  cockpit.priorities = [...q.priorities, ...d.priorities, ...msg.priorities, ...opp, ...cockpit.priorities];
   cockpit.risks = [...d.risks, ...cockpit.risks];
   cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities, ...m.opportunities];
   return cockpit;
