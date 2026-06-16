@@ -122,7 +122,6 @@ import { useAdaptiveWidget } from "./enterprise/widgets/useAdaptiveWidget";
 import { getNotificationsData } from "./enterprise/widgets/getNotificationsData";
 import { RentalForm } from "./enterprise/widgets/RentalForm";
 import { getEquipmentAvailabilityData } from "./enterprise/widgets/getEquipmentAvailabilityData";
-import { mockData } from "./enterprise/widgets/mockData";
 import { widgetConfigs } from "./enterprise/widgets/widgetConfigs";
 import { iconMap } from "./enterprise/widgets/iconMap";
 import { DonutChart } from "./enterprise/widgets/DonutChart";

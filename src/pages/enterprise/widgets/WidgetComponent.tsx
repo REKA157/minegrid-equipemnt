@@ -11,7 +11,6 @@ import {
   getUpcomingRentals,
 } from '../../../utils/enterpriseApi';
 import { getChartData } from './getChartData';
-import { mockData } from './mockData';
 import { iconMap } from './iconMap';
 import {
   DollarSign,
@@ -285,8 +284,9 @@ export const WidgetComponent = ({
             setData(result);
             break;
           default:
-            result = (mockData as any)[widget.dataSource] || null;
-            setData(result);
+            // Anti-façade : aucun mock de repli. dataSource non géré -> état vide honnête
+            // (le widget rend son absence de données ou « Type de widget non supporté »).
+            setData(null);
         }
       } catch (err: any) {
         setError(err.message);
