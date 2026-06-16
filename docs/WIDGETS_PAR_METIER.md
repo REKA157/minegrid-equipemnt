@@ -95,3 +95,17 @@ Aucun widget dédié aujourd'hui (douane gérée par le cockpit `customs_cases`)
 - **3 « remove » deviennent « transform »** : `FinancePrescoringWidget`, `NotificationsWidget`, (et `EscrowFlowWidget` était déjà enrich) — ils PEUVENT se connecter à un moteur réel.
 - **Gisement n°1** : brancher les widgets « façade saisie-utilisateur » sur les moteurs **déjà construits** — `TrustScoreWidget`→Partner Trust, `FraudWidget`→Risk Engine, `EscrowFlowWidget`→escrow bridge, `PriceEstimatorWidget`→Price Intelligence. Zéro nouveau moteur, suppression de 4 façades, gain immédiat.
 - **Bloqués data** : `MarketAlertWidget`/opportunités Monitor (→ `market_projects` non déployée), Price Intelligence (`price_observations` vide jusqu'aux ventes).
+
+---
+
+## Phase 4 — exécutions (2026-06-15)
+
+| Widget | Action | Détail |
+|---|---|---|
+| **TrustScoreWidget** | ✅ **transformé** | simulateur à saisie → assistant **Réseau Partenaire** réel (`buildNetworkForRole` : recommandé/à éviter/saturés par rôle). Anti-façade : état vide si pas de donnée. |
+| **InventoryStatusWidget** | ✅ **transformé** | **7 `Math.random` supprimés** (dormance/visibilité/clics/délai/usageTrend/usageRate) + délais codés en dur retirés. Recommandations/KPI/alertes dérivés UNIQUEMENT du réel ; champs absents masqués. |
+| **SalesEvolutionWidget** | 🗑️ **supprimé** | façade `Math.random`, code mort non monté ; version réelle `SalesEvolutionWidgetEnriched` conservée. |
+
+Validation à chaque étape : tsc + 303 tests + build. Méthode « transformer avant supprimer » appliquée : 2 transformés (branchés sur moteurs réels), 1 supprimé (irrécupérable + doublon).
+
+**Suite (même protocole)** : `FraudWidget`→Risk Engine · `EscrowFlowWidget`→escrow bridge · `PriceEstimatorWidget`→Price Intelligence · `NotificationsWidget`→transaction_events · puis les 6 autres suppressions justifiées (configs mortes, doublons DailyActions).
