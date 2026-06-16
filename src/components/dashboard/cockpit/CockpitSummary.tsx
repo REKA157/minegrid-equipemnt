@@ -75,6 +75,7 @@ import { buildLogisticienCockpit } from './buildLogisticienCockpit';
 import { buildTransitaireCockpit } from './buildTransitaireCockpit';
 import { buildFinancierCockpit } from './buildFinancierCockpit';
 import { buildQuoteSignals } from './correlations/quoteCorrelation';
+import { buildOpportunitySignals } from './correlations/opportunityCorrelation';
 import { buildDossierStageSignals } from './correlations/caseCorrelation';
 import { buildMonitorSignals } from './correlations/monitorCorrelation';
 import { buildMonitorContextBySourceIds } from '../../../utils/buildMonitorContextForLeadSourceIds';
@@ -173,7 +174,9 @@ async function loadVendeur(): Promise<CockpitSummaryData> {
   const m = buildMonitorSignals(leadList, monitorMap);
   // M12 — messages non lus → prochaine action (table messages, RLS).
   const msg = buildMessageSignals(pick(messagesR, []));
-  cockpit.priorities = [...q.priorities, ...d.priorities, ...msg.priorities, ...cockpit.priorities];
+  // Agent D/E — opportunités issues de la convergence des leads (annonces/monitor/besoins pro).
+  const opp = buildOpportunitySignals(leadList);
+  cockpit.priorities = [...opp, ...q.priorities, ...d.priorities, ...msg.priorities, ...cockpit.priorities];
   cockpit.risks = [...d.risks, ...cockpit.risks];
   cockpit.opportunities = [...cockpit.opportunities, ...q.opportunities, ...m.opportunities];
   return cockpit;
