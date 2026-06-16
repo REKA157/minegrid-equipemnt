@@ -18,7 +18,7 @@
 | **G — Network Effect Engine** | ✅ déjà livré | Partner Network (Phase 2 B/F : meilleur dispo/saturés/à éviter). |
 | **H — Cockpit Evolution** | ✅ continu | cockpits = assistants : « que faire / quelle opportunité / quel dossier bloqué / quel partenaire » via signaux M1-M12 + perf + opportunités + risque. |
 | **I — Investor Value** | ✅ implicite | trust/réseau/risque/convergence = moats & effets réseau (code, pas rapport). |
-| **B — Global Monitor Business** | ⛔ **bloqué data** | `market_projects` **non déployée + vide** → « projet→besoin→opportunité » ne peut produire que `[]` (la typologie 'monitor' du Lead Engine est PRÊTE à recevoir ces leads dès qu'ils existent). |
+| **B — Global Monitor Business** | 🟡 **partiel (lien activé)** | Le lien **Monitor → Lead → Convergence est RÉEL** : les prospects AO du Global Monitor (`GlobalMonitor.tsx`) sont désormais taggés `source:'monitor'` → classés au bon moteur par le Lead Engine. Le pipeline profond « projet→besoin→machine→vendeur » reste bloqué par `market_projects` (non déployée+vide), mais l'amorce Monitor→opportunité fonctionne sans elle. |
 | **C — Professional Demand Engine** | ⛔ **schéma absent** | aucune table « besoin pro / service_request » dans le repo ni en prod. La typologie 'pro_demand' du Lead Engine est prête, mais STOCKER un besoin pro = nouveau schéma (hors « activer l'existant »). À spécifier avant build. |
 
 **Validation Phase 3** : tsc + **299 tests** + build ✅. 1 commit (D/E) + revue adversariale.
