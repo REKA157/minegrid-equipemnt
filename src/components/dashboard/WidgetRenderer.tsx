@@ -74,7 +74,7 @@ import AIOptimizationWidget from './widgets/AIOptimizationWidget';
 import MetricWidget from './widgets/MetricWidget';
 import ChartWidget from './widgets/ChartWidget';
 import ListWidget from './widgets/ListWidget';
-import InventoryWidget from './widgets/InventoryWidget';
+import { InventoryStatusWidget } from '../../pages/enterprise/widgets/InventoryStatusWidget';
 import PerformanceWidget from './widgets/PerformanceWidget';
 import DailyActionsWidget from './widgets/DailyActionsWidget';
 import StockStatusWidget from './widgets/StockStatusWidget';
@@ -2727,13 +2727,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
       );
 
     case 'inventory':
-      return (
-        <InventoryWidget 
-          widget={widget} 
-          widgetSize={widgetSize as any}
-          onShowDetails={() => {}}
-        />
-      );
+      return <InventoryStatusWidget />;
 
     case 'equipment':
       if (widget.id === 'equipment-availability') {
