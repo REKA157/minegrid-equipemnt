@@ -437,8 +437,9 @@ export const WidgetComponent = ({
               case 'map':
                 return <MapWidget widget={widget} data={getMapData(widget.id)} />;
               case 'equipment':
-                console.log('[DEBUG] Rendu du widget equipment pour:', widget.id);
-                return <EquipmentAvailabilityWidget data={getEquipmentAvailabilityData(widget.id)} />;
+                // Donnée RÉELLE chargée plus haut via getEquipmentAvailability() (machines ×
+                // rentals × interventions), au lieu du mock à 3 engins inventés (anti-façade).
+                return <EquipmentAvailabilityWidget data={data} />;
               case 'maintenance':
                 console.log('[DEBUG] Rendu du widget maintenance pour:', widget.id);
                 return <PreventiveMaintenanceWidget data={getMaintenanceData(widget.id)} />;
