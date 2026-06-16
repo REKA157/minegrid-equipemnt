@@ -37,7 +37,9 @@ export async function loadCaseRisks(limit = 20): Promise<CaseRisk[]> {
         return { caseId: c.id, title: c.title ?? 'Dossier', risk };
       }),
     );
-    return results.filter((r) => r.risk.level !== 'low').sort((a, b) => b.risk.score - a.risk.score);
+    return results
+      .filter((r) => r.risk.level !== 'low')
+      .sort((a, b) => b.risk.score - a.risk.score || a.caseId.localeCompare(b.caseId));
   } catch {
     return [];
   }

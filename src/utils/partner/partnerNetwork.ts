@@ -52,8 +52,10 @@ export function buildNetworkRanking(
     return a.partnerId.localeCompare(b.partnerId); // tie-break déterministe
   });
 
-  const saturated = withData.filter((p) => p.openLoad >= sat);
   const toAvoid = withData.filter(isToAvoid);
+  // « À éviter » est prioritaire : un partenaire à fort taux d'échec n'est pas listé
+  // aussi comme « saturé réorientable » (évite le double-comptage / message contradictoire).
+  const saturated = withData.filter((p) => p.openLoad >= sat && !isToAvoid(p));
   const available = ranked.filter((p) => p.openLoad < sat && !isToAvoid(p));
   const best = available.length > 0 ? available[0] : null;
 
