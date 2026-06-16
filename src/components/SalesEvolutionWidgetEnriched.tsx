@@ -11,7 +11,6 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Megaphone, PlusCircle, Pencil } from 'lucide-react';
 import { notificationService, exportService } from '../services';
 import { supabaseClient } from '../utils/supabaseClient';
 import { getSalesEvolutionSeriesData } from '../utils/api';
@@ -35,6 +34,7 @@ interface SalesData {
   sales: number;
   target: number;
   previousYear: number;
+  offers: number;
 }
 
 interface Notification {
@@ -42,6 +42,8 @@ interface Notification {
   type: 'warning' | 'info' | 'success';
   message: string;
   action?: string;
+  /** Lien réel vers l'action (anti-façade : pas d'action non branchée). */
+  href?: string;
 }
 
 interface AISuggestion {
@@ -77,9 +79,6 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
   const [aiSuggestionsSource, setAiSuggestionsSource] = useState<'monitor' | 'local' | null>(null);
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
-  const [showPromoModal, setShowPromoModal] = useState(false);
-  const [showEquipmentModal, setShowEquipmentModal] = useState(false);
-  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [forecastPredictions, setForecastPredictions] = useState<AIPrediction[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastSource, setForecastSource] = useState<'monitor' | 'local' | null>(null);
@@ -89,33 +88,58 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
 
   const { currentCurrency, rates } = useCurrencyStore();
 
+  // EXPLICATION DES CAUSES + ACTIONS RÉELLES (remplace les pourcentages nus). Chaque
+  // message s'appuie sur des chiffres RÉELS du mois (CA conclu, nb d'offres, écart cible,
+  // vs an dernier) et propose une action BRANCHÉE (#leads). Anti-façade : pas d'action vide.
   const generateNotifications = (rows: SalesData[]) => {
-    const currentMonth = rows[rows.length - 1];
-    const notifications: Notification[] = [];
+    const cur = rows[rows.length - 1];
+    if (!cur) {
+      setNotifications([]);
+      return;
+    }
+    const out: Notification[] = [];
+    const money = (v: number) => formatMadMoney(v, currentCurrency, rates);
 
-    if (currentMonth && currentMonth.target > 0 && currentMonth.sales < currentMonth.target * 0.85) {
-      notifications.push({
-        id: '1',
+    // Cause : objectif non atteint -> expliquer (CA conclu vs cible + activité offres).
+    if (cur.target > 0 && cur.sales < cur.target * 0.85) {
+      const gapPct = Math.round(((cur.target - cur.sales) / cur.target) * 100);
+      const cause =
+        cur.offers > 0
+          ? `${cur.offers} offre(s) envoyée(s) mais peu de ventes conclues.`
+          : 'Aucune offre envoyée ce mois.';
+      out.push({
+        id: 'below-target',
         type: 'warning',
-        message: `Baisse de ${Math.round(((currentMonth.target - currentMonth.sales) / currentMonth.target) * 100)}% par rapport à l'objectif`,
-        action: 'Corriger ce mois'
+        message: `Objectif à -${gapPct}% : ${money(cur.sales)} conclus sur ${money(cur.target)} visés. ${cause}`,
+        action: 'Relancer mes leads',
+        href: '#leads',
       });
     }
 
-    if (
-      currentMonth &&
-      currentMonth.previousYear > 0 &&
-      currentMonth.sales > currentMonth.previousYear * 1.2
-    ) {
-      notifications.push({
-        id: '2',
+    // Cause : des offres mais zéro vente conclue -> convertir.
+    if (cur.sales === 0 && cur.offers > 0) {
+      out.push({
+        id: 'offers-no-sale',
+        type: 'info',
+        message: `${cur.offers} offre(s) en attente, aucune vente conclue ce mois : convertir vos offres en dossiers.`,
+        action: 'Voir le pipeline',
+        href: '#leads',
+      });
+    }
+
+    // Cause : croissance vs an dernier -> capitaliser.
+    if (cur.previousYear > 0 && cur.sales > cur.previousYear * 1.2) {
+      const growth = Math.round(((cur.sales - cur.previousYear) / cur.previousYear) * 100);
+      out.push({
+        id: 'growth',
         type: 'success',
-        message: `Croissance de ${Math.round(((currentMonth.sales - currentMonth.previousYear) / currentMonth.previousYear) * 100)}% vs année précédente`,
-        action: 'Capitaliser'
+        message: `+${growth}% vs l'an dernier (${money(cur.sales)} contre ${money(cur.previousYear)}) : capitaliser sur cette dynamique.`,
+        action: 'Pousser mes opportunités',
+        href: '#leads',
       });
     }
 
-    setNotifications(notifications);
+    setNotifications(out);
   };
 
   // Suggestions RÉELLES : recommandations IA serveur (monitor) ou, à défaut,
@@ -161,22 +185,12 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
         sales: r.sales,
         target: r.target,
         previousYear: r.previousYear,
+        offers: r.offers ?? 0,
       }));
       setSalesData(normalized);
       generateNotifications(normalized);
-      const last = normalized[normalized.length - 1]?.sales ?? 0;
-      const mean =
-        normalized.length > 0
-          ? Math.round(normalized.reduce((s, r) => s + r.sales, 0) / normalized.length)
-          : 0;
-      const peak = normalized.reduce((m, r) => Math.max(m, r.sales), 0);
-      setBenchmarkData({
-        sector: 'Équipements BTP (est.)',
-        average: mean,
-        top25: Math.round(peak * 1.1),
-        yourPerformance: last,
-        note: 'Basé sur votre pipeline conclu et vos offres (même base que le score commercial).',
-      });
+      // Anti-façade : AUCUN benchmark fabriqué à partir de ses propres chiffres. Le
+      // benchmark secteur réel s'obtient à la demande (bouton « Benchmark secteur » -> serveur).
     } catch (error) {
       console.error('Erreur lors du chargement des données de vente:', error);
       notificationService.error('Erreur de chargement', 'Impossible de charger l’évolution des ventes');
@@ -284,27 +298,11 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
     button.style.cursor = 'not-allowed';
 
     switch (action) {
-      case 'publish_promo':
-        handlePublishPromo();
-        break;
-      case 'add_equipment':
-        handleAddEquipment();
-        break;
-      case 'correct_month':
-        handleCorrectMonth();
-        break;
       case 'ai_forecast':
         handleAIForecast();
         break;
       case 'export_data':
         handleExportData();
-        break;
-      case 'capitalize':
-        notificationService.success(
-          'Capitaliser sur la croissance',
-          'Ouverture de l’analyse détaillée pour prolonger cette dynamique.'
-        );
-        setShowDetails(true);
         break;
       default:
         notificationService.warning('Action non reconnue', `L'action "${action}" n'est pas implémentée`);
@@ -315,105 +313,6 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
       button.style.opacity = '1';
       button.style.cursor = 'pointer';
     }, 280);
-  };
-
-  const handleNotificationAction = (notif: Notification, e: MouseEvent<HTMLButtonElement>) => {
-    if (notif.action === 'Corriger ce mois') {
-      handleQuickAction(e, 'correct_month');
-      return;
-    }
-    if (notif.action === 'Capitaliser') {
-      handleQuickAction(e, 'capitalize');
-      return;
-    }
-    notificationService.info('Notification', notif.message);
-  };
-
-  const handlePublishPromo = () => {
-    try {
-      // Action immédiate
-      notificationService.info('Création de promotion', 'Ouverture du formulaire de promotion...');
-      setShowPromoModal(true);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        // TODO: Implémenter la vraie logique de création de promotion
-        // const promotionData = {
-        //   title: 'Promotion spéciale',
-        //   description: 'Offre limitée sur les équipements',
-        //   discount: 15,
-        //   startDate: new Date().toISOString(),
-        //   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        //   equipmentIds: [],
-        //   status: 'active'
-        // };
-        
-        // apiService.createPromotion(promotionData).then(response => {
-        //   if (response.success) {
-        //     notificationService.promotionCreated(promotionData.title);
-        //   } else {
-        //     notificationService.apiError('création de promotion', response.error || 'Erreur inconnue');
-        //   }
-        // }).catch(error => {
-        //   console.error('Erreur API création promotion:', error);
-        // });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la création de promotion:', error);
-      notificationService.error('Erreur', 'Impossible de créer la promotion');
-    }
-  };
-
-  const handleAddEquipment = () => {
-    try {
-      // Action immédiate
-      notificationService.info('Ajout d\'équipement', 'Redirection vers le formulaire d\'ajout...');
-      setShowEquipmentModal(true);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        // TODO: Implémenter la vraie logique d'ajout d'équipement
-        // Rediriger vers la page d'ajout d'équipement ou ouvrir un modal
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout d\'équipement:', error);
-      notificationService.error('Erreur', 'Impossible d\'ajouter l\'équipement');
-    }
-  };
-
-  const handleCorrectMonth = () => {
-    try {
-      // Action immédiate
-      notificationService.info('Correction des données', 'Ouverture du formulaire de correction...');
-      setShowCorrectionModal(true);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        // TODO: Implémenter la vraie logique de correction
-        // const correctionData = {
-        //   month: 'Juin',
-        //   newSales: 72000,
-        //   reason: 'Correction des données de vente'
-        // };
-        
-        // apiService.updateSalesData(correctionData).then(response => {
-        //   if (response.success) {
-        //     notificationService.success('Données corrigées', 'Les données de vente ont été mises à jour');
-        //     loadSalesData(); // Recharger les données
-        //   } else {
-        //     notificationService.apiError('correction des données', response.error || 'Erreur inconnue');
-        //   }
-        // }).catch(error => {
-        //   console.error('Erreur API correction données:', error);
-        // });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la correction:', error);
-      notificationService.error('Erreur', 'Impossible de corriger les données');
-    }
   };
 
   const formatPredictionMetricValue = (metric: string, value: number) => {
@@ -638,14 +537,13 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
               }`}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">{notif.message}</span>
-                  {notif.action && (
-                    <button
-                      type="button"
-                      onClick={(ev) => handleNotificationAction(notif, ev)}
+                  {notif.action && notif.href && (
+                    <a
+                      href={notif.href}
                       className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50"
                     >
                       {notif.action}
-                    </button>
+                    </a>
                   )}
                 </div>
               </div>
@@ -732,7 +630,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
       {/* Raccourcis (une seule barre, sans doublon) */}
       <div className="border-t border-gray-100 pt-4 mb-4">
         <p className="text-xs text-gray-500 mb-2">
-          Raccourcis navigation et modales. Les actions « promo / ajout / correction » ouvrent le même flux que les notifications du widget.
+          Raccourcis : analyse détaillée, prévision et benchmark (serveur), export des données réelles.
         </p>
         <div className="flex gap-2 flex-wrap">
           <button
@@ -762,30 +660,6 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
             className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
           >
             Exporter
-          </button>
-          <button
-            type="button"
-            onClick={(ev) => handleQuickAction(ev, 'publish_promo')}
-            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center gap-1.5"
-          >
-            <Megaphone className="w-4 h-4 shrink-0" />
-            Publier promo
-          </button>
-          <button
-            type="button"
-            onClick={(ev) => handleQuickAction(ev, 'add_equipment')}
-            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center gap-1.5"
-          >
-            <PlusCircle className="w-4 h-4 shrink-0" />
-            Ajouter équipement
-          </button>
-          <button
-            type="button"
-            onClick={(ev) => handleQuickAction(ev, 'correct_month')}
-            className="px-3 py-1.5 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors flex items-center gap-1.5"
-          >
-            <Pencil className="w-4 h-4 shrink-0" />
-            Corriger ce mois
           </button>
         </div>
       </div>
@@ -987,81 +861,6 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
         </div>
       )}
 
-      {/* Modales pour les actions rapides */}
-      {showPromoModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Créer une promotion</h3>
-            <p className="text-gray-600 mb-4">
-              Formulaire de création de promotion (à implémenter).
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowPromoModal(false)}
-                className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200"
-              >
-                Créer
-              </button>
-              <button
-                onClick={() => setShowPromoModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showEquipmentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Ajouter un équipement</h3>
-            <p className="text-gray-600 mb-4">
-              Formulaire d'ajout d'équipement (à implémenter).
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowEquipmentModal(false)}
-                className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200"
-              >
-                Ajouter
-              </button>
-              <button
-                onClick={() => setShowEquipmentModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showCorrectionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Corriger les données</h3>
-            <p className="text-gray-600 mb-4">
-              Formulaire de correction des données (à implémenter).
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowCorrectionModal(false)}
-                className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200"
-              >
-                Corriger
-              </button>
-              <button
-                onClick={() => setShowCorrectionModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

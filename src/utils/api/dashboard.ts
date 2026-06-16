@@ -474,14 +474,14 @@ export async function getSalesPerformanceData(): Promise<SalesPerformanceData> {
   }
 }
 
-const OFFER_VALUE_ESTIMATE_MAD = 50000;
 const YEARLY_SALES_TARGET_MAD = 3_000_000;
 
 function monthKeyYm(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Série CA mensuelle : max(somme leads conclus, offres × estimation) — même logique que getSalesPerformanceData. */
+/** Série CA mensuelle RÉELLE : somme des leads conclus (value). Le nombre d'offres est
+ *  exposé à part (activité), JAMAIS converti en faux CA (anti-façade). */
 export async function getSalesEvolutionSeriesData(
   monthsBack = 6,
 ): Promise<SalesEvolutionMonthPoint[]> {
@@ -511,6 +511,7 @@ export async function getSalesEvolutionSeriesData(
         sales: 0,
         target: monthlyTarget,
         previousYear: 0,
+        offers: 0,
       });
     }
     return out;
@@ -555,19 +556,17 @@ export async function getSalesEvolutionSeriesData(
       const key = `${y}-${String(m + 1).padStart(2, '0')}`;
       const prevKey = `${y - 1}-${String(m + 1).padStart(2, '0')}`;
 
-      const won = wonByMonth.get(key) || 0;
+      // CA RÉEL = somme des leads conclus du mois (value). Aucune estimation d'offre.
+      const sales = wonByMonth.get(key) || 0;
       const nOff = offersByMonth.get(key) || 0;
-      const sales = Math.max(won, nOff * OFFER_VALUE_ESTIMATE_MAD);
-
-      const prevWon = wonByMonth.get(prevKey) || 0;
-      const prevOff = offersByMonth.get(prevKey) || 0;
-      const previousYear = Math.max(prevWon, prevOff * OFFER_VALUE_ESTIMATE_MAD);
+      const previousYear = wonByMonth.get(prevKey) || 0;
 
       out.push({
         month: `${MONTHS_FR[m]} ${y}`,
         sales,
         target: monthlyTarget,
         previousYear,
+        offers: nOff,
       });
     }
 

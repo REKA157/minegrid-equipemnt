@@ -165,6 +165,8 @@ export interface SalesEvolutionMonthPoint {
   sales: number;
   target: number;
   previousYear: number;
+  /** Nb d'offres envoyées ce mois (activité réelle, jamais convertie en CA). */
+  offers: number;
 }
 
 export interface SalesPerformanceData {
