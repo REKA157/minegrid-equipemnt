@@ -33,41 +33,31 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
   const [showSalesActions, setShowSalesActions] = useState(false);
   const { formatCurrency } = useWidgetMadCurrency();
 
-  // Fonction pour générer des recommandations IA
+  // Recommandation fondée UNIQUEMENT sur des signaux RÉELS (anti-façade : aucune
+  // valeur fabriquée ; les signaux dormance/visibilité ne sont utilisés que s'ils existent).
   const generateAIRecommendation = (item: any) => {
-    const dormantDays = item.dormantDays || Math.floor(Math.random() * 120) + 1;
-    const visibilityRate = item.visibilityRate || Math.floor(Math.random() * 100);
-    const clickCount = item.clickCount || Math.floor(Math.random() * 50);
-    
-    if (dormantDays > 90 && clickCount < 5) {
-      return {
-        type: 'critical',
-        message: `Le ${item.title} est en stock depuis ${dormantDays} jours sans contact. Proposer livraison gratuite ?`,
-        action: 'Baisser le prix de 15%',
-        priority: 'high'
-      };
-    } else if (dormantDays > 60) {
-      return {
-        type: 'warning',
-        message: `Stock dormant depuis ${dormantDays} jours. Booster la visibilité ?`,
-        action: 'Mettre en avant (Premium)',
-        priority: 'medium'
-      };
-    } else if (visibilityRate < 30) {
-      return {
-        type: 'info',
-        message: `Faible visibilité (${visibilityRate}%). Améliorer le référencement ?`,
-        action: 'Optimiser les mots-clés',
-        priority: 'low'
-      };
-    } else {
-      return {
-        type: 'success',
-        message: 'Performance correcte',
-        action: 'Maintenir',
-        priority: 'low'
-      };
+    const stock = typeof item.stock === 'number' ? item.stock : 0;
+    const minStock = typeof item.minStock === 'number' ? item.minStock : 0;
+    const dormantDays: number | null = typeof item.dormantDays === 'number' ? item.dormantDays : null;
+    const visibilityRate: number | null = typeof item.visibilityRate === 'number' ? item.visibilityRate : null;
+    const clickCount: number | null = typeof item.clickCount === 'number' ? item.clickCount : null;
+
+    if (stock <= 0) {
+      return { type: 'critical', message: `${item.title} en rupture de stock.`, action: 'Réapprovisionner', priority: 'high' };
     }
+    if (dormantDays != null && dormantDays > 90 && (clickCount == null || clickCount < 5)) {
+      return { type: 'critical', message: `${item.title} en stock depuis ${dormantDays} jours sans contact.`, action: 'Baisser le prix', priority: 'high' };
+    }
+    if (dormantDays != null && dormantDays > 60) {
+      return { type: 'warning', message: `Stock dormant depuis ${dormantDays} jours.`, action: 'Booster la visibilité', priority: 'medium' };
+    }
+    if (visibilityRate != null && visibilityRate < 30) {
+      return { type: 'info', message: `Faible visibilité (${visibilityRate}%).`, action: 'Optimiser les mots-clés', priority: 'low' };
+    }
+    if (minStock > 0 && stock < minStock) {
+      return { type: 'warning', message: `${item.title} sous le seuil minimum (${stock}/${minStock}).`, action: 'Réapprovisionner', priority: 'medium' };
+    }
+    return { type: 'success', message: 'Aucune alerte sur données réelles.', action: 'Maintenir', priority: 'low' };
   };
 
   // Enrichir les données avec des informations de vente et de visibilité
@@ -81,13 +71,13 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
             ? item.min
             : 0;
 
-      const dormantDays = item.dormantDays ?? Math.floor(Math.random() * 120) + 1;
-      const visibilityRate = item.visibilityRate ?? Math.floor(Math.random() * 100);
-      const averageSalesTime = item.averageSalesTime ?? Math.floor(Math.random() * 90) + 30;
-      const clickCount = item.clickCount ?? Math.floor(Math.random() * 50);
-      const lastContact =
-        item.lastContact ||
-        new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString();
+      // Anti-façade : on N'INVENTE PAS ces signaux. Valeur réelle si fournie, sinon null
+      // (ils ne déclencheront alors ni recommandation ni alerte fondée sur du vide).
+      const dormantDays = typeof item.dormantDays === 'number' ? item.dormantDays : null;
+      const visibilityRate = typeof item.visibilityRate === 'number' ? item.visibilityRate : null;
+      const averageSalesTime = typeof item.averageSalesTime === 'number' ? item.averageSalesTime : null;
+      const clickCount = typeof item.clickCount === 'number' ? item.clickCount : null;
+      const lastContact = item.lastContact ?? null;
       const priceReduction = item.priceReduction || 0;
       const premiumBoost = item.premiumBoost || false;
 
@@ -106,8 +96,8 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
       if (!status) {
         if (stock <= 0) status = 'En rupture';
         else if (minStock > 0 && stock < minStock) status = 'Stock faible';
-        else if (dormantDays > 60) status = 'Stock dormant';
-        else if (visibilityRate < 30) status = 'Faible visibilité';
+        else if (dormantDays != null && dormantDays > 60) status = 'Stock dormant';
+        else if (visibilityRate != null && visibilityRate < 30) status = 'Faible visibilité';
         else status = 'Disponible';
       }
 
@@ -307,17 +297,22 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
   // Calculer les KPI de vente
   const getSalesKPIs = () => {
     const totalItems = enrichedData.length;
-    const dormantItems = enrichedData.filter(item => (item.dormantDays || 0) > 60).length;
-    const lowVisibilityItems = enrichedData.filter(item => (item.visibilityRate || 0) < 30).length;
-    const avgSalesTime = enrichedData.reduce((sum, item) => sum + (item.averageSalesTime || 0), 0) / totalItems;
-    const stockRotationRate = enrichedData.filter(item => (item.dormantDays || 0) < 30).length / totalItems * 100;
+    // Anti-façade : on ne compte/agrège QUE sur des valeurs réellement présentes (!= null).
+    const dormantItems = enrichedData.filter((item) => item.dormantDays != null && item.dormantDays > 60).length;
+    const lowVisibilityItems = enrichedData.filter((item) => item.visibilityRate != null && item.visibilityRate < 30).length;
+    const salesTimes = enrichedData.map((item) => item.averageSalesTime).filter((v: any): v is number => typeof v === 'number');
+    const avgSalesTime = salesTimes.length ? salesTimes.reduce((s: number, v: number) => s + v, 0) / salesTimes.length : null;
+    const withDormant = enrichedData.filter((item) => item.dormantDays != null);
+    const stockRotationRate = withDormant.length
+      ? (withDormant.filter((item) => item.dormantDays < 30).length / withDormant.length) * 100
+      : null;
 
     return {
       totalItems,
       dormantItems,
       lowVisibilityItems,
-      avgSalesTime: Math.round(avgSalesTime),
-      stockRotationRate: Math.round(stockRotationRate)
+      avgSalesTime: avgSalesTime != null ? Math.round(avgSalesTime) : null,
+      stockRotationRate: stockRotationRate != null ? Math.round(stockRotationRate) : null,
     };
   };
 
@@ -342,15 +337,14 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
   };
 
   const getStockTrends = () => {
-    // Simulation de tendances de stock
-    const recentUsage = data.map(item => ({
-      ...item,
-      usageTrend: Math.random() > 0.5 ? 'increasing' : 'decreasing',
-      usageRate: Math.random() * 100,
-      daysUntilEmpty: item.stock > 0 ? Math.floor(item.stock / (item.average_usage || 1)) : 0
-    }));
-
-    return recentUsage;
+    // Anti-façade : aucune tendance simulée. On dérive uniquement daysUntilEmpty du stock RÉEL.
+    return data
+      .map((item) => ({
+        ...item,
+        daysUntilEmpty: item.stock > 0 ? Math.floor(item.stock / (item.average_usage || 1)) : null,
+      }))
+      // On n'affiche une tendance que si la donnée réelle existe (champ `change`).
+      .filter((item: any) => typeof item.change === 'number');
   };
 
   const generateStockRecommendations = () => {
@@ -424,7 +418,9 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
               <div className="text-gray-600">Faible visibilité</div>
             </div>
             <div className="text-center">
-              <div className="font-semibold text-blue-600">{getSalesKPIs().avgSalesTime}j</div>
+              <div className="font-semibold text-blue-600">
+                {getSalesKPIs().avgSalesTime != null ? `${getSalesKPIs().avgSalesTime}j` : '—'}
+              </div>
               <div className="text-gray-600">Temps de vente</div>
             </div>
           </div>
@@ -478,7 +474,8 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
                     <div className="flex-1">
                       <div className="text-sm font-medium text-red-900">{item.title}</div>
                       <div className="text-xs text-red-700">
-                        En stock depuis {item.dormantDays} jours • Visibilité: {item.visibilityRate}%
+                        En stock depuis {item.dormantDays} jours
+                        {item.visibilityRate != null ? ` • Visibilité: ${item.visibilityRate}%` : ''}
                       </div>
                       <div className="text-xs text-red-600 mt-1">
                         💡 {item.aiRecommendation?.message}
@@ -525,18 +522,16 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
             🤖 Recommandations IA - Actions prioritaires
           </h4>
           <div className="space-y-3">
-            {/* Temps moyen de vente par type */}
-            <div className="flex items-start space-x-2">
-              <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-blue-700">
-                <strong>Temps moyen de vente :</strong> {getSalesKPIs().avgSalesTime} jours
-                <br />
-                <span className="text-xs text-blue-600">
-                  • Pelles hydrauliques : 45 jours • Bulldozers : 67 jours • Chargeurs : 38 jours
-                </span>
+            {/* Temps moyen de vente — affiché uniquement si calculable sur données réelles */}
+            {getSalesKPIs().avgSalesTime != null && (
+              <div className="flex items-start space-x-2">
+                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-700">
+                  <strong>Temps moyen de vente :</strong> {getSalesKPIs().avgSalesTime} jours
+                </div>
               </div>
-            </div>
-            
+            )}
+
             {/* Actions recommandées */}
             {enrichedData.filter(item => item.aiRecommendation?.type === 'critical').length > 0 && (
               <div className="flex items-start space-x-2">
@@ -557,12 +552,13 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
               <div className="text-sm text-blue-700">
                 <strong>💡 Astuce IA :</strong> 
                 {(() => {
-                  const dormantItems = enrichedData.filter(item => (item.dormantDays || 0) > 90);
+                  const dormantItems = enrichedData.filter((item) => item.dormantDays != null && item.dormantDays > 90);
+                  const lowVis = enrichedData.filter((item) => item.visibilityRate != null && item.visibilityRate < 30);
                   if (dormantItems.length > 0) {
                     const oldestItem = dormantItems[0];
                     return ` Le ${oldestItem.title} est en stock depuis ${oldestItem.dormantDays} jours. Proposer livraison gratuite ?`;
-                  } else if (enrichedData.filter(item => (item.visibilityRate || 0) < 30).length > 0) {
-                    return ` ${enrichedData.filter(item => (item.visibilityRate || 0) < 30).length} articles ont une faible visibilité. Améliorer le référencement ?`;
+                  } else if (lowVis.length > 0) {
+                    return ` ${lowVis.length} article(s) ont une faible visibilité. Améliorer le référencement ?`;
                   } else {
                     return ` Performance correcte. Maintenir les prix et la visibilité actuels.`;
                   }
@@ -595,7 +591,7 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
             </button>
             <button 
               onClick={() => {
-                const lowVisibilityItems = enrichedData.filter(item => (item.visibilityRate || 0) < 30);
+                const lowVisibilityItems = enrichedData.filter((item) => item.visibilityRate != null && item.visibilityRate < 30);
                 if (lowVisibilityItems.length > 0) {
                   handleBoostVisibility(lowVisibilityItems[0]);
                 }
@@ -714,31 +710,44 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
                 </div>
               </div>
 
-              {/* Informations de vente et visibilité */}
-              <div className="space-y-2 mb-3 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 text-xs">Stock dormant:</span>
-                    <span className={`text-xs ${item.dormantDays > 60 ? 'text-orange-600 font-semibold' : 'text-gray-900'}`}>
-                      {item.dormantDays}j
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 text-xs">Visibilité:</span>
-                    <span className={`text-xs ${item.visibilityRate < 30 ? 'text-red-600 font-semibold' : 'text-gray-900'}`}>
-                      {item.visibilityRate}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 text-xs">Temps vente:</span>
-                    <span className="text-gray-900 text-xs">{item.averageSalesTime}j</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 text-xs">Clics:</span>
-                    <span className="text-gray-900 text-xs">{item.clickCount}</span>
+              {/* Informations de vente et visibilité — affichées UNIQUEMENT si réelles (anti-façade) */}
+              {(item.dormantDays != null ||
+                item.visibilityRate != null ||
+                item.averageSalesTime != null ||
+                item.clickCount != null) && (
+                <div className="space-y-2 mb-3 text-sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    {item.dormantDays != null && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 text-xs">Stock dormant:</span>
+                        <span className={`text-xs ${item.dormantDays > 60 ? 'text-orange-600 font-semibold' : 'text-gray-900'}`}>
+                          {item.dormantDays}j
+                        </span>
+                      </div>
+                    )}
+                    {item.visibilityRate != null && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 text-xs">Visibilité:</span>
+                        <span className={`text-xs ${item.visibilityRate < 30 ? 'text-red-600 font-semibold' : 'text-gray-900'}`}>
+                          {item.visibilityRate}%
+                        </span>
+                      </div>
+                    )}
+                    {item.averageSalesTime != null && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 text-xs">Temps vente:</span>
+                        <span className="text-gray-900 text-xs">{item.averageSalesTime}j</span>
+                      </div>
+                    )}
+                    {item.clickCount != null && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 text-xs">Clics:</span>
+                        <span className="text-gray-900 text-xs">{item.clickCount}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Recommandation IA */}
               {item.aiRecommendation && (
@@ -1182,12 +1191,17 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <div className="text-sm text-gray-600">Délai de rotation des stocks</div>
-                    <div className="text-lg font-semibold text-gray-900">{getSalesKPIs().avgSalesTime} jours</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {getSalesKPIs().avgSalesTime != null ? `${getSalesKPIs().avgSalesTime} jours` : '—'}
+                    </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Taux de visibilité moyen</div>
                     <div className="text-lg font-semibold text-gray-900">
-                      {Math.round(enrichedData.reduce((sum, item) => sum + (item.visibilityRate || 0), 0) / enrichedData.length)}%
+                      {(() => {
+                        const vis = enrichedData.map((i) => i.visibilityRate).filter((v: any): v is number => typeof v === 'number');
+                        return vis.length ? `${Math.round(vis.reduce((s: number, v: number) => s + v, 0) / vis.length)}%` : '—';
+                      })()}
                     </div>
                   </div>
                   <div>
@@ -1274,7 +1288,8 @@ export const InventoryStatusWidget = ({ data }: { data: any[] }) => {
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">{item.title}</div>
                         <div className="text-sm text-gray-600 mt-1">
-                          Stock dormant: {item.dormantDays} jours | Visibilité: {item.visibilityRate}%
+                          {item.dormantDays != null ? `Stock dormant: ${item.dormantDays} jours` : 'Stock dormant: —'}
+                          {item.visibilityRate != null ? ` | Visibilité: ${item.visibilityRate}%` : ''}
                         </div>
                         <div className="text-sm text-red-600 mt-1">{item.aiRecommendation?.message}</div>
                       </div>
