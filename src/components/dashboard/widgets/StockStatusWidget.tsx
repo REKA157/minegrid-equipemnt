@@ -304,9 +304,9 @@ function computeVisibilityScore(input: {
 }
 
 const StockStatusWidget = () => {
-  // Montrer des données de démo immédiatement pour éviter l'état "0/0"
-  // tant que les appels Supabase ne sont pas terminés (ou en cas d'erreur réseau).
-  const [equipments, setEquipments] = useState<Equipment[]>(() => getDemoEquipments());
+  // Anti-façade : démarrer VIDE (le spinner de chargement couvre l'attente Supabase) ;
+  // aucune machine de démonstration. Liste vide -> état vide honnête.
+  const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('Toutes');
   const [selectedAnciennete, setSelectedAnciennete] = useState('Toutes');
@@ -464,7 +464,7 @@ const StockStatusWidget = () => {
       
       if (!user) {
         logger.error("❌ Aucun utilisateur connecté");
-        setEquipments(getDemoEquipments());
+        setEquipments([]);
         setLeadStockRows([]);
         setMarketReferenceMachines([]);
         return;
@@ -708,8 +708,8 @@ const StockStatusWidget = () => {
       
     } catch (error) {
       logger.error("❌ Erreur lors du chargement des données réelles du stock:", error);
-      // En cas d'erreur, utiliser des données de démonstration
-      setEquipments(getDemoEquipments());
+      // Anti-façade : en cas d'erreur, rester VIDE (pas de stock de démonstration).
+      setEquipments([]);
       setPromotions([]);
       setLeadStockRows([]);
       setMarketReferenceMachines([]);
@@ -739,57 +739,6 @@ const StockStatusWidget = () => {
     }
     return 'Performance correcte. Continuez à surveiller les métriques';
   };
-
-  // Données de démonstration
-  function getDemoEquipments(): Equipment[] {
-    return [
-    {
-      id: 1,
-      name: 'Pelle hydraulique CAT 320',
-      category: 'Pelle',
-      daysInStock: 45,
-      views: 120,
-      clicks: 15,
-      contacts: 3,
-      visibilityScore: 75,
-      aiTip: 'Ajoutez plus de photos pour améliorer la visibilité de 15%',
-      alert: true,
-      price: 850000,
-      photos: ['photo1.jpg', 'photo2.jpg'],
-      description: 'Pelle hydraulique en excellent état'
-    },
-    {
-      id: 2,
-      name: 'Chargeur frontal Volvo L120',
-      category: 'Chargeur',
-      daysInStock: 30,
-      views: 85,
-      clicks: 12,
-      contacts: 2,
-      visibilityScore: 65,
-      aiTip: 'Optimisez le prix pour augmenter les contacts de 25%',
-      alert: false,
-      price: 650000,
-      photos: ['photo3.jpg'],
-      description: 'Chargeur frontal récent'
-    },
-    {
-      id: 3,
-      name: 'Bouteur D6T CAT',
-      category: 'Bouteur',
-      daysInStock: 90,
-      views: 45,
-      clicks: 5,
-      contacts: 1,
-      visibilityScore: 35,
-      aiTip: 'Équipement en stock depuis longtemps. Créez une offre flash pour le vendre rapidement',
-      alert: true,
-      price: 450000,
-      photos: [],
-      description: 'Bouteur en bon état'
-    }
-    ];
-  }
 
   // Actions rapides avec réactivité maximale
   const handleQuickAction = (
