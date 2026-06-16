@@ -175,28 +175,11 @@ class AIWidgetService {
     return [];
   }
 
-  private async buildLocalSalesPredictions(userId: string): Promise<AIPrediction[]> {
-    const salesData = await this.getSellerMachines(userId);
-    return [
-      {
-        metric: 'Ventes mensuelles',
-        currentValue: this.calculateCurrentSales(salesData),
-        predictedValue: this.predictNextMonthSales(salesData),
-        confidence: 0.85,
-        timeframe: '30d',
-        trend: 'up',
-        factors: ['Saisonnalité positive', 'Nouveaux prospects', 'Optimisation SEO'],
-      },
-      {
-        metric: 'Taux de conversion',
-        currentValue: this.calculateConversionRate(salesData),
-        predictedValue: this.predictConversionRate(salesData),
-        confidence: 0.78,
-        timeframe: '30d',
-        trend: 'stable',
-        factors: ['Qualité des leads', 'Prix compétitifs', 'Support client'],
-      },
-    ];
+  private async buildLocalSalesPredictions(_userId: string): Promise<AIPrediction[]> {
+    // Anti-façade : aucune prédiction fabriquée (confiance/tendance/facteurs inventés).
+    // Quand le service IA (monitor) est indisponible, on ne fabrique RIEN -> le widget
+    // affiche son état honnête « aucune donnée de prévision ».
+    return [];
   }
 
   // 🧠 ANALYSE PRÉDICTIVE DES VENTES
@@ -230,23 +213,8 @@ class AIWidgetService {
     }
   }
 
-  private async buildLocalSalesBenchmark(userId: string): Promise<AISalesBenchmark> {
-    const machines = await this.getSellerMachines(userId);
-    const count = machines.length;
-    const yourPerformance = count * 15000;
-    return {
-      sector: 'Équipements BTP',
-      average: 65000,
-      top25: 85000,
-      yourPerformance,
-      currency: 'MAD',
-      note:
-        'Estimation alignée sur le référentiel interne (annonces actives × base mensuelle indicative).',
-    };
-  }
-
   async getSalesBenchmarkWithSource(userId: string): Promise<{
-    data: AISalesBenchmark;
+    data: AISalesBenchmark | null;
     source: 'monitor' | 'local';
   }> {
     try {
@@ -270,13 +238,15 @@ class AIWidgetService {
         };
       }
       return {
-        data: await this.buildLocalSalesBenchmark(userId),
+        // Anti-façade : pas de benchmark secteur fabriqué hors monitor (moyenne/top25 inventés).
+        data: null,
         source: 'local',
       };
     } catch (error) {
       console.error('Erreur benchmark ventes:', error);
       return {
-        data: await this.buildLocalSalesBenchmark(userId),
+        // Anti-façade : pas de benchmark secteur fabriqué hors monitor (moyenne/top25 inventés).
+        data: null,
         source: 'local',
       };
     }
@@ -517,34 +487,10 @@ class AIWidgetService {
         });
       }
 
-      // Garantir un socle d'optimisations affichables pour éviter les widgets vides.
-      if (suggestions.length === 0) {
-        suggestions.push(
-          {
-            type: 'seo_optimization',
-            title: 'Optimiser les titres des annonces',
-            description: 'Des titres plus précis augmentent la visibilite dans les recherches.',
-            actions: [
-              'Inclure marque, modele et annee',
-              'Ajouter la localisation dans le titre',
-              'Eviter les titres generiques',
-            ],
-            expectedImpact: 'Amelioration de la visibilite de 15-25%',
-          },
-          {
-            type: 'content_optimization',
-            title: 'Completer les descriptions techniques',
-            description: 'Les annonces detaillees convertissent mieux les visiteurs en contacts.',
-            actions: [
-              'Ajouter specs principales (heures, etat, accessoires)',
-              'Preciser disponibilite et delai de livraison',
-              'Ajouter un appel a l action clair',
-            ],
-            expectedImpact: 'Hausse du taux de contact de 10-15%',
-          }
-        );
-      }
-
+      // Anti-façade : PAS de socle d'optimisations génériques aux impacts inventés pour
+      // « remplir » le widget. Si aucune optimisation réelle (prix/SEO) n'est détectée sur
+      // les annonces du vendeur, on renvoie [] -> le widget affiche son état vide honnête
+      // (« Aucune optimisation suggérée »).
       return suggestions;
     } catch (error) {
       console.error('Erreur suggestions optimisation:', error);

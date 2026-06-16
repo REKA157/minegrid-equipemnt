@@ -356,20 +356,22 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
 
         const { data, source } = await aiWidgetService.getSalesBenchmarkWithSource(userId);
         setBenchmarkModalData(data);
-        setBenchmarkModalSource(source);
-        setBenchmarkData((prev) =>
-          prev
-            ? {
-                ...prev,
-                sector: data.sector,
-                average: data.average,
-                top25: data.top25,
-                yourPerformance: data.yourPerformance,
-                source,
-                note: data.note,
-              }
-            : prev
-        );
+        setBenchmarkModalSource(data ? source : null);
+        if (data) {
+          setBenchmarkData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  sector: data.sector,
+                  average: data.average,
+                  top25: data.top25,
+                  yourPerformance: data.yourPerformance,
+                  source,
+                  note: data.note,
+                }
+              : prev,
+          );
+        }
       } catch (e) {
         console.error('Benchmark secteur:', e);
         notificationService.error('Benchmark', 'Impossible de charger les données.');
