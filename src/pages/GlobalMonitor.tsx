@@ -199,7 +199,7 @@ export default function GlobalMonitor() {
       contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
       contact_phone: contact.phone || undefined,
       contact_email: contact.email || undefined,
-      source: 'manual',
+      source: 'monitor', // lead RÉELLEMENT issu du Global Monitor (AO) -> convergence moteur 'monitor'
       source_id: selectedDetail.id,
     });
     if (lead) {
@@ -299,7 +299,7 @@ export default function GlobalMonitor() {
           contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
           contact_phone: contact.phone || undefined,
           contact_email: contact.email || undefined,
-          source: 'manual',
+          source: 'monitor', // lead RÉELLEMENT issu du Global Monitor (AO) -> convergence moteur 'monitor'
           source_id: selectedDetail.id,
         });
 

@@ -4,12 +4,14 @@
  * Fait CONVERGER les leads des moteurs d'entrée vers une typologie + un scoring +
  * une priorisation uniques, pour surfacer « quelle opportunité saisir ».
  *
- * ÉTAT RÉEL (honnêteté) : aujourd'hui la table `leads` n'est peuplée qu'avec
- * source ∈ {message, offer, manual} -> tout converge vers 'marketplace'. Les
- * branches 'monitor' et 'pro_demand' de classifyEntryEngine sont PRÊTES
- * architecturalement mais non encore alimentées (les leads issus du Global Monitor
- * sont actuellement insérés avec source:'manual'). engineBreakdown renvoie donc 0
- * honnêtement pour ces moteurs tant qu'aucun lead correspondant n'existe.
+ * ÉTAT RÉEL (honnêteté) :
+ *  - 'marketplace' (source message/offer/manual) : RÉEL, alimenté aujourd'hui.
+ *  - 'monitor' : RÉEL — les leads « Prospect AO » du Global Monitor sont désormais
+ *    insérés avec source:'monitor' (cf. GlobalMonitor.tsx), donc la convergence
+ *    Monitor -> Lead est effective dès qu'un prospect AO est envoyé au Kanban.
+ *  - 'pro_demand' : branche PRÊTE mais NON alimentée (aucune table « besoin pro »
+ *    n'existe encore) -> engineBreakdown renvoie 0 honnêtement tant qu'aucun lead
+ *    source='pro_demand' n'existe.
  *
  * Anti-façade : pas de lead inventé ; champs absents -> contribution neutre, jamais
  * un chiffre fabriqué ; les leads terminaux (Conclu/Perdu) ne sont pas des opportunités.

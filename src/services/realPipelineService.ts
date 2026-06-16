@@ -33,7 +33,7 @@ export interface RealLead {
   contact_company?: string;
   contact_phone?: string;
   contact_email?: string;
-  source?: 'message' | 'offer' | 'manual' | 'website' | 'quote_request';
+  source?: 'message' | 'offer' | 'manual' | 'website' | 'quote_request' | 'monitor';
   source_id?: string;
   machine_id?: string | null;
   quote_request_id?: string | null;
