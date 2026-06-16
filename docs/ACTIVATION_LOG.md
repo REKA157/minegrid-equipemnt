@@ -5,6 +5,28 @@
 
 ---
 
+## PHASE 3 — Business Flow Engine (2026-06-15)
+
+> Vision : faire converger 3 moteurs d'entrée (Marketplace / Global Monitor / Besoins pro) vers `Lead → Devis → Dossier → chaîne`. Mapping HONNÊTE (mission : « si un module n'est pas déployé, le documenter »).
+
+| Agent | État | Réalité |
+|---|---|---|
+| **D — Lead Convergence Engine** | ✅ **livré (clé de voûte)** | `src/utils/leads/leadConvergence.ts` — typologie par moteur d'entrée + scoring (stage/valeur/proba/récence/dossier-gap) + priorisation ; carte « opportunités à saisir » dans le cockpit vendeur (`opportunityCorrelation.ts`), action concrète. Données réelles (`leads`+`quote_requests`), déterministe, 9 tests. |
+| **E — Opportunity Engine** | ✅ livré (avec D) | les leads chauds deviennent des opportunités actionnables surfacées au cockpit. |
+| **A — Marketplace Engine** | 🟢 partiel déjà fait | CTA « Créer le dossier » (P4) + scoring lead (D) optimisent le flux annonce→dossier. Friction restante = audit, non refait. |
+| **F — Transaction Flywheel** | ✅ déjà livré | pont escrow (P1) + flywheel prix (P5) + Partner Trust (Phase 2) alimentent trust/matching/price. |
+| **G — Network Effect Engine** | ✅ déjà livré | Partner Network (Phase 2 B/F : meilleur dispo/saturés/à éviter). |
+| **H — Cockpit Evolution** | ✅ continu | cockpits = assistants : « que faire / quelle opportunité / quel dossier bloqué / quel partenaire » via signaux M1-M12 + perf + opportunités + risque. |
+| **I — Investor Value** | ✅ implicite | trust/réseau/risque/convergence = moats & effets réseau (code, pas rapport). |
+| **B — Global Monitor Business** | ⛔ **bloqué data** | `market_projects` **non déployée + vide** → « projet→besoin→opportunité » ne peut produire que `[]` (la typologie 'monitor' du Lead Engine est PRÊTE à recevoir ces leads dès qu'ils existent). |
+| **C — Professional Demand Engine** | ⛔ **schéma absent** | aucune table « besoin pro / service_request » dans le repo ni en prod. La typologie 'pro_demand' du Lead Engine est prête, mais STOCKER un besoin pro = nouveau schéma (hors « activer l'existant »). À spécifier avant build. |
+
+**Validation Phase 3** : tsc + **299 tests** + build ✅. 1 commit (D/E) + revue adversariale.
+
+> Le Lead Convergence Engine est l'**architecture de convergence** demandée : il accepte déjà les 3 typologies de source ; Marketplace alimente réellement aujourd'hui, Monitor et Besoins-pro s'y brancheront **sans refonte** dès que leurs données/schéma existent.
+
+---
+
 ## PHASE 2 — chantiers A/B/F/E (2026-06-15)
 
 > Règle anti-façade appliquée à la stratégie : on **n'exécute que ce qui a des données réelles déployées**. Les chantiers dépendant de tables non déployées/vides sont **explicitement bloqués** (pas falsifiés).
