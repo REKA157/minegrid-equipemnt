@@ -74,8 +74,10 @@ export interface EnterpriseDashboardShellProps {
   role: string;
   /** Source des widgets disponibles pour ce metier */
   widgetsSource: ShellWidgetsSource;
-  /** Liste des IDs de widgets valides pour ce metier */
+  /** Liste des IDs de widgets valides pour ce metier (= catalogue ajoutable) */
   validIds: string[];
+  /** Sous-ensemble ordonné actif PAR DÉFAUT (dashboard épuré) ; le reste reste ajoutable. */
+  defaultActiveIds?: string[];
   /** Libelle de la modale "Ajouter un ..." (ex: "widget mecanicien") */
   modalLabel: string;
 }
@@ -89,6 +91,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
   role,
   widgetsSource,
   validIds,
+  defaultActiveIds,
   modalLabel,
 }) => {
   const { user } = useAuth();
@@ -104,7 +107,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
     removeWidget,
     restoreAllWidgets,
     saveDashboard,
-  } = useShellState({ role, widgetsSource, validIds, storageUserId: user?.id });
+  } = useShellState({ role, widgetsSource, validIds, defaultActiveIds, storageUserId: user?.id });
 
   const [showAddModal, setShowAddModal] = useState(false);
 
