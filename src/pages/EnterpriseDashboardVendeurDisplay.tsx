@@ -31,6 +31,9 @@ const EnterpriseDashboardVendeurDisplay: React.FC = () => (
     widgetsSource={VendeurWidgets}
     validIds={WIDGETS_VENDEUR_IDS}
     defaultActiveIds={WIDGETS_VENDEUR_DEFAULT}
+    // Bandeau « Aujourd'hui » masqué : priorités -> widget Actions ; risques + opportunités
+    // -> widget Recommandations IA. On évite le doublon (cf. décision produit).
+    showCockpit={false}
     modalLabel="widget vendeur"
   />
 );

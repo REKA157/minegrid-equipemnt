@@ -78,6 +78,12 @@ export interface EnterpriseDashboardShellProps {
   validIds: string[];
   /** Sous-ensemble ordonné actif PAR DÉFAUT (dashboard épuré) ; le reste reste ajoutable. */
   defaultActiveIds?: string[];
+  /**
+   * Afficher le bandeau de synthèse « Aujourd'hui » (cockpit). Défaut : true.
+   * Mettre false quand ses signaux (priorités/risques/opportunités) vivent déjà dans
+   * les widgets adaptés (ex. vendeur : Actions + Recommandations IA) -> pas de doublon.
+   */
+  showCockpit?: boolean;
   /** Libelle de la modale "Ajouter un ..." (ex: "widget mecanicien") */
   modalLabel: string;
 }
@@ -92,6 +98,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
   widgetsSource,
   validIds,
   defaultActiveIds,
+  showCockpit = true,
   modalLabel,
 }) => {
   const { user } = useAuth();
@@ -294,7 +301,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
             Accès entreprise temporaire (démonstration). Les données et actions ne reflètent pas un abonnement actif.
           </div>
         )}
-        <CockpitSummary role={role} />
+        {showCockpit && <CockpitSummary role={role} />}
         {renderServices()}
 
         <div className="flex justify-between items-center mb-4">
