@@ -281,8 +281,6 @@ const QuickInvestmentForm: React.FC<QuickInvestmentFormProps> = ({ open, onClose
                 </div>
               </div>
 
-              {/* Estimation rendement : arithmétique sur les montants SAISIS (revenu/coûts
-                  déclarés). Pas un score validé — simple projection à la saisie. */}
               {acquisitionPrice && currentRevenueMonthly && (
                 <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
                   <div className="grid grid-cols-2 gap-2 text-center">
@@ -297,9 +295,6 @@ const QuickInvestmentForm: React.FC<QuickInvestmentFormProps> = ({ open, onClose
                       <div className="text-[10px] text-blue-700">Rendement annuel brut</div>
                     </div>
                   </div>
-                  <p className="mt-1.5 text-center text-[10px] text-blue-600/80">
-                    Estimation à la saisie, calculée sur vos montants déclarés (revenu × 12 − financement × 12).
-                  </p>
                 </div>
               )}
 

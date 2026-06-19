@@ -52,7 +52,7 @@ const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = () => {
       <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-1">
         <Lightbulb className="h-4 w-4 text-orange-600" /> Recommandations — actions prioritaires
       </h3>
-      <p className="text-xs text-gray-500 mb-3">Issues de vos annonces, devis, leads, dossiers et partenaires (données réelles).</p>
+      <p className="text-xs text-gray-500 mb-3">Issues de vos annonces, devis, leads, dossiers et partenaires.</p>
 
       {loading ? (
         <p className="text-sm text-gray-500">Analyse…</p>

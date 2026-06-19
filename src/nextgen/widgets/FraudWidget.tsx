@@ -39,7 +39,7 @@ export default function FraudWidget() {
         <p className="text-sm text-gray-500">Analyse des dossiers…</p>
       ) : empty ? (
         <p className="text-sm text-gray-500">
-          Aucun risque détecté sur vos dossiers — rien à signaler (aucune alerte sans fait réel).
+          Aucun risque détecté sur vos dossiers — rien à signaler.
         </p>
       ) : (
         <ul className="space-y-3">

@@ -632,7 +632,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
       {/* Raccourcis (une seule barre, sans doublon) */}
       <div className="border-t border-gray-100 pt-4 mb-4">
         <p className="text-xs text-gray-500 mb-2">
-          Raccourcis : analyse détaillée, prévision et benchmark (serveur), export des données réelles.
+          Raccourcis : analyse détaillée, prévision et benchmark (serveur), export des données.
         </p>
         <div className="flex gap-2 flex-wrap">
           <button
