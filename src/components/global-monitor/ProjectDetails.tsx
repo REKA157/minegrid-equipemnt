@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity, FileText, Users, Wrench, MapPin, Calendar, DollarSign,
   ExternalLink, Loader2, AlertCircle, TrendingUp, Search, Sparkles, Phone, Mail, PlusCircle, Building2,
@@ -6,6 +6,7 @@ import {
 import type { MonitorProjectDetail, EquipmentNeed, ProjectContact } from '../../types/monitor';
 import { PROJECT_TYPE_LABELS, PROJECT_PHASE_LABELS, PROJECT_TYPE_COLORS } from '../../types/monitor';
 import { enrichEquipmentNeed, machinesCatalogHref } from '../../utils/monitorEquipmentMapping';
+import { matchNeedsToStock, loadSellerStockCategories } from '../../utils/monitorProspectMatch';
 import type { ProjectAnalysisCompare } from '../../services/monitorApi';
 
 interface ProjectDetailsProps {
@@ -295,6 +296,19 @@ export default function ProjectDetails({
   onCreateLeadsFromProject,
   createLeadsFromProjectLoading = false,
 }: ProjectDetailsProps) {
+  // Stock du vendeur (pour le croiser avec les besoins de l'AO à la sélection).
+  // Hook AVANT les retours conditionnels ci-dessous (règle des hooks React).
+  const [stock, setStock] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    loadSellerStockCategories().then((s) => {
+      if (!cancelled) setStock(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-white rounded-xl border border-gray-200">
@@ -338,6 +352,7 @@ export default function ProjectDetails({
     ),
   );
   const equipmentForDisplay = computeEquipmentForDisplay(project);
+  const stockMatch = matchNeedsToStock(equipmentForDisplay, stock);
   const evidenceItems = [
     ...(project.source_url ? [`Source: ${project.source || 'Lien'} (${sourceKind})`] : []),
     ...documents.slice(0, 3).map((d) => `Document: ${d.title || 'sans titre'}`),
@@ -737,6 +752,25 @@ export default function ProjectDetails({
                 <EquipmentCard key={eq.id} eq={eq} />
               ))}
             </div>
+            {stockMatch.needsTotal > 0 && (
+              <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] text-orange-900">
+                <span className="font-semibold">Votre stock</span> : compatible sur{' '}
+                <span className="font-bold">
+                  {stockMatch.needsCovered}/{stockMatch.needsTotal}
+                </span>{' '}
+                besoin(s)
+                {stockMatch.needsCovered > 0 && (
+                  <span className="text-orange-700">
+                    {' — '}
+                    {stockMatch.rows
+                      .filter((r) => r.stockCount > 0)
+                      .slice(0, 4)
+                      .map((r) => `${r.label} (${r.stockCount})`)
+                      .join(', ')}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
