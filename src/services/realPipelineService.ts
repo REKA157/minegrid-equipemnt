@@ -33,6 +33,9 @@ export interface RealLead {
   contact_company?: string;
   contact_phone?: string;
   contact_email?: string;
+  /** Rôle du contact pour un lead issu d'un AO (Global Monitor) : lauréat vs maître d'ouvrage.
+   *  Colonne OPTIONNELLE (cf. SQL_A_APPLIQUER) ; ignorée si non déployée. */
+  contact_role?: 'winner' | 'buyer' | null;
   source?: 'message' | 'offer' | 'manual' | 'website' | 'quote_request' | 'monitor';
   source_id?: string;
   machine_id?: string | null;
@@ -98,6 +101,18 @@ export class RealPipelineService {
     return e?.code === 'PGRST205' || msg.includes("could not find the table 'public.");
   }
 
+  /** Vrai si l'erreur indique une COLONNE inexistante (ex. `contact_role` pas encore déployée). */
+  private static isUndefinedColumnError(error: unknown): boolean {
+    const e = error as { code?: string; message?: string } | null;
+    const msg = (e?.message || '').toLowerCase();
+    return (
+      e?.code === '42703' ||
+      e?.code === 'PGRST204' ||
+      (msg.includes('column') && msg.includes('does not exist')) ||
+      msg.includes("could not find the '")
+    );
+  }
+
   private static async getCurrentUserId(): Promise<string | null> {
     try {
       const { data: { user } } = await supabaseClient.auth.getUser();
@@ -117,9 +132,20 @@ export class RealPipelineService {
       }
 
       const payload = { ...leadData, seller_id: leadData.seller_id || userId };
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from('leads')
         .insert([payload]);
+
+      // Tolérance déploiement : si `contact_role` (colonne optionnelle) n'existe pas encore
+      // en base, on réessaie SANS elle (le rôle reste porté par le titre + les notes).
+      if (error && this.isUndefinedColumnError(error) && 'contact_role' in payload) {
+        const { contact_role: _omitRole, ...withoutRole } = payload as RealLead & { contact_role?: unknown };
+        const retry = await supabaseClient.from('leads').insert([withoutRole]);
+        if (!retry.error) {
+          return { lead: withoutRole as RealLead, error: null };
+        }
+        error = retry.error;
+      }
 
       if (error) {
         return { lead: null, error };

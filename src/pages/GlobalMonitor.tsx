@@ -189,7 +189,8 @@ export default function GlobalMonitor() {
     const stockNote = stockMatchNotesBlock(
       matchNeedsToStock(selectedDetail.equipment_needs ?? [], await loadSellerStockCategories()),
     );
-    const angle = prospectAngle(classifyRole(contact.role));
+    const kind = classifyRole(contact.role);
+    const angle = prospectAngle(kind);
 
     const { lead, error } = await RealPipelineService.createLeadWithStatus({
       title: `${angle.titlePrefix} - ${selectedDetail.title}`,
@@ -212,6 +213,7 @@ export default function GlobalMonitor() {
       contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
       contact_phone: contact.phone || undefined,
       contact_email: contact.email || undefined,
+      contact_role: kind === 'unknown' ? null : kind, // lauréat vs maître d'ouvrage (colonne optionnelle)
       source: 'monitor', // lead RÉELLEMENT issu du Global Monitor (AO) -> convergence moteur 'monitor'
       source_id: selectedDetail.id,
     });
@@ -297,7 +299,8 @@ export default function GlobalMonitor() {
         }
 
         // Angle commercial selon le rôle : LAURÉAT (négocier) vs maître d'ouvrage (soumissionner).
-        const angle = prospectAngle(classifyRole(contact.role));
+        const kind = classifyRole(contact.role);
+        const angle = prospectAngle(kind);
         const { lead, error } = await RealPipelineService.createLeadWithStatus({
           title: `${angle.titlePrefix} - ${selectedDetail.title}`,
           stage: 'Prospection',
@@ -321,6 +324,7 @@ export default function GlobalMonitor() {
           contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
           contact_phone: contact.phone || undefined,
           contact_email: contact.email || undefined,
+          contact_role: kind === 'unknown' ? null : kind, // lauréat vs maître d'ouvrage (colonne optionnelle)
           source: 'monitor', // lead RÉELLEMENT issu du Global Monitor (AO) -> convergence moteur 'monitor'
           source_id: selectedDetail.id,
         });
