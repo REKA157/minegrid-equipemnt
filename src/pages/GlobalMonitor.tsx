@@ -23,6 +23,13 @@ import {
   enrichForDisplay as enrichForDisplayUtil,
 } from '../utils/globalMonitorCoverage';
 import { equipmentNeedsToNotesBlock } from '../utils/globalMonitorEquipmentNeedsText';
+import {
+  classifyRole,
+  prospectAngle,
+  matchNeedsToStock,
+  stockMatchNotesBlock,
+  loadSellerStockCategories,
+} from '../utils/monitorProspectMatch';
 
 /**
  * N'enregistre pas contact_company si c'est le même libellé que le titre projet
@@ -179,21 +186,27 @@ export default function GlobalMonitor() {
       return;
     }
     const gmNeedsNote = equipmentNeedsToNotesBlock(selectedDetail.equipment_needs ?? []);
+    const stockNote = stockMatchNotesBlock(
+      matchNeedsToStock(selectedDetail.equipment_needs ?? [], await loadSellerStockCategories()),
+    );
+    const angle = prospectAngle(classifyRole(contact.role));
 
     const { lead, error } = await RealPipelineService.createLeadWithStatus({
-      title: `Prospect AO - ${selectedDetail.title}`,
+      title: `${angle.titlePrefix} - ${selectedDetail.title}`,
       stage: 'Prospection',
       priority: (contact.confidence ?? 0.6) >= 0.75 ? 'high' : 'medium',
       value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
       probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
-      next_action: 'Prendre contact et qualifier le besoin',
+      next_action: angle.nextAction,
       assigned_to: assignedToLabel,
       last_contact: new Date().toISOString(),
       notes: [
         `Source AO: ${selectedDetail.source || 'inconnue'}`,
         `Organisation: ${contact.organization || 'n/a'}`,
+        angle.roleNote,
         contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
         gmNeedsNote,
+        stockNote,
       ].filter(Boolean).join('\n'),
       contact_name: contact.person_name || undefined,
       contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
@@ -244,6 +257,11 @@ export default function GlobalMonitor() {
 
     setCreateLeadsLoading(true);
     const gmNeedsNote = equipmentNeedsToNotesBlock(selectedDetail.equipment_needs ?? []);
+    // Croisement besoins de l'AO <-> stock RÉEL du vendeur (« vous avez X compatibles »).
+    const stockCategories = await loadSellerStockCategories();
+    const stockNote = stockMatchNotesBlock(
+      matchNeedsToStock(selectedDetail.equipment_needs ?? [], stockCategories),
+    );
 
     try {
       const contactKey = (contact: ProjectContact) => {
@@ -278,22 +296,26 @@ export default function GlobalMonitor() {
           continue;
         }
 
+        // Angle commercial selon le rôle : LAURÉAT (négocier) vs maître d'ouvrage (soumissionner).
+        const angle = prospectAngle(classifyRole(contact.role));
         const { lead, error } = await RealPipelineService.createLeadWithStatus({
-          title: `Prospect AO - ${selectedDetail.title}`,
+          title: `${angle.titlePrefix} - ${selectedDetail.title}`,
           stage: 'Prospection',
           priority: (contact.confidence ?? 0.6) >= 0.75 ? 'high' : 'medium',
           value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
           probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
-          next_action: 'Prendre contact et qualifier le besoin',
+          next_action: angle.nextAction,
           assigned_to: assignedToLabel,
           last_contact: new Date().toISOString(),
           notes: [
             `Source AO: ${selectedDetail.source || 'inconnue'}`,
             `Organisation: ${contact.organization || 'n/a'}`,
+            angle.roleNote,
             selectedDetail.phase ? `Phase: ${selectedDetail.phase}` : null,
             selectedDetail.type ? `Type projet: ${selectedDetail.type}` : null,
             contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
             gmNeedsNote,
+            stockNote,
           ].filter(Boolean).join('\n'),
           contact_name: contact.person_name || undefined,
           contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
