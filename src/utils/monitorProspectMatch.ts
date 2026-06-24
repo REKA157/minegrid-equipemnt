@@ -27,6 +27,27 @@ export function classifyRole(role: string | null | undefined): ProspectKind {
   return 'unknown';
 }
 
+/**
+ * PUR : rôle d'un lead Kanban — depuis le champ structuré `contact_role` si présent,
+ * sinon replié sur le TITRE (leads créés avant la colonne). Pour badge / filtre Kanban.
+ */
+export function prospectKindOfLead(lead: { contact_role?: string | null; title?: string | null }): ProspectKind {
+  const role = (lead.contact_role || '').trim().toLowerCase();
+  if (role === 'winner') return 'winner';
+  if (role === 'buyer') return 'buyer';
+  const t = (lead.title || '').toLowerCase();
+  if (t.includes('lauréat') || t.includes('laureat')) return 'winner';
+  if (t.includes("maître d'ouvrage") || t.includes("maitre d'ouvrage")) return 'buyer';
+  return 'unknown';
+}
+
+/** Libellé court d'un rôle pour l'UI (badge). null si indéterminé. */
+export function prospectKindLabel(kind: ProspectKind): string | null {
+  if (kind === 'winner') return 'Lauréat';
+  if (kind === 'buyer') return "Maître d'ouvrage";
+  return null;
+}
+
 export interface ProspectAngle {
   titlePrefix: string;
   nextAction: string;

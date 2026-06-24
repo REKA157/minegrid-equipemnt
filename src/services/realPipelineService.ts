@@ -171,14 +171,21 @@ export class RealPipelineService {
       const userId = await this.getCurrentUserId();
       if (!userId) return [];
 
-      const { data, error } = await supabaseClient
-        .from('leads')
-        .select(PIPELINE_LEADS_COLUMNS)
-        .eq('seller_id', userId)
-        .order('created_at', { ascending: false });
-      
+      const runSelect = (columns: string) =>
+        supabaseClient
+          .from('leads')
+          .select(columns)
+          .eq('seller_id', userId)
+          .order('created_at', { ascending: false });
+
+      // contact_role est OPTIONNELLE : on la lit si déployée, sinon on relit sans elle.
+      let { data, error } = await runSelect(`${PIPELINE_LEADS_COLUMNS},contact_role`);
+      if (error && this.isUndefinedColumnError(error)) {
+        ({ data, error } = await runSelect(PIPELINE_LEADS_COLUMNS));
+      }
+
       if (error) throw error;
-      return data || [];
+      return (data || []) as unknown as RealLead[];
     } catch (error) {
       if (!this.isMissingTableError(error)) {
         console.error('Erreur récupération leads:', error);

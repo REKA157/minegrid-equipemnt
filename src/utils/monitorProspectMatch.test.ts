@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyRole,
   prospectAngle,
+  prospectKindOfLead,
+  prospectKindLabel,
   matchNeedsToStock,
   stockMatchNotesBlock,
 } from './monitorProspectMatch';
@@ -33,6 +35,23 @@ describe('classifyRole (PUR)', () => {
     expect(classifyRole('')).toBe('unknown');
     expect(classifyRole(null)).toBe('unknown');
     expect(classifyRole('consultant')).toBe('unknown');
+  });
+});
+
+describe('prospectKindOfLead (PUR)', () => {
+  it('utilise contact_role si présent', () => {
+    expect(prospectKindOfLead({ contact_role: 'winner', title: 'X' })).toBe('winner');
+    expect(prospectKindOfLead({ contact_role: 'buyer', title: 'X' })).toBe('buyer');
+  });
+  it('replie sur le titre si pas de contact_role', () => {
+    expect(prospectKindOfLead({ title: 'Prospect lauréat - Route N1' })).toBe('winner');
+    expect(prospectKindOfLead({ title: "Prospect AO (maître d'ouvrage) - Port" })).toBe('buyer');
+    expect(prospectKindOfLead({ title: 'Prospect AO - Barrage' })).toBe('unknown');
+  });
+  it('libellé badge', () => {
+    expect(prospectKindLabel('winner')).toBe('Lauréat');
+    expect(prospectKindLabel('buyer')).toBe("Maître d'ouvrage");
+    expect(prospectKindLabel('unknown')).toBeNull();
   });
 });
 
