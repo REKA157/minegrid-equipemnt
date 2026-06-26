@@ -1,44 +1,64 @@
-"""Filtre de PERTINENCE engins/BTP pour l'ingestion.
+"""Filtre de PERTINENCE engins/BTP pour l'ingestion (bilingue FR/EN).
 
-Probleme : les portails publics sont scrapes par mots-cles generiques (« marche »,
-« avis »…) -> on capture aussi des AO hors-sujet (informatique, assurance, nettoyage,
-formation, mobilier…) et meme des fragments non-AO (actualites, noms de directeurs).
+Probleme : les sources (portails + World Bank) ramenent aussi des marches hors-sujet
+(informatique, medical, mobilier, assurance, services, consulting) et du bruit.
 
-Regle : on ne GARDE un projet que s'il a un signal clair de MATERIEL / TRAVAUX / genie
-civil / mine (le marche est susceptible de necessiter des engins). Sinon -> rejete.
+Regle : on ne GARDE un marche que s'il a un signal clair de MATERIEL / TRAVAUX / genie
+civil / mine / infrastructure. Garde-fou : si un signal HORS-SUJET fort est present
+SANS vrai mot de travaux/engin, on rejette (ex. « medical equipment ... installation »).
 """
 from __future__ import annotations
 
-# Signaux POSITIFS : engins + travaux / genie civil / mine / infrastructure.
+# --- Signaux POSITIFS (FR + EN) : engins + travaux / genie civil / mine / infra. ---
 _RELEVANT = (
     # engins de chantier
     "pelle", "excavat", "chargeuse", "chargeur", "bulldozer", "bouteur", "tombereau",
-    "dumper", "niveleuse", "compacteur", "rouleau compresseur", "grue", "nacelle",
-    "foreuse", "forage", "concasseur", "crible", "tractopelle", "finisseur",
-    "camion benne", "camion-benne", "engin", "materiel de chantier", "matériel de chantier",
-    "materiel roulant", "matériel roulant", "groupe electrogene", "groupe électrogène",
-    # travaux / genie civil / infrastructure
+    "dumper", "niveleuse", "compacteur", "rouleau compresseur", "grue", "crane",
+    "nacelle", "foreuse", "forage", "drilling", "borehole", "concasseur", "crusher",
+    "crible", "tractopelle", "finisseur", "paver", "camion benne", "camion-benne",
+    "engin", "materiel de chantier", "matériel de chantier", "groupe electrogene",
+    "groupe électrogène",
+    # travaux / genie civil / infrastructure (FR)
     "travaux", "genie civil", "génie civil", "terrassement", "construction", "btp",
     "batiment", "bâtiment", "route", "autoroute", "voirie", "pont", "ouvrage d'art",
-    "barrage", "port ", "portuaire", "quai", "chemin de fer", "voie ferree", "voie ferrée",
+    "barrage", "portuaire", "quai", "chemin de fer", "voie ferree", "voie ferrée",
     "ferroviaire", "assainissement", "adduction", "amenagement", "aménagement",
-    "infrastructure", "canalisation", "conduite", "reseau d'eau", "réseau d'eau",
-    "electrification", "électrification", "irrigation", "asphalte", "bitume", "enrobe",
-    "enrobé", "beton", "béton", "carriere", "carrière", "mine", "miniere", "minière",
-    "extraction", "decapage", "décapage", "remblai", "deblai", "déblai",
+    "infrastructure", "canalisation", "conduite", "electrification", "électrification",
+    "irrigation", "asphalte", "bitume", "enrobe", "enrobé", "beton", "béton",
+    "carriere", "carrière", "mine", "miniere", "minière", "extraction", "decapage",
+    "décapage", "remblai", "deblai", "déblai",
+    # travaux / infrastructure (EN) — phrases sures (eviter sous-chaines pieges)
+    "civil works", "earthworks", "earthwork", "road works", "roadworks", "roadwork",
+    "rehabilitation", "drainage", "sewerage", "water supply", "pavement", "paving",
+    "asphalt", "bitumen", "concrete", "embankment", "culvert", "bridge", "highway",
+    "dam ", "dredging", "pipeline", "transmission line", "power line", "substation",
+    "quarry", "mining", "excavation", "feeder road",
 )
 
-# Signaux NEGATIFS forts (hors materiel/travaux) : utilises seulement pour trancher
-# un titre AMBIGU qui contiendrait par hasard un mot « travaux »/« reseau ».
+# --- Signaux NEGATIFS forts (FR + EN) : tranche un titre AMBIGU sans vrai mot travaux. ---
 _IRRELEVANT = (
+    # FR
     "informatique", "logiciel", "ordinateur", "imprimante", "licence", "progiciel",
-    "telephonie", "téléphonie", "telecom", "télécom", "internet", "reseau informatique",
-    "réseau informatique", "assurance", "nettoyage", "gardiennage", "surveillance",
-    "fourniture de bureau", "mobilier", "papeterie", "restauration", "traiteur",
-    "formation", "consulting", "audit ", "communication", "evenement", "événement",
+    "telephonie", "téléphonie", "telecom", "télécom", "assurance", "nettoyage",
+    "gardiennage", "fourniture de bureau", "mobilier", "papeterie", "restauration",
+    "traiteur", "formation", "consulting", "communication", "evenement", "événement",
     "voyage", "hotel", "hôtel", "produits chimiques", "insecticide", "medicament",
     "médicament", "pharmac", "alimentaire", "uniforme", "vetement", "vêtement",
-    "impression", "edition ", "édition ",
+    # EN
+    "medical", "hospital", "clinic", "health center", "pharmaceutical", "software",
+    "computer", "laptop", "printer", "furniture", "stationery", "textbook", "books",
+    "uniform", "catering", "cleaning", "insurance", "consultancy", "consultant",
+    "supervision", "audit ", "training", "workshop", "seminar", "broadband",
+    "vaccine", "drugs", "internet",
+)
+
+# Mots TRAVAUX FORTS : leur presence neutralise un signal hors-sujet (FR + EN).
+_STRONG_WORKS = (
+    "travaux", "construction", "terrassement", "genie civil", "génie civil", "engin",
+    "pelle", "excavat", "chargeuse", "bulldozer", "route", "barrage", "btp", "chantier",
+    "carriere", "carrière", "mine", "miniere", "minière", "forage", "drilling",
+    "borehole", "civil works", "earthworks", "road works", "rehabilitation", "asphalt",
+    "bitumen", "dredging", "excavation", "pipeline", "irrigation", "bridge", "highway",
 )
 
 
@@ -52,25 +72,14 @@ def relevance_text(title: str | None, raw: dict | None) -> str:
 
 
 def is_equipment_relevant(title: str | None, raw: dict | None = None) -> bool:
-    """True si l'AO est susceptible de necessiter du materiel minier / BTP / travaux."""
+    """True si le marche est susceptible de necessiter du materiel minier / BTP / travaux."""
     text = relevance_text(title, raw)
     if not text.strip():
         return False
-    has_relevant = any(k in text for k in _RELEVANT)
-    if not has_relevant:
-        return False  # aucun signal materiel/travaux -> hors-scope (informatique, services, bruit)
-    # Signal materiel present, mais titre clairement « service » (ex. « assurance des travaux ») :
-    # rejeter si un signal hors-sujet FORT domine et qu'on n'a pas de vrai mot d'engin/chantier.
-    has_irrelevant = any(k in text for k in _IRRELEVANT)
-    if has_irrelevant:
-        strong_works = any(
-            k in text
-            for k in (
-                "travaux", "construction", "terrassement", "genie civil", "génie civil",
-                "engin", "pelle", "excavat", "chargeuse", "bulldozer", "route", "barrage",
-                "btp", "chantier", "carriere", "carrière", "mine", "forage",
-            )
-        )
-        if not strong_works:
-            return False
+    if not any(k in text for k in _RELEVANT):
+        return False  # aucun signal materiel/travaux -> hors-scope
+    # Signal present, mais marche clairement « hors-sujet » (medical, IT, mobilier…) :
+    # rejeter SAUF si un vrai mot de travaux/engin domine.
+    if any(k in text for k in _IRRELEVANT) and not any(k in text for k in _STRONG_WORKS):
+        return False
     return True

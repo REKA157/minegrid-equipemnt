@@ -14,6 +14,7 @@ from app.ingestion.connectors.mascus import MascusConnector
 from app.ingestion.connectors.leboncoin import LeboncoinConnector
 from app.ingestion.connectors.public_portals import PublicPortalsConnector
 from app.ingestion.connectors.mdb_procurement import MDBProcurementConnector
+from app.ingestion.connectors.wb_procurement import WBProcurementConnector
 from app.schemas import IngestResult
 
 logger = logging.getLogger("monitor.registry")
@@ -26,6 +27,7 @@ CONNECTOR_MAP: dict[str, type[BaseConnector]] = {
     "leboncoin": LeboncoinConnector,
     "public_portals": PublicPortalsConnector,
     "mdb_procurement": MDBProcurementConnector,
+    "wb_procurement": WBProcurementConnector,
 }
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent.parent / "sources.yaml"

@@ -29,6 +29,24 @@ def test_garde_pertinents():
     assert is_equipment_relevant("Exploitation miniere : decapage et extraction")
 
 
+def test_rejette_hors_sujet_anglais():
+    # Cas reels World Bank : materiel medical / IT / mobilier / services -> rejetes.
+    assert not is_equipment_relevant("Procurement of Medical equipment and Medical furniture")
+    assert not is_equipment_relevant("Supply and installation of computer software and laptops")
+    assert not is_equipment_relevant("Supply of office furniture and stationery")
+    assert not is_equipment_relevant("Consultancy services for project supervision and training")
+    # Le garde-fou : 'installation' (mot faible) ne sauve pas un marche medical.
+    assert not is_equipment_relevant("Supply, delivery and installation of hospital medical devices")
+
+
+def test_garde_pertinents_anglais():
+    assert is_equipment_relevant("Borehole Drilling Works in the northern region")
+    assert is_equipment_relevant("Civil works for road rehabilitation")
+    assert is_equipment_relevant("Construction of a science laboratory building")
+    assert is_equipment_relevant("Improvement of the power supply system: construction of power lines")
+    assert is_equipment_relevant("Earthworks and excavation for the new dam")
+
+
 def test_raw_text_pris_en_compte():
     # Titre pauvre mais texte source clair -> garde.
     assert is_equipment_relevant("Avis n123", {"source_text": "travaux de construction d'une autoroute"})

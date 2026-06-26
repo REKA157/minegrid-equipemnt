@@ -3,6 +3,17 @@
 
 sources:
 
+  # SOURCE PRINCIPALE — structuree, multi-pays : avis d'AO ET attributions (laureats).
+  # API publique World Bank Procurement Notices (~tous les pays membres).
+  - name: "World Bank Procurement - tous pays"
+    connector: wb_procurement
+    enabled: true
+    config:
+      max_items: 1500          # avis les plus recents (tries par date desc)
+      page_rows: 200
+      exclude_groups: ["CS"]   # exclut Consulting Services ; garde CW (travaux), GO (biens), NC
+      country_names: []        # vide = TOUS les pays (la pertinence engins/BTP filtre en aval)
+
   - name: "World Bank Data360 - Afrique"
     connector: wb_data360
     enabled: true
