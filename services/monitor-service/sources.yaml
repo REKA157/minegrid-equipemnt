@@ -25,7 +25,7 @@ sources:
 
   - name: "PPI Database - Afrique"
     connector: ppi
-    enabled: true
+    enabled: false   # ppi_projects.csv absent -> aucune donnee ; desactive (100% live)
     config:
       file_path: "data/ppi_projects.csv"
       delimiter: ","
@@ -34,7 +34,7 @@ sources:
 
   - name: "Mining Seed Africa - multi pays"
     connector: ppi
-    enabled: true
+    enabled: false   # SEED fabrique (URLs example.org, montants ronds) -> desactive (anti-facade)
     config:
       file_path: "data/mining_projects_seed.csv"
       delimiter: ","
