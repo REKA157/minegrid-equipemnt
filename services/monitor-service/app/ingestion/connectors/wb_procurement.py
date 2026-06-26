@@ -54,16 +54,29 @@ def _guess_type(text: str) -> str:
     return "btp"  # WB CW/works par defaut
 
 
-_SUPPLIER_RE = re.compile(r"Awarded Bidder\(s\):\s*([^()\n<]+?)\s*\(\d+\)", re.I)
-_SUPPLIER_RE_FALLBACK = re.compile(r"Awarded Bidder\(s\):\s*([^\n<]{2,80})", re.I)
+# « Awarded Bidder(s): NOM (ID) ADRESSE Country: » -> nom + adresse du laureat.
+_AWARD_RE = re.compile(r"Awarded Bidder\(s\):\s*([^()\n<]+?)\s*\(\d+\)\s*(.*?)\s*Country\s*:", re.I)
+_AWARD_NAME_FALLBACK = re.compile(r"Awarded Bidder\(s\):\s*([^\n<(]{2,80})", re.I)
+# « Signed Contract price MAD 2560500.00 » -> devise + montant.
+_VALUE_RE = re.compile(r"Signed Contract price\s+([A-Z]{2,4})\s*([\d.,]+)", re.I)
 
 
-def _extract_supplier(notice_text_plain: str) -> str | None:
-    m = _SUPPLIER_RE.search(notice_text_plain) or _SUPPLIER_RE_FALLBACK.search(notice_text_plain)
-    if not m:
-        return None
-    name = m.group(1).strip(" .,-")
-    return name or None
+def _extract_award(notice_text_plain: str) -> tuple[str | None, str | None, str | None]:
+    """Retourne (nom_laureat, adresse_laureat, montant_signe) depuis l'avis d'attribution."""
+    name = address = value = None
+    m = _AWARD_RE.search(notice_text_plain)
+    if m:
+        name = m.group(1).strip(" .,-") or None
+        addr = re.sub(r"\s+", " ", m.group(2) or "").strip(" .,-")
+        address = addr[:300] or None
+    else:
+        m2 = _AWARD_NAME_FALLBACK.search(notice_text_plain)
+        if m2:
+            name = m2.group(1).strip(" .,-") or None
+    v = _VALUE_RE.search(notice_text_plain)
+    if v:
+        value = f"{v.group(1)} {v.group(2)}"
+    return name, address, value
 
 
 class WBProcurementConnector(BaseConnector):
@@ -114,10 +127,16 @@ class WBProcurementConnector(BaseConnector):
                     text_plain = _strip_html(n.get("notice_text"))
                     # Texte de scoring + marqueurs role (pour relevance + extraction contacts).
                     source_text_parts = [desc, text_plain]
-                    supplier = _extract_supplier(text_plain) if is_award else None
+                    supplier = supplier_address = award_value = None
+                    if is_award:
+                        supplier, supplier_address, award_value = _extract_award(text_plain)
                     if supplier:
                         # « Attributaire : … » -> capte par l'extraction (role winner).
                         source_text_parts.append(f"Attributaire : {supplier}.")
+                    if supplier_address:
+                        source_text_parts.append(f"Adresse : {supplier_address}.")
+                    if award_value:
+                        source_text_parts.append(f"Montant signe : {award_value}.")
                     org = (n.get("contact_organization") or "").strip()
                     if org and not is_award:
                         source_text_parts.append(f"Maitre d'ouvrage : {org}.")
@@ -146,6 +165,8 @@ class WBProcurementConnector(BaseConnector):
                                 "project_id": project_id,
                                 "project_name": n.get("project_name"),
                                 "awarded_supplier": supplier,
+                                "awarded_supplier_address": supplier_address,
+                                "awarded_value": award_value,
                                 "contact_organization": org or None,
                                 "contact_name": n.get("contact_name") or None,
                                 "contact_email": n.get("contact_email") or None,

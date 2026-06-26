@@ -28,9 +28,13 @@ def materialize_contacts(project: Project, raw: dict) -> None:
         return
     supplier = _clip(raw.get("awarded_supplier"), 300)
     if supplier:
+        value = _clip(raw.get("awarded_value"), 60)
+        note = "Attributaire (avis d'attribution World Bank)"
+        if value:
+            note += f" — montant signe {value}"
         project.contacts.append(ProjectContact(
             organization=supplier, role="winner", confidence=Decimal("0.80"),
-            rationale="Attributaire (avis d'attribution World Bank)",
+            address=_clip(raw.get("awarded_supplier_address"), 1000), rationale=note,
         ))
     org = _clip(raw.get("contact_organization"), 300)
     if org:

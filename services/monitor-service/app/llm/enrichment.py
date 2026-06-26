@@ -240,7 +240,10 @@ def _extract_contacts_from_text(corpus: str, entities: list[ProjectEntity]) -> l
     seen_keys: set[str] = set()
 
     emails = sorted({m.group(0).strip() for m in _EMAIL_RE.finditer(text)})[:12]
-    phones = sorted({m.group(0).strip() for m in _PHONE_RE.finditer(text) if len(re.sub(r"\D", "", m.group(0))) >= 8})[:12]
+    phones = sorted({
+        m.group(0).strip() for m in _PHONE_RE.finditer(text)
+        if len(re.sub(r"\D", "", m.group(0))) >= 8 and not re.match(r"^\(\d{4,}\)", m.group(0).strip())
+    })[:12]
     urls = sorted({m.group(0).strip() for m in _URL_RE.finditer(text)})[:8]
 
     entity_candidates: list[tuple[str, str]] = []
@@ -569,24 +572,32 @@ async def enrich_project(db: AsyncSession, project: Project) -> dict:
             ]
         )
         is_non_machine = _is_non_machine_project(project, raw_text, source_text)
-        # Contacts/prospects extraction
-        extracted_contacts = [] if is_non_machine else _extract_contacts_from_text(corpus, existing_entities)
-        existing_contacts = (
-            await db.execute(select(ProjectContact).where(ProjectContact.project_id == project.id))
-        ).scalars().all()
-        contacts_saved, contacts_removed = _upsert_project_contacts(
-            project,
-            existing_contacts,
-            extracted_contacts,
-            db,
-        )
-        result["steps"].append(
-            {
-                "step": "contacts_extract",
-                "contacts_count": contacts_saved,
-                "removed": contacts_removed,
-            }
-        )
+        # Contacts/prospects : si le CONNECTEUR a deja fourni des contacts structures
+        # (World Bank : awarded_supplier / contact_organization), on NE relance PAS l'extraction
+        # heuristique — elle scrape de faux telephones depuis les ID WB entre parentheses et
+        # ecraserait les contacts propres (laureat + maitre d'ouvrage).
+        _raw = project.raw or {}
+        has_structured_contacts = bool(_raw.get("awarded_supplier") or _raw.get("contact_organization"))
+        if has_structured_contacts:
+            result["steps"].append({"step": "contacts_extract", "skipped": "structured_contacts_present"})
+        else:
+            extracted_contacts = [] if is_non_machine else _extract_contacts_from_text(corpus, existing_entities)
+            existing_contacts = (
+                await db.execute(select(ProjectContact).where(ProjectContact.project_id == project.id))
+            ).scalars().all()
+            contacts_saved, contacts_removed = _upsert_project_contacts(
+                project,
+                existing_contacts,
+                extracted_contacts,
+                db,
+            )
+            result["steps"].append(
+                {
+                    "step": "contacts_extract",
+                    "contacts_count": contacts_saved,
+                    "removed": contacts_removed,
+                }
+            )
 
         extracted_needs = [] if is_non_machine else _extract_needs_from_tender_text(corpus)
 
