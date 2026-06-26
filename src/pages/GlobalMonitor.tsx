@@ -16,12 +16,7 @@ import {
   fetchProjectAnalysisCompare,
   type ProjectAnalysisCompare,
 } from '../services/monitorApi';
-import {
-  normalizeBudget as normalizeBudgetUtil,
-  ensureCountryCoverage as ensureCountryCoverageUtil,
-  ensureLayerCoverageByCountry as ensureLayerCoverageByCountryUtil,
-  enrichForDisplay as enrichForDisplayUtil,
-} from '../utils/globalMonitorCoverage';
+import { normalizeBudget as normalizeBudgetUtil } from '../utils/globalMonitorCoverage';
 import { equipmentNeedsToNotesBlock } from '../utils/globalMonitorEquipmentNeedsText';
 import {
   classifyRole,
@@ -46,11 +41,6 @@ function contactCompanyForPipeline(projectTitle: string, organization: string | 
   if (pLow.length >= 8 && oLow.includes(pLow)) return undefined;
   return o;
 }
-
-const DEMO_PROJECTS: MonitorProject[] = [
-  { id: '1', title: "Mine d'or de Kédougou", type: 'mine', phase: 'construction', country: 'Senegal', region: 'Kédougou', lat: 12.56, lon: -12.18, budget_usd: 350_000_000, start_date: '2025-06-01', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd1', confidence: 0.8, updated_at: '2026-03-01' },
-  { id: '2', title: 'Autoroute Dakar-Saint-Louis', type: 'road', phase: 'tender', country: 'Senegal', region: 'Saint-Louis', lat: 15.95, lon: -16.27, budget_usd: 820_000_000, start_date: '2026-01-15', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd2', confidence: 0.7, updated_at: '2026-03-02' },
-];
 
 export default function GlobalMonitor() {
   const [filters, setFilters] = useState<ProjectFilters>({});
@@ -98,14 +88,11 @@ export default function GlobalMonitor() {
       }
 
       if (reqId !== requestSeqRef.current) return;
-      const normalized = allItems.map(normalizeBudgetUtil);
-      const covered = ensureLayerCoverageByCountryUtil(
-        ensureCountryCoverageUtil(normalized, filtersRef.current),
-        filtersRef.current,
-      );
-      const display = enrichForDisplayUtil(covered, DEMO_PROJECTS, filtersRef.current);
+      // Anti-façade : on affiche UNIQUEMENT les vrais projets du monitor-service,
+      // sans remplissage par seeds/démo (ensureCoverage/enrichForDisplay retirés).
+      const display = allItems.map(normalizeBudgetUtil);
       setProjects(display);
-      setTotal(Math.max(totalFromApi, display.length));
+      setTotal(totalFromApi || display.length);
       setPage(1);
       setHasMore(false);
       setIsLive(true);
@@ -115,8 +102,9 @@ export default function GlobalMonitor() {
       const message = error instanceof Error ? error.message : 'Erreur API Monitor';
       setLiveError(message);
       if (!hadLiveSuccessRef.current) {
-        setProjects(DEMO_PROJECTS.map(normalizeBudgetUtil));
-        setTotal(DEMO_PROJECTS.length);
+        // API injoignable et jamais de succès : on n'invente rien (anti-façade) -> vide + erreur.
+        setProjects([]);
+        setTotal(0);
         setIsLive(false);
       }
     } finally {
