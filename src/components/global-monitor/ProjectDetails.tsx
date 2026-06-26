@@ -703,6 +703,11 @@ export default function ProjectDetails({
                         <ExternalLink className="h-3 w-3" /> site
                       </a>
                     )}
+                    {contact.address && (
+                      <span className="inline-flex items-center gap-1 text-gray-500">
+                        <MapPin className="h-3 w-3" /> {contact.address}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

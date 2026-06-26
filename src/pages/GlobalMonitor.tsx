@@ -204,6 +204,8 @@ export default function GlobalMonitor() {
       notes: [
         `Source AO: ${selectedDetail.source || 'inconnue'}`,
         `Organisation: ${contact.organization || 'n/a'}`,
+        contact.address ? `Adresse: ${contact.address}` : null,
+        contact.website ? `Site: ${contact.website}` : null,
         angle.roleNote,
         contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
         gmNeedsNote,
@@ -313,6 +315,8 @@ export default function GlobalMonitor() {
           notes: [
             `Source AO: ${selectedDetail.source || 'inconnue'}`,
             `Organisation: ${contact.organization || 'n/a'}`,
+            contact.address ? `Adresse: ${contact.address}` : null,
+            contact.website ? `Site: ${contact.website}` : null,
             angle.roleNote,
             selectedDetail.phase ? `Phase: ${selectedDetail.phase}` : null,
             selectedDetail.type ? `Type projet: ${selectedDetail.type}` : null,
