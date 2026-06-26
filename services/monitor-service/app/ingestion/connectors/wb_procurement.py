@@ -21,6 +21,7 @@ import httpx
 
 from app.ingestion.base import BaseConnector
 from app.ingestion.asset import ProjectAsset
+from app.ingestion.target_markets import is_target_country
 
 _DEFAULT_BASE = "https://search.worldbank.org/api/v2/procnotices"
 _TYPE_MINING = {  # mapping grossier notice/text -> type projet
@@ -75,8 +76,8 @@ class WBProcurementConnector(BaseConnector):
         # Groupes a EXCLURE (CS = consulting services). On garde CW (travaux), GO (biens),
         # NC (non-consulting) car certains marches de travaux y sont classes.
         exclude_groups = {g.upper() for g in self.config.get("exclude_groups", ["CS"])}
-        # Filtre pays optionnel (sous-chaine dans project_ctry_name). Vide = TOUS les pays.
-        country_names = [c.lower() for c in self.config.get("country_names", [])]
+        # Si True : ne garder que les marches cibles MineGrid (Afrique/Maghreb/MO/Europe).
+        restrict_target = bool(self.config.get("restrict_to_target_markets", False))
 
         assets: list[ProjectAsset] = []
         async with httpx.AsyncClient(timeout=45, headers={"User-Agent": "Mozilla/5.0 (MinegridMonitor/1.0)"}) as client:
@@ -98,7 +99,7 @@ class WBProcurementConnector(BaseConnector):
                     if group in exclude_groups:
                         continue
                     country = (n.get("project_ctry_name") or "").strip()
-                    if country_names and not any(c in country.lower() for c in country_names):
+                    if restrict_target and country and not is_target_country(country):
                         continue
 
                     notice_type = (n.get("notice_type") or "").strip()

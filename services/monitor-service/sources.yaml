@@ -9,10 +9,10 @@ sources:
     connector: wb_procurement
     enabled: true
     config:
-      max_items: 1500          # avis les plus recents (tries par date desc)
+      max_items: 2500          # plus large car on filtre ensuite sur les marches cibles
       page_rows: 200
       exclude_groups: ["CS"]   # exclut Consulting Services ; garde CW (travaux), GO (biens), NC
-      country_names: []        # vide = TOUS les pays (la pertinence engins/BTP filtre en aval)
+      restrict_to_target_markets: true   # Afrique + Maghreb + Moyen-Orient + Europe (target_markets.py)
 
   - name: "World Bank Data360 - Afrique"
     connector: wb_data360
