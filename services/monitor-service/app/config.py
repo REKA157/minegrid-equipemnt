@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     enrich_interval_hours: int = 12
     alerts_interval_hours: int = 6
     mascus_interval_hours: int = 12
+    # Enrichissement coordonnees laureats (recherche web via Piloterr) — desactive si
+    # PILOTERR_API_KEY absente. Plafond par execution pour maitriser les credits.
+    enrich_contacts_interval_hours: int = 24
+    enrich_contacts_max_per_run: int = 60
 
     # Widgets IA : limite de requêtes / minute / utilisateur (anti-surcharge & coût LLM)
     ai_widget_max_per_minute: int = 120

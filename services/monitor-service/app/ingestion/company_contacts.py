@@ -8,10 +8,15 @@ rempli est marque « a verifier » (confiance modeste) — le commercial control
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 import unicodedata
+from decimal import Decimal
 
 import httpx
+
+logger = logging.getLogger("monitor.company_contacts")
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[a-z]{2,12}\b")
 _BAD_MAIL = (".png", ".jpg", ".jpeg", ".gif", ".webp", "sentry", "wixpress", "example.", "@2x", "godaddy")
@@ -151,3 +156,63 @@ async def find_company_contact(
         "confidence": conf,
         "rationale": "Coordonnees via recherche web (Google/Piloterr) — a verifier",
     }
+
+
+def city_hint(address: str | None, country: str | None) -> str | None:
+    """Heuristique : dernier mot 'lieu' de l'adresse (souvent la ville), hors pays."""
+    if not address:
+        return None
+    a = re.sub(re.escape(country or ""), "", address, flags=re.I)
+    words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", a)
+    skip = {"zone", "industrielle", "rue", "avenue", "lot", "quartier", "nouvelle", "est", "ouest"}
+    words = [w for w in words if w.lower() not in skip]
+    return words[-1] if words else None
+
+
+async def enrich_pending_winners(db, api_key: str, limit: int = 60, only_country: str | None = None) -> tuple[int, int]:
+    """Enrichit les contacts 'winner' SANS tel/email/site (recherche web). Idempotent.
+    Retourne (essayes, enrichis). Plafonne a `limit` pour maitriser les credits."""
+    from sqlalchemy import select
+    from app.models import Project, ProjectContact
+
+    if not api_key:
+        return 0, 0
+    tried = filled = 0
+    rows = (
+        await db.execute(
+            select(ProjectContact, Project).join(Project, Project.id == ProjectContact.project_id)
+            .where(ProjectContact.role == "winner")
+        )
+    ).all()
+    async with httpx.AsyncClient(timeout=55) as client:
+        for contact, project in rows:
+            # Skip si deja un contact OU deja tente (marqueur) -> ne pas re-depenser de credits.
+            if contact.phone or contact.email or contact.website:
+                continue
+            if contact.rationale and "recherche web" in contact.rationale:
+                continue
+            if only_country and _norm(project.country) != _norm(only_country):
+                continue
+            if tried >= limit:
+                break
+            tried += 1
+            res = await find_company_contact(
+                client, api_key, contact.organization, project.country, city_hint(contact.address, project.country)
+            )
+            base = (contact.rationale or "").split(" | ")[0]
+            if res and (res.get("phone") or res.get("email") or res.get("website")):
+                if res.get("phone"):
+                    contact.phone = res["phone"][:80]
+                if res.get("email"):
+                    contact.email = res["email"][:255]
+                if res.get("website"):
+                    contact.website = res["website"][:500]
+                contact.confidence = Decimal(str(res["confidence"]))
+                contact.rationale = f"{base} | {res['rationale']}"
+                filled += 1
+            else:
+                # Marque « tente, rien de fiable » -> ne sera pas re-essaye automatiquement.
+                contact.rationale = f"{base} | recherche web: aucun contact fiable"
+            await asyncio.sleep(0.3)
+    await db.commit()
+    return tried, filled
