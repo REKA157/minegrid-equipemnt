@@ -1,10 +1,11 @@
 """Dedup + upsert logic shared by all connectors, with geocoding enrichment."""
 from __future__ import annotations
 import logging
+from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Project
+from app.models import Project, ProjectContact
 from app.ingestion.asset import ProjectAsset
 from app.ingestion.fingerprint import compute_fingerprint
 from app.ingestion.relevance import is_equipment_relevant
@@ -12,6 +13,33 @@ from app.schemas import IngestResult
 from app.geocoder import enrich_coordinates
 
 logger = logging.getLogger("monitor.upsert")
+
+
+def _clip(v, n: int):
+    return v.strip()[:n] if isinstance(v, str) and v.strip() else None
+
+
+def materialize_contacts(project: Project, raw: dict) -> None:
+    """Materialise les contacts STRUCTURES portes par certains connecteurs (World Bank) :
+    LAUREAT (awarded_supplier -> role 'winner') et MAITRE D'OUVRAGE (contact_organization
+    -> role 'buyer'). Rend le marche directement actionnable comme prospect, sans LLM.
+    Utilise la relation ORM : project_id est pose automatiquement au flush."""
+    if not isinstance(raw, dict):
+        return
+    supplier = _clip(raw.get("awarded_supplier"), 300)
+    if supplier:
+        project.contacts.append(ProjectContact(
+            organization=supplier, role="winner", confidence=Decimal("0.80"),
+            rationale="Attributaire (avis d'attribution World Bank)",
+        ))
+    org = _clip(raw.get("contact_organization"), 300)
+    if org:
+        project.contacts.append(ProjectContact(
+            organization=org, person_name=_clip(raw.get("contact_name"), 200),
+            email=_clip(raw.get("contact_email"), 255), phone=_clip(raw.get("contact_phone"), 80),
+            role="buyer", confidence=Decimal("0.70"),
+            rationale="Maitre d'ouvrage (avis World Bank)",
+        ))
 
 
 async def upsert_assets(
@@ -90,7 +118,9 @@ async def upsert_assets(
                         "country": asset.country,
                     }]
                 data["raw"] = raw
-                db.add(Project(**data))
+                project = Project(**data)
+                db.add(project)
+                materialize_contacts(project, raw)
                 result.inserted += 1
                 logger.debug("Inserted: %s", asset.title)
 
