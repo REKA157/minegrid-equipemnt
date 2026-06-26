@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Project
 from app.ingestion.asset import ProjectAsset
 from app.ingestion.fingerprint import compute_fingerprint
+from app.ingestion.relevance import is_equipment_relevant
 from app.schemas import IngestResult
 from app.geocoder import enrich_coordinates
 
@@ -22,6 +23,13 @@ async def upsert_assets(
         result = IngestResult()
 
     for asset in assets:
+        # Filtre PERTINENCE : ne garder que les AO susceptibles de necessiter des engins
+        # (materiel minier / BTP / travaux). Exclut informatique, services, bruit de scraping.
+        if not is_equipment_relevant(asset.title, asset.raw):
+            result.skipped += 1
+            logger.debug("Skipped (hors-scope engins): %s", asset.title)
+            continue
+
         fp = compute_fingerprint(
             asset.title,
             asset.country,
