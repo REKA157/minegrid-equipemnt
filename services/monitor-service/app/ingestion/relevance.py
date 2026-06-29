@@ -73,6 +73,14 @@ def relevance_text(title: str | None, raw: dict | None) -> str:
 
 def is_equipment_relevant(title: str | None, raw: dict | None = None) -> bool:
     """True si le marche est susceptible de necessiter du materiel minier / BTP / travaux."""
+    # Categorie OCDS structuree (autoritaire) : 'works' = travaux (toujours pertinent),
+    # 'services' = prestations (consultants/interim/IT) -> jamais. 'goods'/inconnu -> mots-cles.
+    if isinstance(raw, dict):
+        cat = (raw.get("procurement_category") or "").lower()
+        if cat == "services":
+            return False
+        if cat == "works":
+            return True
     text = relevance_text(title, raw)
     if not text.strip():
         return False

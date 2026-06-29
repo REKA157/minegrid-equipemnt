@@ -178,6 +178,7 @@ class OCDSConnector(BaseConnector):
             raw={
                 "source_type": "ocds",
                 "ocid": ocid,
+                "procurement_category": (tender.get("mainProcurementCategory") or "").lower() or None,
                 "awarded_supplier": supplier,
                 "contact_organization": org,
                 "source_text": " ".join(parts)[:4000],

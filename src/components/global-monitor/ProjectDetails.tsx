@@ -341,16 +341,32 @@ export default function ProjectDetails({
   const documents = project.documents ?? [];
   const entities = project.entities ?? [];
   const contacts = project.contacts ?? [];
-  const buyerCandidates = entities.filter((ent) =>
-    ['client', 'buyer', 'acheteur', 'adjudicateur', 'authority'].some((k) =>
-      (ent.role || '').toLowerCase().includes(k),
-    ),
-  );
-  const winnerCandidates = entities.filter((ent) =>
-    ['winner', 'attributaire', 'adjudicataire', 'contractor', 'operator'].some((k) =>
-      (ent.role || '').toLowerCase().includes(k),
-    ),
-  );
+  // Candidats = entités OCDS/IA + CONTACTS structurés (le gagnant/maître d'ouvrage y est
+  // pour World Bank et OCDS) -> évite « non détecté » alors que le contact existe.
+  const buyerCandidates: { name: string; role: string }[] = [
+    ...entities
+      .filter((ent) =>
+        ['client', 'buyer', 'acheteur', 'adjudicateur', 'authority'].some((k) =>
+          (ent.role || '').toLowerCase().includes(k),
+        ),
+      )
+      .map((e) => ({ name: e.name || '', role: e.role || 'buyer' })),
+    ...contacts
+      .filter((c) => (c.role || '').toLowerCase() === 'buyer')
+      .map((c) => ({ name: c.organization || c.person_name || '', role: 'buyer' })),
+  ].filter((x) => x.name);
+  const winnerCandidates: { name: string; role: string }[] = [
+    ...entities
+      .filter((ent) =>
+        ['winner', 'attributaire', 'adjudicataire', 'contractor', 'operator'].some((k) =>
+          (ent.role || '').toLowerCase().includes(k),
+        ),
+      )
+      .map((e) => ({ name: e.name || '', role: e.role || 'winner' })),
+    ...contacts
+      .filter((c) => (c.role || '').toLowerCase() === 'winner')
+      .map((c) => ({ name: c.organization || c.person_name || '', role: 'winner' })),
+  ].filter((x) => x.name);
   const equipmentForDisplay = computeEquipmentForDisplay(project);
   const stockMatch = matchNeedsToStock(equipmentForDisplay, stock);
   const evidenceItems = [
