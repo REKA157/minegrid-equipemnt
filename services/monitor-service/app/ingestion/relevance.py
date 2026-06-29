@@ -62,6 +62,29 @@ _STRONG_WORKS = (
 )
 
 
+# Lexique ENGINS / MATERIEL LOURD — pour la categorie 'goods' (achat de biens) : on ne garde
+# un bien que s'il s'agit d'un vrai engin/machine de chantier (pas eau/papeterie/labo/IT).
+# Termes specifiques (compound) pour eviter les faux positifs ('engin' eviterait 'engineer').
+_MACHINE = (
+    # FR
+    "pelle", "pelleteuse", "excavat", "chargeuse", "chargeur", "bulldozer", "bouteur",
+    "tombereau", "tracto-pelle", "tractopelle", "niveleuse", "motoniveleuse", "compacteur",
+    "rouleau compacteur", "foreuse", "forage", "concasseur", "crible", "finisseur",
+    "camion benne", "camion-benne", "camion", "benne", "grue", "nacelle", "dumper",
+    "groupe electrogene", "groupe électrogène", "compresseur", "betonniere", "bétonnière",
+    "malaxeur", "chariot elevateur", "chariot élévateur", "engins de chantier",
+    "engin de chantier", "materiel de chantier", "matériel de chantier", "pompe a beton",
+    # EN
+    "excavator", "wheel loader", "front loader", "payloader", "backhoe", "dozer",
+    "motor grader", "compactor", "vibratory roller", "road roller", "dump truck",
+    "tipper", "crane", "drilling rig", "drill rig", "borehole", "crusher", "crushing plant",
+    "asphalt plant", "batching plant", "concrete mixer", "concrete pump", "generator set",
+    "generating set", "genset", "generator", "air compressor", "forklift", "telehandler",
+    "skid steer", "earthmoving", "earth-moving", "heavy machinery", "construction equipment",
+    "construction machinery", "wheel loader", "graders", "truck",
+)
+
+
 def relevance_text(title: str | None, raw: dict | None) -> str:
     parts: list[str] = [title or ""]
     if isinstance(raw, dict):
@@ -74,14 +97,17 @@ def relevance_text(title: str | None, raw: dict | None) -> str:
 def is_equipment_relevant(title: str | None, raw: dict | None = None) -> bool:
     """True si le marche est susceptible de necessiter du materiel minier / BTP / travaux."""
     # Categorie OCDS structuree (autoritaire) : 'works' = travaux (toujours pertinent),
-    # 'services' = prestations (consultants/interim/IT) -> jamais. 'goods'/inconnu -> mots-cles.
+    # 'services' = prestations (consultants/interim/IT) -> jamais, 'goods' = bien -> seulement
+    # si c'est un vrai ENGIN/machine. Categorie inconnue (WB, portails) -> mots-cles.
+    text = relevance_text(title, raw)
     if isinstance(raw, dict):
         cat = (raw.get("procurement_category") or "").lower()
         if cat == "services":
             return False
         if cat == "works":
             return True
-    text = relevance_text(title, raw)
+        if cat == "goods":
+            return any(k in text for k in _MACHINE)
     if not text.strip():
         return False
     if not any(k in text for k in _RELEVANT):
