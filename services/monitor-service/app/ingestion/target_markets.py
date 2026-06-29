@@ -33,13 +33,13 @@ TARGET_COUNTRY_NAMES: tuple[str, ...] = (
     "Ethiopia", "Eritrea", "Sudan", "Tanzania", "Kenya", "Uganda", "Malawi", "Zambia",
     "Zimbabwe", "Mozambique", "Angola", "Madagascar", "Burundi", "Rwanda",
     "Somalia, Federal Republic of", "South Sudan", "Lesotho", "Eswatini", "Botswana",
-    "Namibia", "Mauritius", "Comoros", "Seychelles",
+    "Namibia", "Mauritius", "Comoros", "Seychelles", "South Africa",
     # Regions World Bank (Afrique / MENA)
     "Western and Central Africa", "Eastern and Southern Africa", "Southern Africa",
     "Central Africa", "Africa", "Middle East and North Africa", "Sahel",
     # Europe / Caucase / Balkans
     "Italy", "France", "Germany", "Spain", "Portugal", "Netherlands", "Belgium",
-    "Greece", "Poland", "Romania", "Bulgaria", "Ukraine", "Turkiye", "Turkey",
+    "United Kingdom", "Greece", "Poland", "Romania", "Bulgaria", "Ukraine", "Turkiye", "Turkey",
     "Georgia", "Armenia", "Azerbaijan", "Kosovo", "Albania", "Montenegro", "Moldova",
     "North Macedonia", "Serbia", "Bosnia and Herzegovina", "Western Balkans",
 )

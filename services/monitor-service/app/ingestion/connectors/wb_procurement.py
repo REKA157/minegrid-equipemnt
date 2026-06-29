@@ -22,6 +22,7 @@ import httpx
 from app.ingestion.base import BaseConnector
 from app.ingestion.asset import ProjectAsset
 from app.ingestion.target_markets import is_target_country
+from app.ingestion.currency import value_text_to_usd as value_to_usd
 
 _DEFAULT_BASE = "https://search.worldbank.org/api/v2/procnotices"
 _TYPE_MINING = {  # mapping grossier notice/text -> type projet
@@ -79,35 +80,7 @@ def _extract_award(notice_text_plain: str) -> tuple[str | None, str | None, str 
     return name, address, value
 
 
-# Conversion indicative devise -> USD (montant signe du contrat World Bank).
-_FX_TO_USD = {
-    "USD": 1.0, "EUR": 1.08, "GBP": 1.27,
-    "MAD": 0.10, "TND": 0.32, "DZD": 0.0074, "EGP": 0.021, "LYD": 0.21, "MRU": 0.025,
-    "XOF": 0.00164, "XAF": 0.00164, "NGN": 0.0012, "GHS": 0.075, "GMD": 0.014,
-    "TZS": 0.00040, "KES": 0.0077, "UGX": 0.00027, "ETB": 0.018, "RWF": 0.00078,
-    "MGA": 0.00022, "MWK": 0.00058, "ZMW": 0.038, "MZN": 0.016, "AOA": 0.0011,
-    "ZAR": 0.055, "MUR": 0.022, "BIF": 0.00035, "SDG": 0.0017,
-    "TRY": 0.031, "UAH": 0.025, "GEL": 0.37, "RON": 0.22, "PLN": 0.25, "MDL": 0.057,
-    "SAR": 0.27, "AED": 0.27, "QAR": 0.27, "KWD": 3.25, "OMR": 2.60, "BHD": 2.65,
-    "JOD": 1.41, "IQD": 0.00076,
-}
-
-
-def value_to_usd(value_str: str | None) -> Decimal | None:
-    """« MAD 2560500.00 » -> ~256050 USD (indicatif). None si devise inconnue/illisible."""
-    if not value_str:
-        return None
-    m = re.match(r"\s*([A-Za-z]{2,4})\s*([\d.,]+)", value_str)
-    if not m:
-        return None
-    rate = _FX_TO_USD.get(m.group(1).upper())
-    if not rate:
-        return None
-    try:
-        usd = float(m.group(2).replace(",", "")) * rate
-    except ValueError:
-        return None
-    return Decimal(str(int(round(usd)))) if usd > 0 else None
+# value_to_usd est importe depuis app.ingestion.currency (table FX partagee).
 
 
 class WBProcurementConnector(BaseConnector):
