@@ -214,5 +214,7 @@ async def enrich_pending_winners(db, api_key: str, limit: int = 60, only_country
                 # Marque « tente, rien de fiable » -> ne sera pas re-essaye automatiquement.
                 contact.rationale = f"{base} | recherche web: aucun contact fiable"
             await asyncio.sleep(0.3)
+            if tried % 50 == 0:
+                await db.commit()  # commit progressif : on ne perd pas le travail deja fait
     await db.commit()
     return tried, filled
