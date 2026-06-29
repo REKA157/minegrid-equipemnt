@@ -19,7 +19,9 @@ async def main(apply: bool) -> None:
     keep: set[str] = set()
     seen: set[str] = set()
     for src in sources:
-        conn = CONNECTOR_MAP["ocds_feed"](config=src.get("config", {}))
+        cfg = dict(src.get("config", {}))
+        cfg["max_items"] = 60000   # couvre TOUT le flux (pas seulement les 1500 premiers ocids)
+        conn = CONNECTOR_MAP["ocds_feed"](config=cfg)
         try:
             assets = await conn.fetch()
         except Exception as e:
