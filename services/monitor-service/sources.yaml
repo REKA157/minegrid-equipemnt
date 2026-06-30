@@ -55,7 +55,8 @@ sources:
     config: { source_name: "UK Find a Tender", mode: "api", country_default: "United Kingdom", max_items: 600, max_pages: 25, feed_url: "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages", params: { stages: "award" } }
   - name: "OCDS - France (DECP)"
     connector: ocds_feed
-    enabled: true   # full 67 Mo en latin-1 (repli decode) ; pas de mainProcurementCategory -> mots-cles
+    enabled: false   # SOURCE PRE-CORROMPUE : l'export OCP du DECP a perdu les accents (U+FFFD ~49%
+                     # des titres, irrecuperable). France propre = API BOAMP Opendatasoft (nature=ATTRIBUTION).
     config: { source_name: "France DECP", mode: "bulk_jsonl_gz", country_default: "France", max_items: 2000, feed_url: "https://data.open-contracting.org/en/publication/23/download", params: { name: "full.jsonl.gz" } }
   - name: "OCDS - Italie (ANAC)"
     connector: ocds_feed
