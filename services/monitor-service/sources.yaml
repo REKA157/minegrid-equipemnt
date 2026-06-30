@@ -30,8 +30,8 @@ sources:
     config: { source_name: "Kenya PPRA", mode: "bulk_jsonl_gz", country_default: "Kenya", max_items: 1500, feed_url: "https://data.open-contracting.org/en/publication/147/download", params: { name: "full.jsonl.gz" } }
   - name: "OCDS - Tanzanie (PPRA NeST)"
     connector: ocds_feed
-    enabled: false   # bulk 374 Mo -> streaming a fiabiliser (ou utiliser un fichier annuel 20xx.jsonl.gz)
-    config: { source_name: "Tanzania PPRA", mode: "bulk_jsonl_gz", country_default: "Tanzania", max_items: 1500, feed_url: "https://data.open-contracting.org/en/publication/152/download", params: { name: "full.jsonl.gz" } }
+    enabled: true   # fichier annuel 2026 (31 Mo) ; titre derive des items, pas de mainProcurementCategory
+    config: { source_name: "Tanzania PPRA", mode: "bulk_jsonl_gz", country_default: "Tanzania", max_items: 2000, feed_url: "https://data.open-contracting.org/en/publication/152/download", params: { name: "2026.jsonl.gz" } }
   - name: "OCDS - Ouganda (PPDA)"
     connector: ocds_feed
     enabled: true
@@ -55,12 +55,12 @@ sources:
     config: { source_name: "UK Find a Tender", mode: "api", country_default: "United Kingdom", max_items: 600, max_pages: 25, feed_url: "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages", params: { stages: "award" } }
   - name: "OCDS - France (DECP)"
     connector: ocds_feed
-    enabled: false   # bulk 67 Mo -> streaming a fiabiliser (ou fichier annuel) ; sinon couvrir via TED
-    config: { source_name: "France DECP", mode: "bulk_jsonl_gz", country_default: "France", max_items: 1500, feed_url: "https://data.open-contracting.org/en/publication/23/download", params: { name: "full.jsonl.gz" } }
+    enabled: true   # full 67 Mo en latin-1 (repli decode) ; pas de mainProcurementCategory -> mots-cles
+    config: { source_name: "France DECP", mode: "bulk_jsonl_gz", country_default: "France", max_items: 2000, feed_url: "https://data.open-contracting.org/en/publication/23/download", params: { name: "full.jsonl.gz" } }
   - name: "OCDS - Italie (ANAC)"
     connector: ocds_feed
-    enabled: false   # bulk 190 Mo -> streaming a fiabiliser (ou fichier annuel) ; sinon couvrir via TED
-    config: { source_name: "Italy ANAC", mode: "bulk_jsonl_gz", country_default: "Italy", max_items: 1500, feed_url: "https://data.open-contracting.org/en/publication/117/download", params: { name: "full.jsonl.gz" } }
+    enabled: true   # fichier annuel 2025 (3,5 Mo) ; mainProcurementCategory present (works/services)
+    config: { source_name: "Italy ANAC", mode: "bulk_jsonl_gz", country_default: "Italy", max_items: 2000, feed_url: "https://data.open-contracting.org/en/publication/117/download", params: { name: "2025.jsonl.gz" } }
   - name: "OCDS - Pays-Bas (TenderNed)"
     connector: ocds_feed
     enabled: true

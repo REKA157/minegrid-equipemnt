@@ -99,15 +99,26 @@ class OCDSConnector(BaseConnector):
     async def _fetch_bulk(self, feed_url: str, by_ocid: dict) -> None:
         params = self.config.get("params", {}) or {}
         dec = zlib.decompressobj(16 + zlib.MAX_WBITS)  # gzip
-        buf = ""
+        buf = b""  # on accumule des OCTETS et on decode par LIGNE (evite de couper l'UTF-8)
         async with httpx.AsyncClient(timeout=180, headers=_UA, follow_redirects=True) as client:
             async with client.stream("GET", feed_url, params=params) as resp:
                 resp.raise_for_status()
                 async for chunk in resp.aiter_bytes(chunk_size=131072):
-                    buf += dec.decompress(chunk).decode("utf-8", "replace")
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        line = line.strip()
+                    # gzip MULTI-MEMBRES : enchainer les membres (sinon on s'arrete au 1er).
+                    cur = chunk
+                    while cur:
+                        buf += dec.decompress(cur)
+                        if dec.eof:
+                            cur = dec.unused_data
+                            dec = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                        else:
+                            cur = b""
+                    while b"\n" in buf:
+                        rawline, buf = buf.split(b"\n", 1)
+                        try:  # UTF-8 d'abord, repli latin-1 (certains exports France DECP)
+                            line = rawline.decode("utf-8").strip()
+                        except UnicodeDecodeError:
+                            line = rawline.decode("latin-1").strip()
                         if not line:
                             continue
                         try:
@@ -135,15 +146,28 @@ class OCDSConnector(BaseConnector):
             return None
         tender = rel.get("tender") or {}
         awards = [a for a in (rel.get("awards") or []) if isinstance(a, dict) and a.get("suppliers")]
+        buyer = rel.get("buyer") or {}
 
+        # Titre : tender.title -> award.title -> description -> 1er item -> maitre d'ouvrage.
         title = (tender.get("title") or "").strip()
         if not title and awards:
             title = (awards[0].get("title") or "").strip()
+        if not title:
+            title = (tender.get("description") or "").strip()
+        if not title:
+            items = list(tender.get("items") or [])
+            if awards:
+                items += list(awards[0].get("items") or [])
+            for it in items:
+                d = (it.get("description") or (it.get("classification") or {}).get("description") or "").strip()
+                if d:
+                    title = d
+                    break
+        if not title and (buyer.get("name") or "").strip():
+            title = f"Marché public — {buyer.get('name').strip()}"
         title = title[:220]
         if not title or title.isdigit() or len(title) < 4:
             return None
-
-        buyer = rel.get("buyer") or {}
         country = ((buyer.get("address") or {}).get("countryName") or "").strip() or self._country_default
         if self._restrict and country and not is_target_country(country):
             return None
