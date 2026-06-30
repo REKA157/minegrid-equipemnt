@@ -178,6 +178,7 @@ export default function Dashboard({ section = 'overview' }) {
     useEffect(() => {
         loadDashboardData();
         loadUserData();
+        loadMachines(); // sans ça, `loading` reste true (seul loadMachines remet setLoading(false)) → "Mes annonces" bloqué sur "Chargement…"
         window.addEventListener('hashchange', handleHashChange);
         handleHashChange(); // Appel initial
         

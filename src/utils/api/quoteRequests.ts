@@ -127,6 +127,23 @@ async function fetchSellerUserIdFromMachine(machineId: string): Promise<string |
   }
 }
 
+/** Lit machines.price (TEXT, virgule possible) et le normalise en nombre > 0, sinon null. */
+async function fetchMachinePrice(machineId: string): Promise<number | null> {
+  try {
+    const { data, error } = await supabase
+      .from('machines')
+      .select('price')
+      .eq('id', machineId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const raw = (data as { price?: unknown }).price;
+    const n = Number(String(raw ?? '').replace(',', '.'));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Cree un dossier transaction (si les tables existent) et rattache la demande.
  * Appele pour un acheteur connecte qui n est pas le vendeur.
@@ -136,6 +153,8 @@ async function tryLinkQuoteToNewTransactionCase(opts: {
   machineId: string;
   sellerId: string;
   buyerUserId: string;
+  amount?: number | null;
+  currency?: string | null;
 }): Promise<{ caseId: string | null; participantsLinked: boolean }> {
   const { data, error } = await supabase
     .from('transaction_cases')
@@ -148,6 +167,8 @@ async function tryLinkQuoteToNewTransactionCase(opts: {
       primary_quote_request_id: opts.quoteId,
       title: 'Demande depuis annonce',
       created_by: opts.buyerUserId,
+      total_amount: opts.amount ?? null,
+      currency: opts.currency ?? 'MAD',
     })
     .select('id')
     .single();
@@ -274,11 +295,18 @@ export async function submitQuoteRequest(
   let transactionCaseId: string | null = null;
   let participantsLinked: boolean | null = null;
   if (linkAttempted) {
+    // Montant du dossier : offre de l'acheteur (budget_max sinon budget_min), repli sur le prix de l'annonce.
+    let offerAmount: number | null = cleaned.budget_max ?? cleaned.budget_min ?? null;
+    if (offerAmount == null || offerAmount <= 0) {
+      offerAmount = await fetchMachinePrice(cleaned.machine_id);
+    }
     const linked = await tryLinkQuoteToNewTransactionCase({
       quoteId,
       machineId: cleaned.machine_id,
       sellerId: sellerId!,
       buyerUserId: uid!,
+      amount: offerAmount,
+      currency: 'MAD',
     });
     transactionCaseId = linked.caseId;
     participantsLinked = linked.caseId ? linked.participantsLinked : null;

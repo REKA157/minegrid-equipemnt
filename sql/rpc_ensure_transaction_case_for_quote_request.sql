@@ -19,6 +19,8 @@ declare
   qr record;
   new_case uuid;
   resolved_seller uuid;
+  v_amount numeric;
+  v_currency text := 'MAD';
 begin
   if auth.uid() is null then
     raise exception 'ensure_transaction_case_for_quote_request: authentification requise';
@@ -69,6 +71,18 @@ begin
   where q0.id = qr.id
     and q0.seller_id is distinct from resolved_seller;
 
+  -- Montant du dossier : offre de l'acheteur (budget_max sinon budget_min),
+  -- repli sur le prix de l'annonce (machines.price est en TEXT → parsing défensif).
+  v_amount := coalesce(qr.budget_max, qr.budget_min);
+  if v_amount is null and qr.machine_id is not null then
+    select nullif(regexp_replace(replace(m.price::text, ',', '.'), '[^0-9.]', '', 'g'), '')::numeric
+      into v_amount
+    from public.machines m
+    where m.id = qr.machine_id
+    limit 1;
+  end if;
+  if coalesce(v_amount, 0) <= 0 then v_amount := null; end if;
+
   insert into public.transaction_cases (
     kind,
     status,
@@ -77,7 +91,9 @@ begin
     buyer_user_id,
     primary_quote_request_id,
     title,
-    created_by
+    created_by,
+    total_amount,
+    currency
   )
   values (
     'sale',
@@ -87,7 +103,9 @@ begin
     qr.buyer_user_id,
     qr.id,
     'Demande depuis annonce',
-    qr.buyer_user_id
+    qr.buyer_user_id,
+    v_amount,
+    v_currency
   )
   returning id into new_case;
 
@@ -100,7 +118,8 @@ begin
   )
   values
     (new_case, qr.buyer_user_id, 'buyer', qr.buyer_user_id, now()),
-    (new_case, resolved_seller, 'seller', qr.buyer_user_id, now());
+    (new_case, resolved_seller, 'seller', qr.buyer_user_id, now())
+  on conflict (case_id, user_id, role) do nothing;
 
   /* quote_requests.transaction_case_id : trigger AFTER INSERT ou mise à jour idempotente */
   update public.quote_requests q

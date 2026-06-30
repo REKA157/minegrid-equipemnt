@@ -208,6 +208,19 @@ begin
 
   -- Anti-façade : pas d'escrow sans acheteur réel ni montant.
   if v_case.buyer_user_id is null then raise exception 'buyer_required'; end if;
+
+  -- Filet : si le dossier n'a pas de montant (anciens dossiers), le renseigner
+  -- depuis le prix de l'annonce (machines.price est en TEXT → parsing défensif).
+  if coalesce(v_case.total_amount, 0) <= 0 and v_case.machine_id is not null then
+    update public.transaction_cases
+       set total_amount = (
+             select nullif(regexp_replace(replace(m.price::text, ',', '.'), '[^0-9.]', '', 'g'), '')::numeric
+             from public.machines m where m.id = v_case.machine_id limit 1),
+           currency = coalesce(v_case.currency, 'MAD')
+     where id = p_case_id and (total_amount is null or total_amount <= 0);
+    select * into v_case from public.transaction_cases where id = p_case_id;
+  end if;
+
   if coalesce(v_case.total_amount, 0) <= 0 then raise exception 'amount_required'; end if;
 
   -- Idempotence : un escrow non terminal déjà rattaché -> on le renvoie.
