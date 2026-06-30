@@ -341,32 +341,50 @@ export default function ProjectDetails({
   const documents = project.documents ?? [];
   const entities = project.entities ?? [];
   const contacts = project.contacts ?? [];
-  // Candidats = entités OCDS/IA + CONTACTS structurés (le gagnant/maître d'ouvrage y est
-  // pour World Bank et OCDS) -> évite « non détecté » alors que le contact existe.
-  const buyerCandidates: { name: string; role: string }[] = [
-    ...entities
-      .filter((ent) =>
-        ['client', 'buyer', 'acheteur', 'adjudicateur', 'authority'].some((k) =>
-          (ent.role || '').toLowerCase().includes(k),
-        ),
-      )
-      .map((e) => ({ name: e.name || '', role: e.role || 'buyer' })),
-    ...contacts
-      .filter((c) => (c.role || '').toLowerCase() === 'buyer')
-      .map((c) => ({ name: c.organization || c.person_name || '', role: 'buyer' })),
-  ].filter((x) => x.name);
-  const winnerCandidates: { name: string; role: string }[] = [
-    ...entities
-      .filter((ent) =>
-        ['winner', 'attributaire', 'adjudicataire', 'contractor', 'operator'].some((k) =>
-          (ent.role || '').toLowerCase().includes(k),
-        ),
-      )
-      .map((e) => ({ name: e.name || '', role: e.role || 'winner' })),
-    ...contacts
-      .filter((c) => (c.role || '').toLowerCase() === 'winner')
-      .map((c) => ({ name: c.organization || c.person_name || '', role: 'winner' })),
-  ].filter((x) => x.name);
+  // Réconciliation ENTITÉS (IA/OCDS) + CONTACTS structurés en parties UNIQUES (dédup par nom) :
+  // le contact structuré prime sur l'entité, un acheteur n'est jamais le gagnant, pas de doublon.
+  const _normName = (s: string | null | undefined) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+  const _collectParties = (entityKeys: string[], role: string): { name: string; role: string }[] => {
+    const out: { name: string; role: string }[] = [];
+    const seen = new Set<string>();
+    const push = (name: string) => {
+      const k = _normName(name);
+      if (!name || !k || seen.has(k)) return;
+      seen.add(k);
+      out.push({ name, role });
+    };
+    contacts.filter((c) => (c.role || '').toLowerCase() === role)
+      .forEach((c) => push(c.organization || c.person_name || ''));
+    entities.filter((e) => entityKeys.some((k) => (e.role || '').toLowerCase().includes(k)))
+      .forEach((e) => push(e.name || ''));
+    return out;
+  };
+  const buyerCandidates = _collectParties(['client', 'buyer', 'acheteur', 'adjudicateur', 'authority'], 'buyer');
+  const _buyerSet = new Set(buyerCandidates.map((b) => _normName(b.name)));
+  const winnerCandidates = _collectParties(['winner', 'attributaire', 'adjudicataire', 'contractor', 'operator'], 'winner')
+    .filter((w) => !_buyerSet.has(_normName(w.name)));
+  const _winnerSet = new Set(winnerCandidates.map((w) => _normName(w.name)));
+  // Contacts à afficher : dédupliqués par organisation, rôle reconcilié (lauréat/maître d'ouvrage).
+  const _seenContact = new Set<string>();
+  const contactsForDisplay = contacts
+    .filter((c) => {
+      const k = _normName(c.organization || c.person_name);
+      if (!k || _seenContact.has(k)) return false;
+      _seenContact.add(k);
+      return true;
+    })
+    .map((c) => {
+      const k = _normName(c.organization || c.person_name);
+      const displayRole = _winnerSet.has(k) ? 'winner' : _buyerSet.has(k) ? 'buyer' : (c.role || 'unknown');
+      return { contact: c, displayRole };
+    });
+  const roleLabel = (r: string): string => {
+    const x = (r || '').toLowerCase();
+    if (x === 'winner') return 'Lauréat (attributaire)';
+    if (x === 'buyer') return "Maître d'ouvrage";
+    if (x === 'operator') return 'Opérateur';
+    return 'Contact';
+  };
   const equipmentForDisplay = computeEquipmentForDisplay(project);
   const stockMatch = matchNeedsToStock(equipmentForDisplay, stock);
   const evidenceItems = [
@@ -668,19 +686,19 @@ export default function ProjectDetails({
           </div>
         )}
 
-        {/* Prospects AO (acheteur / gagnant / contacts publics) */}
-        {contacts.length > 0 && (
+        {/* Prospects AO (acheteur / gagnant / contacts publics) — dédupliqués, rôle reconcilié */}
+        {contactsForDisplay.length > 0 && (
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                <Users className="h-3 w-3" /> Prospects AO ({contacts.length})
+                <Users className="h-3 w-3" /> Prospects AO ({contactsForDisplay.length})
               </h4>
               {onCreateLeadsFromProject && (
                 <span className="text-[10px] text-gray-400">Action disponible en haut: « Vers Kanban »</span>
               )}
             </div>
             <div className="space-y-2">
-              {contacts.map((contact) => (
+              {contactsForDisplay.map(({ contact, displayRole }) => (
                 <div key={contact.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -688,7 +706,7 @@ export default function ProjectDetails({
                         {contact.organization || contact.person_name || 'Organisation non précisée'}
                       </p>
                       <p className="text-[10px] text-gray-500">
-                        {contact.role || 'role non précisé'} · confiance {Math.round((contact.confidence ?? 0.6) * 100)}%
+                        {roleLabel(displayRole)} · confiance {Math.round((contact.confidence ?? 0.6) * 100)}%
                       </p>
                     </div>
                     {onCreateLeadFromContact && (
@@ -730,7 +748,7 @@ export default function ProjectDetails({
             </div>
           </div>
         )}
-        {contacts.length === 0 && (
+        {contactsForDisplay.length === 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
             Aucun contact direct (email/téléphone/site) détecté pour l’instant dans l’AO.
             Lance « Comparer IA » puis « Kanban » dès qu’un contact apparaît.
