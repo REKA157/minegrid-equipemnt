@@ -18,6 +18,7 @@ const EnterpriseDashboardCourtierDisplay: React.FC = () => (
     role="courtier"
     widgetsSource={CourtierWidgets}
     validIds={WIDGETS_COURTIER_IDS}
+    defaultActiveIds={WIDGETS_COURTIER_IDS}
     modalLabel="widget courtier"
   />
 );

@@ -16,6 +16,7 @@ const EnterpriseDashboardInvestisseurDisplay: React.FC = () => (
     role="investisseur"
     widgetsSource={InvestisseurWidgets}
     validIds={WIDGETS_INVESTISSEUR_IDS}
+    defaultActiveIds={WIDGETS_INVESTISSEUR_IDS}
     modalLabel="widget investisseur"
   />
 );

@@ -15,6 +15,7 @@ const EnterpriseDashboardTransitaireDisplay: React.FC = () => (
     role="transitaire"
     widgetsSource={TransitaireWidgets}
     validIds={WIDGETS_TRANSITAIRE_IDS}
+    defaultActiveIds={WIDGETS_TRANSITAIRE_IDS}
     modalLabel="widget transitaire"
   />
 );

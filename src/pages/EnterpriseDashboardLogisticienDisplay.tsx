@@ -15,6 +15,7 @@ const EnterpriseDashboardLogisticienDisplay: React.FC = () => (
     role="logisticien"
     widgetsSource={LogisticienWidgets}
     validIds={WIDGETS_LOGISTICIEN_IDS}
+    defaultActiveIds={WIDGETS_LOGISTICIEN_IDS}
     modalLabel="widget logisticien"
   />
 );
