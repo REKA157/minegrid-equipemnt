@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Building2, Calendar, Users } from 'lucide-react';
+import { DollarSign, Building2, Calendar, Users, Receipt } from 'lucide-react';
 
 export const LoueurWidgets = {
   metier: 'Loueur',
@@ -40,6 +40,15 @@ export const LoueurWidgets = {
       icon: Users,
       dataSource: 'rental-pipeline',
       features: { periodSelector: true, export: true, analytics: true, alerts: true }
+    },
+    {
+      id: 'rental-overdue',
+      type: 'list',
+      title: 'Recouvrement / impayés',
+      description: 'Loyers échus non payés : total MAD, ancienneté du retard (0-30j / 31-60j / 60j+) et clients débiteurs',
+      icon: Receipt,
+      dataSource: 'rental_invoices',
+      features: { periodSelector: false, export: true, analytics: false, alerts: true }
     }
     // Widgets retirés (hors-sujet pour le loueur — c'étaient des composants VENDEUR
     // recyclés) : 'daily-actions' (Actions Commerciales), 'ai-insights' (reco CRM),

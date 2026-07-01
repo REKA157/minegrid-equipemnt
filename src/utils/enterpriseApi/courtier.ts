@@ -500,3 +500,146 @@ export function computeMonthlyPayment(amount: number, annualRatePercent: number,
   const factor = Math.pow(1 + monthlyRate, durationMonths);
   return Math.round((amount * monthlyRate * factor) / (factor - 1));
 }
+
+// ---------------------------------------------------------------------
+// WIDGET : "COMPARATEUR MULTI-BANQUES" (bank-comparator -> list)
+// Pour une demande de credit (montant + duree), compare les offres des
+// banques partenaires : taux, mensualite, cout total du credit, et met
+// en avant la moins chere. Coeur de metier du courtier en financement.
+// Formule d'annuite : M = C*(t/12) / (1 - (1 + t/12)^(-n)).
+// ---------------------------------------------------------------------
+export type BankOfferRow = {
+  id: string;
+  bank_name: string;
+  annual_rate: number | null;
+  max_duration_months: number | null;
+  file_fees: number | null;
+  min_amount?: number | null;
+  max_amount?: number | null;
+  active?: boolean | null;
+};
+
+export type BankComparisonItem = {
+  id: string;
+  bankName: string;
+  annualRate: number;
+  durationMonths: number;      // duree effectivement appliquee (bornee par max_duration_months)
+  monthlyPayment: number;      // mensualite MAD
+  totalPaid: number;           // total rembourse = mensualite * duree + frais de dossier
+  totalCost: number;           // cout du credit = totalPaid - montant emprunte
+  fileFees: number;
+  eligible: boolean;           // banque capable de financer ce montant sur cette duree
+  isBest: boolean;             // meilleure offre eligible (cout total le plus bas)
+};
+
+const BANK_OFFER_COLUMNS = `
+  id, bank_name, annual_rate, max_duration_months, file_fees, min_amount, max_amount, active
+`;
+
+/** Mensualite via formule d'annuite. Renvoie 0 si donnees insuffisantes. */
+function annuityMonthlyPayment(amount: number, annualRatePercent: number, durationMonths: number): number {
+  if (!amount || !durationMonths) return 0;
+  if (!annualRatePercent) return amount / durationMonths;
+  const t = annualRatePercent / 100 / 12;
+  return (amount * t) / (1 - Math.pow(1 + t, -durationMonths));
+}
+
+export async function getBankComparison() {
+  const [offers, lastApps] = await Promise.all([
+    supabaseCall<BankOfferRow[]>(
+      () =>
+        supabase
+          .from('bank_offers')
+          .select(BANK_OFFER_COLUMNS)
+          .eq('active', true)
+          .order('annual_rate', { ascending: true }),
+      { label: 'getBankComparison.offers', fallback: [] },
+    ),
+    supabaseCall<CreditApplicationRow[]>(
+      () =>
+        supabase
+          .from('credit_applications')
+          .select('requested_amount, duration_months, equipment_label, application_date')
+          .order('application_date', { ascending: false })
+          .limit(1),
+      { label: 'getBankComparison.lastApp', fallback: [] },
+    ),
+  ]);
+
+  // Montant / duree de reference : derniere demande de credit, sinon valeurs par defaut.
+  const lastApp = lastApps[0];
+  const refAmount = Number(lastApp?.requested_amount) > 0 ? Number(lastApp!.requested_amount) : 1_000_000;
+  const refDuration = Number(lastApp?.duration_months) > 0 ? Number(lastApp!.duration_months) : 60;
+  const refLabel = lastApp?.equipment_label || null;
+  const usingRealApp = !!(lastApp && Number(lastApp.requested_amount) > 0);
+
+  const rawItems = offers.map((o) => {
+    const annualRate = Number(o.annual_rate || 0);
+    const maxDuration = Number(o.max_duration_months || 0);
+    const fileFees = Number(o.file_fees || 0);
+    const minAmount = o.min_amount != null ? Number(o.min_amount) : null;
+    const maxAmount = o.max_amount != null ? Number(o.max_amount) : null;
+
+    // Duree effective : bornee par la duree max de la banque.
+    const durationMonths = maxDuration > 0 ? Math.min(refDuration, maxDuration) : refDuration;
+    const monthlyPayment = annuityMonthlyPayment(refAmount, annualRate, durationMonths);
+    const totalPaid = monthlyPayment * durationMonths + fileFees;
+    const totalCost = totalPaid - refAmount;
+
+    // Eligible si la banque couvre le montant demande et la duree souhaitee.
+    const eligible =
+      (minAmount == null || refAmount >= minAmount) &&
+      (maxAmount == null || refAmount <= maxAmount) &&
+      (maxDuration === 0 || maxDuration >= refDuration);
+
+    return {
+      id: String(o.id),
+      bankName: String(o.bank_name || ''),
+      annualRate,
+      durationMonths,
+      monthlyPayment: Math.round(monthlyPayment),
+      totalPaid: Math.round(totalPaid),
+      totalCost: Math.round(totalCost),
+      fileFees: Math.round(fileFees),
+      eligible,
+      isBest: false,
+    } as BankComparisonItem;
+  });
+
+  // Meilleure offre = cout total le plus bas parmi les banques eligibles.
+  const eligibleItems = rawItems.filter((i) => i.eligible && i.monthlyPayment > 0);
+  let bestId: string | null = null;
+  let bestCost = Infinity;
+  for (const i of eligibleItems) {
+    if (i.totalCost < bestCost) {
+      bestCost = i.totalCost;
+      bestId = i.id;
+    }
+  }
+
+  const items = rawItems
+    .map((i) => ({ ...i, isBest: i.id === bestId }))
+    // Eligibles d'abord, puis par cout total croissant.
+    .sort((a, b) => {
+      if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+      return a.totalCost - b.totalCost;
+    });
+
+  const worstCost = eligibleItems.reduce((m, i) => Math.max(m, i.totalCost), 0);
+  const best = items.find((i) => i.isBest) || null;
+
+  return {
+    items,
+    bankCount: items.length,
+    eligibleCount: eligibleItems.length,
+    refAmount: Math.round(refAmount),
+    refDuration,
+    refLabel,
+    usingRealApp,
+    bestBankName: best?.bankName || null,
+    bestMonthlyPayment: best?.monthlyPayment || 0,
+    bestTotalCost: best?.totalCost || 0,
+    // Economie realisee en choisissant la meilleure offre plutot que la plus chere.
+    savingsVsWorst: best ? Math.max(0, Math.round(worstCost - best.totalCost)) : 0,
+  };
+}

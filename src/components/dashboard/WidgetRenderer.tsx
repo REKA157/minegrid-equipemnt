@@ -5,6 +5,7 @@ import { supabaseClient } from '../../utils/supabaseClient';
 import {
   getRentalRevenue,
   getUpcomingRentals,
+  getRentalOverdue,
 } from '../../utils/enterpriseApi/rentals';
 import { getEquipmentAvailability } from '../../utils/enterpriseApi/equipment';
 import { buildCorrelatedRentalActions } from '../../utils/buildCorrelatedRentalActions';
@@ -27,6 +28,7 @@ import {
   getCommissionTracking,
   getClientPortfolio,
   getPerformanceAnalytics,
+  getBankComparison,
   renewInsurancePolicy,
   type CreditApplicationRow,
   type InsurancePolicyRow,
@@ -58,8 +60,9 @@ import {
   getRouteTrackingRows,
   getSupplyChainKpisChart,
   getLogisticsStockAlertsList,
+  getLogisticsProfitability,
 } from '../../utils/enterpriseApi/logisticien';
-import { Plus, ShoppingCart, Truck, Package, AlertTriangle, Clock, Shield, FileText, DollarSign, RefreshCw, Building2, Target, TrendingUp, Briefcase, ArrowRight, Ship, Anchor } from 'lucide-react';
+import { Plus, ShoppingCart, Truck, Package, AlertTriangle, Clock, Shield, FileText, DollarSign, RefreshCw, Building2, Target, TrendingUp, Briefcase, ArrowRight, Ship, Anchor, Landmark, Wallet } from 'lucide-react';
 
 // Import des widgets avancés avec IA
 import SalesPerformanceScoreWidget from './widgets/SalesPerformanceScoreWidget';
@@ -340,6 +343,14 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
     Awaited<ReturnType<typeof getDemurrageExposure>> | null
   >(null);
   const [liveDemurrageLoading, setLiveDemurrageLoading] = useState(false);
+  const [liveRentalOverdue, setLiveRentalOverdue] = useState<
+    Awaited<ReturnType<typeof getRentalOverdue>> | null
+  >(null);
+  const [liveRentalOverdueLoading, setLiveRentalOverdueLoading] = useState(false);
+  const [liveBankComparison, setLiveBankComparison] = useState<Awaited<ReturnType<typeof getBankComparison>> | null>(null);
+  const [liveBankComparisonLoading, setLiveBankComparisonLoading] = useState(false);
+  const [liveLogisticsProfit, setLiveLogisticsProfit] = useState<Awaited<ReturnType<typeof getLogisticsProfitability>> | null>(null);
+  const [liveLogisticsProfitLoading, setLiveLogisticsProfitLoading] = useState(false);
 
   // --- LOGISTICIEN / SUPPLY CHAIN ---
   const [liveWarehouseOccupancy, setLiveWarehouseOccupancy] = useState<
@@ -1006,6 +1017,57 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         console.error('WidgetRenderer getDemurrageExposure', e);
       } finally {
         if (!cancelled) setLiveDemurrageLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'rental-overdue') return;
+    let cancelled = false;
+    (async () => {
+      setLiveRentalOverdueLoading(true);
+      try {
+        const data = await getRentalOverdue();
+        if (!cancelled) setLiveRentalOverdue(data);
+      } catch (e) {
+        console.error('WidgetRenderer getRentalOverdue', e);
+      } finally {
+        if (!cancelled) setLiveRentalOverdueLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'bank-comparator') return;
+    let cancelled = false;
+    (async () => {
+      setLiveBankComparisonLoading(true);
+      try {
+        const data = await getBankComparison();
+        if (!cancelled) setLiveBankComparison(data);
+      } catch (e) {
+        console.error('WidgetRenderer getBankComparison', e);
+      } finally {
+        if (!cancelled) setLiveBankComparisonLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'logistics-profitability') return;
+    let cancelled = false;
+    (async () => {
+      setLiveLogisticsProfitLoading(true);
+      try {
+        const data = await getLogisticsProfitability();
+        if (!cancelled) setLiveLogisticsProfit(data);
+      } catch (e) {
+        console.error('WidgetRenderer getLogisticsProfitability', e);
+      } finally {
+        if (!cancelled) setLiveLogisticsProfitLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -1763,6 +1825,189 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             </div>
             {dem.watchCount > 0 && (
               <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">{dem.watchCount} conteneur(s) dans la franchise à surveiller</div>
+            )}
+          </div>
+        );
+      }
+      if (widget.id === 'rental-overdue') {
+        if (liveRentalOverdueLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mr-2" />
+              Chargement des impayés…
+            </div>
+          );
+        }
+        const ovd = liveRentalOverdue;
+        if (!ovd || ovd.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <DollarSign className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucun loyer impayé</div>
+              <div className="text-xs text-gray-400 mt-1">Trésorerie à jour, ou renseignez vos factures de location (échéance + montant) pour suivre les retards</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className={`rounded p-2 ${ovd.totalOverdue > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${ovd.totalOverdue > 0 ? 'text-red-700' : 'text-green-700'}`}>{ovd.totalOverdue.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Total impayé</div>
+              </div>
+              <div className="rounded bg-amber-50 p-2">
+                <div className="text-sm font-bold text-amber-700">{ovd.overdueCount}</div>
+                <div className="text-[10px] text-amber-700/80">Factures en retard</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{ovd.maxDaysLate} j</div>
+                <div className="text-[10px] text-gray-600">Pire retard</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className="rounded bg-amber-50/60 p-1.5">
+                <div className="text-xs font-bold text-amber-700">{ovd.bucket0_30.toLocaleString('fr-FR')}</div>
+                <div className="text-[10px] text-gray-600">0-30 j</div>
+              </div>
+              <div className="rounded bg-orange-50 p-1.5">
+                <div className="text-xs font-bold text-orange-700">{ovd.bucket31_60.toLocaleString('fr-FR')}</div>
+                <div className="text-[10px] text-gray-600">31-60 j</div>
+              </div>
+              <div className="rounded bg-red-50 p-1.5">
+                <div className="text-xs font-bold text-red-700">{ovd.bucket60plus.toLocaleString('fr-FR')}</div>
+                <div className="text-[10px] text-gray-600">60 j+</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {ovd.items.slice(0, 8).map((i) => (
+                <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.clientName}</div>
+                    <div className="text-[10px] text-gray-500">{i.invoiceNumber}{i.dueDate ? ' · éch. ' + i.dueDate : ''}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className="font-bold text-red-700">{i.remaining.toLocaleString('fr-FR')} MAD</div>
+                    <div className={`text-[10px] ${i.bucket === '60+' ? 'text-red-600' : i.bucket === '31-60' ? 'text-orange-600' : 'text-amber-600'}`}>+{i.daysLate} j de retard</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      if (widget.id === 'logistics-profitability') {
+        if (liveLogisticsProfitLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mr-2" />
+              Chargement de la rentabilité…
+            </div>
+          );
+        }
+        const prof = liveLogisticsProfit;
+        if (!prof || prof.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Wallet className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucune opération chiffrée</div>
+              <div className="text-xs text-gray-400 mt-1">Renseignez coût transport, coût entreposage et montant facturé sur vos routes</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className={`rounded p-2 ${prof.totalMargin >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className={`text-sm font-bold ${prof.totalMargin >= 0 ? 'text-green-700' : 'text-red-700'}`}>{prof.totalMargin.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Marge globale ({prof.marginPct}%)</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{prof.totalCost.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Coût total</div>
+              </div>
+              <div className={`rounded p-2 ${prof.unprofitableCount > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${prof.unprofitableCount > 0 ? 'text-red-700' : 'text-green-700'}`}>{prof.unprofitableCount}</div>
+                <div className="text-[10px] text-gray-600">Livraisons à perte</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {prof.items.slice(0, 8).map((i) => (
+                <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.route_ref}{i.lane ? ' · ' + i.lane : ''}</div>
+                    <div className="text-[10px] text-gray-500">{i.status} · coût {i.totalCost.toLocaleString('fr-FR')} · facturé {i.revenue.toLocaleString('fr-FR')} MAD</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className={`font-bold ${i.margin < 0 ? 'text-red-700' : 'text-green-700'}`}>{i.margin >= 0 ? '+' : ''}{i.margin.toLocaleString('fr-FR')} MAD</div>
+                    <div className={`text-[10px] ${i.margin < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.marginPct}%</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {prof.unprofitableCount > 0 && (
+              <div className="px-1 pt-1 text-[10px] text-red-500 text-right">{prof.unprofitableCount} livraison(s) à perte · {prof.unprofitableLoss.toLocaleString('fr-FR')} MAD</div>
+            )}
+          </div>
+        );
+      }
+      if (widget.id === 'bank-comparator') {
+        if (liveBankComparisonLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mr-2" />
+              Comparaison des offres bancaires…
+            </div>
+          );
+        }
+        const cmp = liveBankComparison;
+        if (!cmp || cmp.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Landmark className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucune banque partenaire configurée</div>
+              <div className="text-xs text-gray-400 mt-1">Ajoutez vos baremes bancaires (taux, duree max, frais) dans la table bank_offers</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className="rounded bg-green-50 p-2">
+                <div className="text-sm font-bold text-green-700 truncate">{cmp.bestBankName || '—'}</div>
+                <div className="text-[10px] text-gray-600">Meilleure offre</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{cmp.bestMonthlyPayment.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Mensualite mini</div>
+              </div>
+              <div className={`rounded p-2 ${cmp.savingsVsWorst > 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
+                <div className={`text-sm font-bold ${cmp.savingsVsWorst > 0 ? 'text-green-700' : 'text-gray-900'}`}>{cmp.savingsVsWorst.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Économie vs pire</div>
+              </div>
+            </div>
+            <div className="px-1 pb-1 text-[10px] text-gray-500">
+              {cmp.usingRealApp
+                ? <>Sur demande : <span className="font-medium text-gray-700">{cmp.refLabel || 'derniere demande'}</span> · {cmp.refAmount.toLocaleString('fr-FR')} MAD / {cmp.refDuration} mois</>
+                : <>Montant de reference : {cmp.refAmount.toLocaleString('fr-FR')} MAD / {cmp.refDuration} mois (aucune demande enregistree)</>}
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {cmp.items.slice(0, 8).map((b) => (
+                <div key={b.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${b.isBest ? 'border-green-300 bg-green-50' : b.eligible ? 'border-gray-100 bg-white' : 'border-amber-200 bg-amber-50'}`}>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">
+                      {b.bankName}{b.isBest && <span className="ml-1 text-[10px] font-semibold text-green-700">• Recommandée</span>}
+                    </div>
+                    <div className="text-[10px] text-gray-500">Taux {b.annualRate.toLocaleString('fr-FR')}% · {b.durationMonths} mois{b.fileFees > 0 ? ' · frais ' + b.fileFees.toLocaleString('fr-FR') + ' MAD' : ''}{!b.eligible ? ' · hors criteres' : ''}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className={`font-bold ${b.isBest ? 'text-green-700' : 'text-gray-900'}`}>{b.monthlyPayment.toLocaleString('fr-FR')} MAD/mois</div>
+                    <div className="text-[10px] text-gray-500">Cout credit {b.totalCost.toLocaleString('fr-FR')} MAD</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {cmp.eligibleCount < cmp.bankCount && (
+              <div className="px-1 pt-1 text-[10px] text-amber-600 text-right">{cmp.bankCount - cmp.eligibleCount} banque(s) hors criteres (montant/duree)</div>
             )}
           </div>
         );

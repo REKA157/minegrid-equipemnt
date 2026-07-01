@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Truck, Target, Package, FolderOpen } from 'lucide-react';
+import { Building2, Truck, Target, Package, FolderOpen, Wallet } from 'lucide-react';
 
 // Widgets pour le métier Logisticien / Supply Chain
 export const LogisticienWidgets = {
@@ -73,6 +73,20 @@ export const LogisticienWidgets = {
         periodSelector: false,
         export: true,
         analytics: false,
+        alerts: true
+      }
+    },
+    {
+      id: 'logistics-profitability',
+      type: 'list',
+      title: 'Coût & rentabilité des opérations',
+      description: 'Coût (transport + entreposage) vs revenu facturé : marge par livraison, alerte marge négative',
+      icon: Wallet,
+      dataSource: 'routes',
+      features: {
+        periodSelector: false,
+        export: true,
+        analytics: true,
         alerts: true
       }
     }

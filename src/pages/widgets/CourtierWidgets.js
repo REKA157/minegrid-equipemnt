@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Shield, FileText, Users, TrendingUp, Calendar, Target, Building2, FolderOpen } from 'lucide-react';
+import { DollarSign, Shield, FileText, Users, TrendingUp, Calendar, Target, Building2, FolderOpen, Landmark } from 'lucide-react';
 
 // Widgets pour le métier Courtier en crédit et assurances
 export const CourtierWidgets = {
@@ -101,6 +101,20 @@ export const CourtierWidgets = {
       dataSource: 'performance',
       features: {
         periodSelector: true,
+        export: true,
+        analytics: true,
+        alerts: false
+      }
+    },
+    {
+      id: 'bank-comparator',
+      type: 'list',
+      title: 'Comparateur multi-banques',
+      description: 'Compare taux, mensualite et cout total du credit entre banques partenaires pour la derniere demande',
+      icon: Landmark,
+      dataSource: 'bank_offers',
+      features: {
+        periodSelector: false,
         export: true,
         analytics: true,
         alerts: false

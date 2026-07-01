@@ -7,6 +7,7 @@ const WIDGETS_LOGISTICIEN_IDS = [
   'route-optimization',
   'supply-chain-kpis',
   'inventory-alerts',
+  'logistics-profitability',
   'transaction-cases',
 ];
 
