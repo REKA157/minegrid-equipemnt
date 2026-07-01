@@ -39,8 +39,8 @@ export const TransporteurWidgets = {
     {
       id: 'delivery-map',
       type: 'map',
-      title: 'Carte des livraisons',
-      description: 'Localisation des véhicules',
+      title: 'Suivi des livraisons',
+      description: 'Statut & ETA des livraisons (position si renseignée — pas de télématique temps réel)',
       icon: Globe,
       dataSource: 'gps_tracking',
       features: {

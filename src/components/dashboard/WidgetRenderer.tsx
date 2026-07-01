@@ -2900,9 +2900,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           return (
             <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
               <Package className="h-10 w-10 text-gray-300 mb-2" />
-              <div>Aucune position GPS disponible</div>
+              <div>Aucune position renseignée</div>
               <div className="text-xs text-gray-400 mt-1">
-                Renseignez les coordonnées de vos véhicules et destinations
+                Suivi statut/ETA — position affichée si renseignée (pas de télématique temps réel)
               </div>
             </div>
           );
@@ -2945,8 +2945,8 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           return (
             <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
               <Ship className="h-10 w-10 text-gray-300 mb-2" />
-              <div>Aucune position GPS enregistrée</div>
-              <div className="text-xs text-gray-400 mt-1">Ajoutez lat/lng aux conteneurs dans la base</div>
+              <div>Aucune position renseignée</div>
+              <div className="text-xs text-gray-400 mt-1">Suivi statut/ETA — ajoutez lat/lng aux conteneurs (pas de télématique temps réel)</div>
             </div>
           );
         }

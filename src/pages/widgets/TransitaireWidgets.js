@@ -38,7 +38,7 @@ export const TransitaireWidgets = {
       id: 'container-tracking',
       type: 'map',
       title: 'Suivi conteneurs',
-      description: 'Localisation des conteneurs',
+      description: 'Statut & ETA des conteneurs (position si renseignée — pas de télématique temps réel)',
       icon: Globe,
       dataSource: 'containers',
       features: {

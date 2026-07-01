@@ -22,7 +22,11 @@ export const getInventoryStatus = async () => {
       stock,
       minStock,
       min: minStock,
-      value: unitPrice * Math.max(stock, 0),
+      // Le widget « Stock pièces détachées » charte un NIVEAU DE STOCK (quantité),
+      // pas une valeur monétaire. La valorisation (prix × quantité) est fournie à
+      // part dans `stockValue` pour qui en a besoin.
+      value: Math.max(stock, 0),
+      stockValue: unitPrice * Math.max(stock, 0),
       unit_price: unitPrice,
       supplier: item.supplier,
       needs_restock: stock < minStock,
