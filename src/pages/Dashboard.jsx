@@ -817,7 +817,7 @@ export default function Dashboard({ section = 'overview' }) {
         switch (planType) {
             case 'pro': return 70;
             case 'premium': return 149;
-            case 'enterprise': return 299;
+            case 'enterprise': return 200; // aligné sur l'annonce « À partir de 200 USD » (était 299, incohérent avec les cartes)
             default: return 0;
         }
     };

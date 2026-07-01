@@ -849,7 +849,7 @@ const SalesPipelineWidget = ({
       {/* En-tête avec bouton d'ajout */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-semibold text-orange-900">Pipeline Commercial</h3>
+          <h3 className="text-lg font-semibold text-orange-900">{variant === 'rental' ? 'Pipeline de location' : 'Pipeline Commercial'}</h3>
           <p className="text-sm text-orange-600">
             {loading ? 'Chargement des données réelles...' : error ? 'Erreur de connexion' : realData ? 'Données en temps réel' : 'Aucune donnée'}
           </p>

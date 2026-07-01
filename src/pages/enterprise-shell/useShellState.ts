@@ -14,7 +14,7 @@ import type {
   ShellWidgetsSource,
   ShellSaveStatus,
 } from './shellTypes';
-import { generatePreviewLayout } from './layoutHelpers';
+import { generatePreviewLayout, getHeightFromWidget, getWidthFromSize } from './layoutHelpers';
 
 /**
  * Hook centralisant toute la logique d'etat commune aux 8 dashboards
@@ -262,10 +262,18 @@ export function useShellState(options: UseShellStateOptions) {
 
       if (cancelled) return;
 
-      // Aucune config (utilisateur neuf) -> amorcer le sous-ensemble par défaut épuré
-      // (ex. vendeur : Actions + Stock + Score + Évolution + Recommandations IA).
-      if ((!parsed.widgets || parsed.widgets.length === 0) && defaultActiveIds && defaultActiveIds.length) {
-        parsed = seedDefaultActive(parsed, widgetsSource, defaultActiveIds);
+      // Aucune config (utilisateur neuf) -> amorcer un layout par défaut.
+      // Si le rôle fournit defaultActiveIds, on amorce ce sous-ensemble épuré
+      // (ex. vendeur). Sinon, on amorce TOUS les widgets valides (dans l'ordre
+      // du catalogue) pour éviter l'écran « Aucun widget configuré » au 1er accès.
+      if (!parsed.widgets || parsed.widgets.length === 0) {
+        const effectiveDefaultIds =
+          defaultActiveIds && defaultActiveIds.length
+            ? defaultActiveIds
+            : widgetsSource.widgets.map((w) => w.id).filter((id) => validIds.includes(id));
+        if (effectiveDefaultIds.length) {
+          parsed = seedDefaultActive(parsed, widgetsSource, effectiveDefaultIds);
+        }
       }
 
       persistLocalAndCloud(role, parsed);
@@ -319,8 +327,13 @@ export function useShellState(options: UseShellStateOptions) {
 
   const resetWidgetSize = useCallback(
     (widgetId: string) => {
+      // Réinitialise à la taille PAR DÉFAUT du widget (largeur selon size, hauteur
+      // selon le type) au lieu d'un h=2 qui tronquait graphes/listes/cartes.
+      const widget = config?.widgets.find((w) => w.id === widgetId);
+      const w = getWidthFromSize(widget?.size);
+      const h = widget ? getHeightFromWidget(widget) : 4;
       setLayout((prev) => {
-        const newLg = prev.lg.map((l) => (l.i === widgetId ? { ...l, w: 4, h: 2 } : l));
+        const newLg = prev.lg.map((l) => (l.i === widgetId ? { ...l, w, h } : l));
         const updated = { ...prev, lg: newLg };
         setConfig((prevConfig) => {
           if (!prevConfig) return prevConfig;
@@ -331,7 +344,7 @@ export function useShellState(options: UseShellStateOptions) {
         return updated;
       });
     },
-    [role, persistLocalAndCloud],
+    [config, role, persistLocalAndCloud],
   );
 
   const removeWidget = useCallback(
@@ -389,7 +402,13 @@ export function useShellState(options: UseShellStateOptions) {
       const newWidgets = [...config.widgets, widgetToAdd];
       const newLayoutItem: ShellLayoutItem = originalPosition
         ? originalPosition
-        : { i: widgetId, x: 0, y: layout.lg.length, w: 4, h: 2 };
+        : {
+            i: widgetId,
+            x: 0,
+            y: layout.lg.length,
+            w: getWidthFromSize(widgetToAdd.size),
+            h: getHeightFromWidget(widgetToAdd),
+          };
       const newLg = [...layout.lg, newLayoutItem];
       const newConfig = { ...config, widgets: newWidgets, layout: { ...config.layout, lg: newLg } };
       setConfig(newConfig);
@@ -423,12 +442,12 @@ export function useShellState(options: UseShellStateOptions) {
     const newWidgets = [...config.widgets, ...missing];
     const newLg: ShellLayoutItem[] = [
       ...layout.lg,
-      ...missing.map((w, idx) => ({
-        i: w.id,
+      ...missing.map((wg, idx) => ({
+        i: wg.id,
         x: 0,
         y: layout.lg.length + idx,
-        w: 4,
-        h: 2,
+        w: getWidthFromSize(wg.size),
+        h: getHeightFromWidget(wg),
       })),
     ];
     const newConfig = { ...config, widgets: newWidgets, layout: { ...config.layout, lg: newLg } };
