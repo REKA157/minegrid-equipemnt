@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Target, TrendingUp, Shield, Star, FolderOpen } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, Shield, FolderOpen } from 'lucide-react';
 
 // Widgets pour le métier Investisseur
 export const InvestisseurWidgets = {
@@ -75,21 +75,10 @@ export const InvestisseurWidgets = {
         analytics: true,
         alerts: true
       }
-    },
-    {
-      id: 'opportunities',
-      type: 'metric',
-      title: 'Analyse des opportunités',
-      description: 'Analyse des opportunités d\'investissement',
-      icon: Star,
-      dataSource: 'opportunities',
-      features: {
-        periodSelector: true,
-        export: true,
-        analytics: true,
-        alerts: false
-      }
     }
+    // Widget 'opportunities' (metric « Analyse des opportunités ») retiré :
+    // doublon de 'investment-opportunities' (même source 'opportunities'),
+    // déjà couvert par la carte « Opportunités » de l'en-tête cockpit.
   ]
 };
 
