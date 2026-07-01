@@ -1424,6 +1424,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             </div>
             <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">
               Distance totale : {totalKm.toLocaleString('fr-FR')} km
+              {totalKm > 0 && (
+                <> · <span className="font-semibold text-gray-600">Coût moyen : {Math.round(totalCost / totalKm).toLocaleString('fr-FR')} MAD/km</span></>
+              )}
             </div>
           </div>
         );
