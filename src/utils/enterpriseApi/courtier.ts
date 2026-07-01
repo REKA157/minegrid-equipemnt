@@ -153,6 +153,16 @@ export const getCommissionTracking = async () => {
   const creditCommissionTotal = credits.reduce((s, c) => s + Number(c.commission_amount || 0), 0);
   const policyCommissionTotal = policies.reduce((s, p) => s + Number(p.commission_amount || 0), 0);
 
+  // Commissions ENCAISSÉES (crédit décaissé + police active) vs DUES / à recouvrer
+  // (crédit approuvé mais pas encore décaissé → commission acquise mais non versée).
+  const commissionDue = credits
+    .filter((c) => c.status === 'Approuvé')
+    .reduce((s, c) => s + Number(c.commission_amount || 0), 0);
+  const commissionEarned =
+    credits
+      .filter((c) => c.status === 'Décaissé')
+      .reduce((s, c) => s + Number(c.commission_amount || 0), 0) + policyCommissionTotal;
+
   // Mois courant
   const monthStart = new Date();
   monthStart.setDate(1);
@@ -177,6 +187,8 @@ export const getCommissionTracking = async () => {
     monthCommission: creditThisMonth + policyThisMonth,
     creditMonth: creditThisMonth,
     policyMonth: policyThisMonth,
+    commissionDue,
+    commissionEarned,
     creditCount: credits.length,
     policyCount: policies.length,
   };

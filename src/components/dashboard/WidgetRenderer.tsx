@@ -781,7 +781,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         if (!cancelled) setLiveCommissions(data);
       } catch (e) {
         console.error('WidgetRenderer getCommissionTracking', e);
-        if (!cancelled) setLiveCommissions({ totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, creditCount: 0, policyCount: 0 });
+        if (!cancelled) setLiveCommissions({ totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, commissionDue: 0, commissionEarned: 0, creditCount: 0, policyCount: 0 });
       } finally {
         if (!cancelled) setLiveCommissionsLoading(false);
       }
@@ -2607,7 +2607,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             </div>
           );
         }
-        const c = liveCommissions ?? { totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, creditCount: 0, policyCount: 0 };
+        const c = liveCommissions ?? { totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, commissionDue: 0, commissionEarned: 0, creditCount: 0, policyCount: 0 };
         const policyShare = c.totalCommission > 0 ? Math.round((c.policyCommission / c.totalCommission) * 100) : 0;
         const creditShare = c.totalCommission > 0 ? Math.round((c.creditCommission / c.totalCommission) * 100) : 0;
         return (
@@ -2646,6 +2646,18 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                   <div className="flex h-full">
                     <div className="bg-purple-500" style={{ width: `${creditShare}%` }} />
                     <div className="bg-blue-500" style={{ width: `${policyShare}%` }} />
+                  </div>
+                </div>
+              )}
+              {(c.commissionDue > 0 || c.commissionEarned > 0) && (
+                <div className="mt-3 grid w-full grid-cols-2 gap-2 text-center">
+                  <div className="rounded bg-green-50 p-2">
+                    <div className="text-xs font-bold text-green-700">{Math.round(c.commissionEarned).toLocaleString('fr-FR')} MAD</div>
+                    <div className="text-[10px] text-green-700/80">Encaissées (décaissé)</div>
+                  </div>
+                  <div className="rounded bg-amber-50 p-2">
+                    <div className="text-xs font-bold text-amber-700">{Math.round(c.commissionDue).toLocaleString('fr-FR')} MAD</div>
+                    <div className="text-[10px] text-amber-700/80">Dues — à recouvrer</div>
                   </div>
                 </div>
               )}
