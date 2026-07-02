@@ -7,6 +7,7 @@ import { estimateMachinePrice } from '../data/priceService';
 import { fraudSignals } from '../ai/fraudSignals';
 import { requestInspection } from '../inspection/inspectionService';
 import { monthlyPayment } from '../finance/monthlyPayment';
+import Price from '../../components/Price';
 
 // Intégrations INLINE (pas de panneau) : chaque composant se greffe à côté d'un
 // élément existant et rend `null` quand il n'a pas de donnée → invisible par défaut.
@@ -59,8 +60,9 @@ export function FinancingInline({ price }: { price?: number | null }) {
   const r = monthlyPayment({ amount: price, downPayment: Math.round(price * 0.2), annualRatePct: 12, termMonths: 48 });
   return (
     <p className="text-sm text-gray-500">
-      Financement : à partir de ~{Math.round(r.monthlyPayment).toLocaleString('fr-FR')} €/mois{' '}
-      <span className="text-gray-400">(indicatif · 20 % d'apport sur 48 mois)</span>
+      Financement : à partir de ~
+      <Price amount={Math.round(r.monthlyPayment)} className="font-medium" />/mois{' '}
+      <span className="text-gray-400">(indicatif · 20 % d'apport, 48 mois, taux 12 %/an)</span>
     </p>
   );
 }
