@@ -1,5 +1,5 @@
 import React from 'react';
-import { Truck, Globe, DollarSign, Calendar, MapPinned } from 'lucide-react';
+import { Truck, Globe, DollarSign, Calendar, MapPinned, TrendingDown } from 'lucide-react';
 
 // Widgets pour le métier Transporteur / Logistique
 export const TransporteurWidgets = {
@@ -75,6 +75,20 @@ export const TransporteurWidgets = {
         periodSelector: true,
         export: true,
         analytics: false,
+        alerts: true
+      }
+    },
+    {
+      id: 'deadhead-cost',
+      type: 'list',
+      title: 'Km à vide / coût du retour à vide',
+      description: 'Par trajet : km en charge vs à vide, taux de retour à vide (%) et coût du vide (MAD)',
+      icon: TrendingDown,
+      dataSource: 'deliveries',
+      features: {
+        periodSelector: false,
+        export: true,
+        analytics: true,
         alerts: true
       }
     }

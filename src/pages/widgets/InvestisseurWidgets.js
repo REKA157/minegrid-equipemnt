@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Target, TrendingUp, Shield, FolderOpen } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, Shield, FolderOpen, TrendingDown } from 'lucide-react';
 
 // Widgets pour le métier Investisseur
 export const InvestisseurWidgets = {
@@ -71,6 +71,20 @@ export const InvestisseurWidgets = {
       dataSource: 'risk',
       features: {
         periodSelector: true,
+        export: true,
+        analytics: true,
+        alerts: true
+      }
+    },
+    {
+      id: 'yield-realized-vs-expected',
+      type: 'list',
+      title: 'Rendement réalisé vs attendu',
+      description: 'Revenu réellement encaissé face au revenu attendu, par actif — écart MAD et actifs sous-performants',
+      icon: TrendingDown,
+      dataSource: 'investments',
+      features: {
+        periodSelector: false,
         export: true,
         analytics: true,
         alerts: true

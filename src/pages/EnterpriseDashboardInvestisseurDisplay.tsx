@@ -8,6 +8,7 @@ const WIDGETS_INVESTISSEUR_IDS = [
   'roi-analysis',
   'risk-assessment',
   // 'opportunities' retiré : doublon de 'investment-opportunities' (même source).
+  'yield-realized-vs-expected',
   'transaction-cases',
 ];
 

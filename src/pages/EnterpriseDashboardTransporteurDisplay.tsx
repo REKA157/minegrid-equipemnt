@@ -7,6 +7,7 @@ const WIDGETS_TRANSPORTEUR_IDS = [
   'delivery-map',
   'transport-costs',
   'driver-schedule',
+  'deadhead-cost',
   // 'tx-assigned-transports' : widget planifié, volontairement exclu tant que non branché
   // (voir widgets/plannedEnterpriseWidgets.ts + docs/PLANNED_ENTERPRISE_WIDGETS.md)
 ];

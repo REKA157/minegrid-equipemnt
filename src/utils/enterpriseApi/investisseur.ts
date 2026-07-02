@@ -558,3 +558,108 @@ export function computeOpportunityMetrics(input: {
     paybackMonths: payback,
   };
 }
+
+// ---------------------------------------------------------------------
+// WIDGET : "RENDEMENT RÉALISÉ VS ATTENDU" (yield-realized-vs-expected → list)
+// Pour chaque actif détenu : revenu ATTENDU sur la période de détention
+// (loyer cible ou yield annuel) vs revenu RÉELLEMENT encaissé.
+// Écart MAD + % ; surligne les actifs SOUS-PERFORMANTS (réalisé < attendu).
+// Enjeu argent n°1 : capital immobilisé qui ne rend pas ce qui était budgété.
+// ---------------------------------------------------------------------
+export type YieldGapItem = {
+  id: string;
+  label: string;
+  reference: string | null;
+  category: string | null;
+  status: InvestmentStatus;
+  monthsHeld: number;
+  expectedMonthly: number;
+  expectedRevenue: number;
+  realizedRevenue: number;
+  gap: number;          // réalisé − attendu (négatif = sous-performance)
+  gapPercent: number;   // gap / attendu × 100
+  underperforming: boolean;
+};
+
+export async function getYieldRealizedVsExpected() {
+  const investments = await supabaseCall<
+    Array<
+      InvestmentRow & {
+        target_monthly_revenue?: number | null;
+        expected_yield_percent?: number | null;
+      }
+    >
+  >(
+    () =>
+      supabase
+        .from('investments')
+        .select(
+          `${INVESTMENT_COLUMNS}, target_monthly_revenue, expected_yield_percent`,
+        ),
+    { label: 'getYieldRealizedVsExpected', fallback: [] },
+  );
+
+  const MONTH = 1000 * 3600 * 24 * 30;
+  const now = Date.now();
+
+  const items: YieldGapItem[] = investments
+    .filter((i) => i.status !== 'Cédé' && i.status !== 'Hors service')
+    .map((i) => {
+      const acq = Number(i.acquisition_price || 0);
+      const targetMonthly = Number(i.target_monthly_revenue || 0);
+      const yieldPct = Number(i.expected_yield_percent || 0);
+      // Base attendue mensuelle : loyer cible sinon yield annuel / 12
+      const expectedMonthly =
+        targetMonthly > 0
+          ? targetMonthly
+          : yieldPct > 0 && acq > 0
+            ? (acq * yieldPct) / 100 / 12
+            : 0;
+      if (expectedMonthly <= 0) return null;
+
+      const monthsHeld = i.acquisition_date
+        ? Math.max((now - new Date(i.acquisition_date).getTime()) / MONTH, 1)
+        : 1;
+
+      const expectedRevenue = Math.round(expectedMonthly * monthsHeld);
+      const realizedRevenue = Math.round(Number(i.total_revenue_to_date || 0));
+      const gap = realizedRevenue - expectedRevenue;
+      const gapPercent = expectedRevenue > 0 ? (gap / expectedRevenue) * 100 : 0;
+
+      return {
+        id: String(i.id),
+        label: i.equipment_label,
+        reference: i.reference ?? null,
+        category: i.category ?? null,
+        status: i.status,
+        monthsHeld: Math.round(monthsHeld),
+        expectedMonthly: Math.round(expectedMonthly),
+        expectedRevenue,
+        realizedRevenue,
+        gap,
+        gapPercent: Math.round(gapPercent * 10) / 10,
+        underperforming: gap < 0,
+      };
+    })
+    .filter((x): x is YieldGapItem => !!x);
+
+  const totalExpected = items.reduce((s, i) => s + i.expectedRevenue, 0);
+  const totalRealized = items.reduce((s, i) => s + i.realizedRevenue, 0);
+  const totalGap = totalRealized - totalExpected;
+  const totalGapPercent =
+    totalExpected > 0 ? Math.round((totalGap / totalExpected) * 1000) / 10 : 0;
+  const underperformers = items.filter((i) => i.underperforming);
+  const shortfall = underperformers.reduce((s, i) => s + i.gap, 0); // somme des écarts négatifs (MAD manqués)
+
+  return {
+    // tri : plus gros manque à gagner (gap le plus négatif) en premier
+    items: items.sort((a, b) => a.gap - b.gap),
+    totalExpected,
+    totalRealized,
+    totalGap,
+    totalGapPercent,
+    underperformingCount: underperformers.length,
+    shortfall: Math.round(shortfall),
+    assetCount: items.length,
+  };
+}
