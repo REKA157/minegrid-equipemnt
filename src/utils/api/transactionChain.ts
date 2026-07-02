@@ -20,6 +20,8 @@ export interface ChainStepResult {
   ok: boolean;
   id: string | null;
   reason: ChainStepReason;
+  /** Message brut de l'exception SQL (ex. précondition de clôture non remplie). */
+  message?: string;
 }
 
 function isMissingFunction(err: { message?: string } | null): boolean {
@@ -36,13 +38,13 @@ async function callStepRpc(fn: string, args: Record<string, unknown>): Promise<C
         return { ok: false, id: null, reason: 'forbidden' };
       }
       logger.warn(`[transactionChain:${fn}]`, error);
-      return { ok: false, id: null, reason: 'error' };
+      return { ok: false, id: null, reason: 'error', message: error.message };
     }
     const id = data == null || data === '' ? null : String(data);
     return id ? { ok: true, id, reason: 'created' } : { ok: false, id: null, reason: 'error' };
   } catch (e) {
     logger.warn(`[transactionChain:${fn}]`, e);
-    return { ok: false, id: null, reason: 'error' };
+    return { ok: false, id: null, reason: 'error', message: e instanceof Error ? e.message : undefined };
   }
 }
 
@@ -90,6 +92,48 @@ export function createCustomsStep(
 /** Orchestrateur : avance le dossier à une étape et crée la ligne de chaîne correspondante. */
 export function advanceTransactionCaseStep(caseId: string, step: ChainStep): Promise<ChainStepResult> {
   return callStepRpc('advance_transaction_case_step', { p_case_id: caseId, p_step: step });
+}
+
+/* -------------------------------------------------------------------------
+ * RAIL RETOUR — transitions TERMINALES (cf. supabase/migrations/..._p5_return_rail_transitions.sql).
+ * Réservées au partenaire assigné (ou principal si aucun assigné) ; clôture aux
+ * principaux. Aucune transition escrow funded/released (pas de PSP) : honnête.
+ * ---------------------------------------------------------------------- */
+
+/** Le mécanicien assigné (ou un principal) marque l'inspection terminée (+ rapport optionnel). */
+export function completeInspectionStep(
+  caseId: string,
+  report?: { conditionScore?: number | null; summary?: string | null; recommendations?: string | null },
+): Promise<ChainStepResult> {
+  return callStepRpc('complete_inspection_step', {
+    p_case_id: caseId,
+    p_condition_score: report?.conditionScore ?? null,
+    p_summary: report?.summary ?? null,
+    p_recommendations: report?.recommendations ?? null,
+  });
+}
+
+/** Le transporteur assigné (ou un principal) confirme la livraison (+ preuve optionnelle). */
+export function confirmDelivery(caseId: string, proofPath?: string | null): Promise<ChainStepResult> {
+  return callStepRpc('confirm_delivery', { p_case_id: caseId, p_proof_path: proofPath ?? null });
+}
+
+/** Le transitaire assigné (ou un principal) marque la douane dédouanée. */
+export function clearCustoms(caseId: string): Promise<ChainStepResult> {
+  return callStepRpc('clear_customs', { p_case_id: caseId });
+}
+
+/**
+ * Clôture du dossier (vendeur/acheteur). Échoue si une étape d'exécution est encore
+ * ouverte — `message` porte alors la précondition ('transport_not_delivered'…).
+ */
+export function closeTransactionCase(caseId: string): Promise<ChainStepResult> {
+  return callStepRpc('close_transaction_case', { p_case_id: caseId });
+}
+
+/** Annulation du dossier (vendeur/acheteur). */
+export function cancelTransactionCase(caseId: string, reason?: string | null): Promise<ChainStepResult> {
+  return callStepRpc('cancel_transaction_case', { p_case_id: caseId, p_reason: reason ?? null });
 }
 
 /* -------------------------------------------------------------------------

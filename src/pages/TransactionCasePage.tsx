@@ -43,7 +43,13 @@ import {
   revokeTransactionPartner,
   acceptTransactionInvitation,
   declineTransactionInvitation,
+  completeInspectionStep,
+  confirmDelivery,
+  clearCustoms,
+  closeTransactionCase,
+  cancelTransactionCase,
   type ChainStep,
+  type ChainStepResult,
   type PartnerRole,
 } from '../utils/api/transactionChain';
 import { buildNetworkForRole } from '../utils/partner/partnerPerformanceService';
@@ -125,6 +131,116 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
         Le paiement séquestre n'est pas encore activé (aucun prestataire de paiement connecté). Aucun fonds ne peut
         être séquestré, financé ni libéré pour le moment.
       </p>
+      {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
+    </div>
+  );
+}
+
+/** Une phrase « où en est-on / que faire » selon le statut du dossier. */
+function nextActionHint(status: string): string {
+  switch (status) {
+    case 'draft':
+    case 'qualified':
+    case 'negotiation':
+    case 'contract':
+      return 'Prochaine action : créer les étapes d’exécution (inspection, transport, douane) ci-dessus.';
+    case 'payment':
+      return 'Prochaine action : séquestre en préparation — activation opérateur requise (aucun PSP connecté).';
+    case 'logistics':
+      return 'Prochaine action : le transporteur assigné confirme la livraison.';
+    case 'customs':
+      return 'Prochaine action : le transitaire assigné marque la douane dédouanée.';
+    case 'delivery':
+      return 'Prochaine action : vérifiez que les étapes sont terminées, puis clôturez le dossier.';
+    case 'closed':
+      return 'Dossier clôturé.';
+    case 'cancelled':
+      return 'Dossier annulé.';
+    default:
+      return 'Prochaine action : faites avancer le dossier ci-dessus.';
+  }
+}
+
+/**
+ * Rail RETOUR : transitions terminales (cf. supabase/migrations/..._p5_return_rail_transitions.sql).
+ * Réservées au partenaire assigné (inspection/transport/douane) ; clôture/annulation au
+ * vendeur/acheteur. Feedback honnête, y compris les préconditions de clôture non remplies.
+ * Aucune action escrow réelle (pas de PSP).
+ */
+function TransactionCaseClosure({
+  caseId,
+  caseStatus,
+  onDone,
+}: {
+  caseId: string;
+  caseStatus: string;
+  onDone: () => void;
+}) {
+  const [pending, setPending] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const friendly = (r: ChainStepResult): string => {
+    if (r.ok) return 'Étape mise à jour.';
+    if (r.reason === 'not_deployed')
+      return 'Transitions non déployées (RPC absente). Appliquez supabase/migrations/…_p5_return_rail_transitions.sql.';
+    if (r.reason === 'forbidden')
+      return 'Action réservée au partenaire assigné (ou vendeur/acheteur pour la clôture).';
+    const m = r.message || '';
+    if (m.includes('transport_not_delivered')) return 'Clôture impossible : le transport n’est pas encore livré.';
+    if (m.includes('customs_not_cleared')) return 'Clôture impossible : la douane n’est pas dédouanée.';
+    if (m.includes('inspection_not_completed')) return 'Clôture impossible : l’inspection n’est pas terminée.';
+    if (m.includes('not_found')) return 'Aucune étape correspondante sur ce dossier.';
+    return 'Action impossible pour le moment.';
+  };
+
+  const run = async (key: string, fn: () => Promise<ChainStepResult>) => {
+    setPending(key);
+    setMsg(null);
+    const r = await fn();
+    setPending(null);
+    setMsg(friendly(r));
+    if (r.ok) onDone();
+  };
+
+  const stepActions: Array<{ key: string; label: string; fn: () => Promise<ChainStepResult> }> = [
+    { key: 'inspection', label: 'Inspection terminée', fn: () => completeInspectionStep(caseId) },
+    { key: 'transport', label: 'Confirmer la livraison', fn: () => confirmDelivery(caseId) },
+    { key: 'customs', label: 'Douane dédouanée', fn: () => clearCustoms(caseId) },
+  ];
+
+  return (
+    <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-gray-900 mb-1">Terminer les étapes &amp; clôturer</h2>
+      <p className="text-xs text-gray-600 mb-3">{nextActionHint(caseStatus)}</p>
+      <div className="flex flex-wrap gap-2">
+        {stepActions.map((a) => (
+          <button
+            key={a.key}
+            type="button"
+            disabled={pending !== null}
+            onClick={() => void run(a.key, a.fn)}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            {pending === a.key ? 'Envoi…' : a.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={pending !== null}
+          onClick={() => void run('close', () => closeTransactionCase(caseId))}
+          className="inline-flex items-center gap-1 rounded-md border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-800 transition hover:bg-green-100 disabled:opacity-50"
+        >
+          {pending === 'close' ? 'Clôture…' : 'Clôturer le dossier'}
+        </button>
+        <button
+          type="button"
+          disabled={pending !== null}
+          onClick={() => void run('cancel', () => cancelTransactionCase(caseId))}
+          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+        >
+          {pending === 'cancel' ? 'Annulation…' : 'Annuler le dossier'}
+        </button>
+      </div>
       {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
     </div>
   );
@@ -602,6 +718,11 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
       })()}
 
       <TransactionCaseActions caseId={caseRow.id} onDone={() => setActionTick((t) => t + 1)} />
+      <TransactionCaseClosure
+        caseId={caseRow.id}
+        caseStatus={caseRow.status}
+        onDone={() => setActionTick((t) => t + 1)}
+      />
       <AssignPartnerPanel caseId={caseRow.id} onChanged={() => void refreshMeta()} />
 
       {bundle.loading && (
