@@ -232,7 +232,7 @@ export function buildLeadStockSuggestions(
 
     const leadNorm = norm(leadText);
 
-    let leadTokens = tokens(leadText);
+    const leadTokens = tokens(leadText);
     if (leadTokens.size === 0) {
       for (const w of norm(lead.title).split(/\s+/)) {
         if (w.length >= 2) leadTokens.add(w);

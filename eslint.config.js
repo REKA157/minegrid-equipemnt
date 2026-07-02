@@ -31,11 +31,44 @@ export default tseslint.config(
       'docs/**',
       'migrations/**',
       'scripts/**',
+      'public/**',
     ],
   },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
+
+  // Incompatibilité de versions : eslint 9.39 (règle de base `no-unused-expressions`)
+  // × typescript-eslint 8.8 → la règle plante AU CHARGEMENT (context.options[0] undefined),
+  // ce qui faisait tomber TOUT le lint (donc plus aucune règle n'était appliquée).
+  // On désactive cette seule règle pour restaurer l'exécution du lint et de toutes les
+  // autres règles. Correctif racine à planifier : aligner les versions (bump typescript-eslint).
+  {
+    rules: {
+      'no-unused-expressions': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+    },
+  },
+
+  // Fichiers .js/.jsx de src (catalogues de widgets, utilitaires legacy) : ce sont des
+  // modules navigateur/CommonJS de configuration, pas du TS strict. On leur donne les
+  // globals attendus et on tolère `require` pour éviter des faux no-undef / no-require-imports
+  // (correction de config, pas de masquage d'un vrai problème de code).
+  {
+    files: ['src/**/*.{js,jsx}'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.es2022,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 
   {
     files: ['src/**/*.{ts,tsx}'],

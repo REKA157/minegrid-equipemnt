@@ -1,4 +1,3 @@
-import React from 'react';
 import { Truck, Globe, DollarSign, Calendar, MapPinned, TrendingDown } from 'lucide-react';
 
 // Widgets pour le métier Transporteur / Logistique

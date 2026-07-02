@@ -1,4 +1,3 @@
-import React from 'react';
 import { FileText, Globe, BarChart3, FileText as FileText2, FolderOpen, Timer } from 'lucide-react';
 
 // Widgets pour le métier Transitaire / Freight Forwarder

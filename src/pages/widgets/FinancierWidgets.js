@@ -1,4 +1,3 @@
-import React from 'react';
 import { DollarSign, TrendingUp, CreditCard, PieChart } from 'lucide-react';
 
 // Widgets pour le métier Financier / Finance

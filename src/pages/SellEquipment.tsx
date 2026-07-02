@@ -12,7 +12,7 @@ import { toast } from '../utils/toast';
 // page SellEquipment pour les utilisateurs qui ne font pas d'import Excel.
 
 function cleanImagePath(img: string): string {
-  const match = img.match(/(?:.*\/)?([^\/]+\.png|jpg|jpeg|webp)/i);
+  const match = img.match(/(?:.*\/)?([^/]+\.png|jpg|jpeg|webp)/i);
   return match ? match[1] : img;
 }
 
@@ -258,7 +258,7 @@ export default function SellEquipment() {
       });
 
       // Lire le body une seule fois
-      let rawText = await response.text();
+      const rawText = await response.text();
       let data;
       try {
         data = JSON.parse(rawText);

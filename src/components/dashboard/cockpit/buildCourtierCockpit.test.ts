@@ -16,6 +16,8 @@ const base: CourtierCockpitInput = {
     policyMonth: 0,
     creditCount: 0,
     policyCount: 0,
+    commissionDue: 0,
+    commissionEarned: 0,
   },
   clients: [],
 };

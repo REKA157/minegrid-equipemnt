@@ -1,4 +1,3 @@
-import React from 'react';
 import { Building2, Truck, Target, Package, FolderOpen, Wallet } from 'lucide-react';
 
 // Widgets pour le métier Logisticien / Supply Chain

@@ -214,7 +214,7 @@ export function OrdersTab({ orders, onRefresh }: { orders: ClientOrder[], onRefr
         client_id: proProfile.id,
         order_number: orderNumber,
         order_type: newOrderForm.order_type,
-        status: 'pending' as 'pending',
+        status: 'pending' as const,
         total_amount: newOrderForm.total_amount,
         currency: newOrderForm.currency,
         order_date: new Date().toISOString(),

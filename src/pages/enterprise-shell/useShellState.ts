@@ -37,8 +37,9 @@ export interface UseShellStateOptions {
   /**
    * Sous-ensemble (ordonné) des widgets ACTIFS par défaut quand aucune config n'existe.
    * Permet d'avoir un dashboard par défaut épuré (ex. vendeur : 5 essentiels) tout en
-   * gardant `validIds` complet comme CATALOGUE ajoutable. Si absent : tout reste vide
-   * (comportement historique des autres rôles).
+   * gardant `validIds` complet comme CATALOGUE ajoutable. Si absent ou vide : on amorce
+   * TOUS les widgets valides (ordre du catalogue) pour éviter l'écran « Aucun widget
+   * configuré » au 1er accès.
    */
   defaultActiveIds?: string[];
   /** Isoler la config grille par utilisateur Supabase (évite mélange premium / enterprise sur même origin). */
@@ -385,6 +386,12 @@ export function useShellState(options: UseShellStateOptions) {
       const widgetToAdd = widgetsSource.widgets.find((w) => w.id === widgetId);
       if (!widgetToAdd) {
         logger.warn(`[enterpriseDashboard:${role}] widget introuvable`, widgetId);
+        return;
+      }
+
+      // Déjà actif : ne pas dupliquer (évite id + clé de layout en double).
+      if (config.widgets.some((w) => w.id === widgetId)) {
+        setAddStatus((s) => ({ ...s, [widgetId]: 'added' }));
         return;
       }
 

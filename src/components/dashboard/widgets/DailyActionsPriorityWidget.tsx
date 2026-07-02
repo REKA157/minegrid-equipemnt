@@ -194,9 +194,10 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
     })
     .sort((a, b) => {
       switch (sortBy) {
-        case 'priority':
+        case 'priority': {
           const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
           return priorityOrder[b.priority] - priorityOrder[a.priority];
+        }
         case 'time':
           return a.dueTime.localeCompare(b.dueTime);
         case 'value':

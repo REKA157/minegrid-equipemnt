@@ -265,7 +265,7 @@ class CommunicationService {
   }
 
   private isValidPhone(phone: string): boolean {
-    const phoneRegex = /^[\+]?[0-9\s\-\(\)]{8,}$/;
+    const phoneRegex = /^[+]?[0-9\s\-()]{8,}$/;
     return phoneRegex.test(phone);
   }
 }

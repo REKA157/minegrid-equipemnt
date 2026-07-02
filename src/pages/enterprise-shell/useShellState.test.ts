@@ -20,15 +20,28 @@ describe('useShellState', () => {
     localStorage.clear();
   });
 
-  it('initialise avec une config vide quand rien en localStorage', async () => {
+  it('amorce tous les widgets valides quand aucune config ni defaultActiveIds', async () => {
     const { result } = renderHook(() =>
       useShellState({ role: 'test-role', widgetsSource: fakeSource, validIds }),
     );
     await waitFor(() => {
       expect(result.current.config).not.toBeNull();
     });
-    expect(result.current.config?.widgets).toEqual([]);
-    expect(result.current.layout.lg).toEqual([]);
+    // Sans defaultActiveIds, on amorce TOUT le catalogue valide (évite l'écran vide).
+    expect(result.current.config?.widgets.map((w) => w.id)).toEqual(['w1', 'w2', 'w3']);
+    expect(result.current.layout.lg.map((l) => l.i)).toEqual(['w1', 'w2', 'w3']);
+  });
+
+  it('addWidget ne duplique pas un widget déjà actif', async () => {
+    const { result } = renderHook(() =>
+      useShellState({ role: 'test-role', widgetsSource: fakeSource, validIds, defaultActiveIds: ['w1'] }),
+    );
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => result.current.addWidget('w1'));
+
+    expect(result.current.config?.widgets.map((w) => w.id)).toEqual(['w1']);
+    expect(result.current.layout.lg.map((l) => l.i)).toEqual(['w1']);
   });
 
   it('purge les widgets qui ne sont plus dans validIds', async () => {
@@ -126,14 +139,14 @@ describe('useShellState', () => {
       useShellState({ role: 'loueur', widgetsSource: fakeSource, validIds }),
     );
 
-    await waitFor(() => expect(r1.current.config).not.toBeNull());
-    await waitFor(() => expect(r2.current.config).not.toBeNull());
+    await waitFor(() => expect(r1.current.config?.widgets?.length).toBe(3));
+    await waitFor(() => expect(r2.current.config?.widgets?.length).toBe(3));
 
-    act(() => r1.current.addWidget('w1'));
-    act(() => r2.current.addWidget('w2'));
+    // Muter un rôle ne doit PAS affecter l'autre (clés localStorage distinctes par rôle).
+    act(() => r1.current.removeWidget('w1'));
 
-    expect(r1.current.config?.widgets.map((w) => w.id)).toEqual(['w1']);
-    expect(r2.current.config?.widgets.map((w) => w.id)).toEqual(['w2']);
+    expect(r1.current.config?.widgets.map((w) => w.id)).toEqual(['w2', 'w3']);
+    expect(r2.current.config?.widgets.map((w) => w.id)).toEqual(['w1', 'w2', 'w3']);
   });
 
   it('amorce le sous-ensemble par défaut (defaultActiveIds, ordonné) quand aucune config', async () => {

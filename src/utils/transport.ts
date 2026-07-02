@@ -448,7 +448,7 @@ export function calculateCustomsDuties(country: string, cifValue: number): numbe
   
   switch (country) {
     // 🇨🇮 Côte d'Ivoire - WAEMU
-    case 'Abidjan':
+    case 'Abidjan': {
       // Droits CET: 10% de la valeur CIF
       // Surtaxes: 2.5% de la valeur CIF (statistique 1% + solidarité 1% + CDEAO 0.5%)
       // TVA: 18% de la valeur CIF
@@ -456,41 +456,46 @@ export function calculateCustomsDuties(country: string, cifValue: number): numbe
       const surtaxes = baseValue * 0.025;
       const tva = baseValue * 0.18;
       return Math.round(droitsCET + surtaxes + tva);
-      
+    }
+
     // 🇸🇳 Sénégal - WAEMU
-    case 'Dakar':
+    case 'Dakar': {
       // Même régime que Côte d'Ivoire
       const droitsCETSenegal = baseValue * 0.10;
       const surtaxesSenegal = baseValue * 0.025;
       const tvaSenegal = baseValue * 0.18;
       return Math.round(droitsCETSenegal + surtaxesSenegal + tvaSenegal);
-      
+    }
+
     // 🇧🇯 Bénin - WAEMU
-    case 'Cotonou':
+    case 'Cotonou': {
       // Même régime que Côte d'Ivoire
       const droitsCETBenin = baseValue * 0.10;
       const surtaxesBenin = baseValue * 0.025;
       const tvaBenin = baseValue * 0.18;
       return Math.round(droitsCETBenin + surtaxesBenin + tvaBenin);
-      
+    }
+
     // 🇳🇬 Nigeria
-    case 'Lagos':
+    case 'Lagos': {
       // Droits de douane: 7.5% de la valeur CIF
       // TVA: 7.5% de la valeur CIF
       const droitsNigeria = baseValue * 0.075;
       const tvaNigeria = baseValue * 0.075;
       return Math.round(droitsNigeria + tvaNigeria);
-      
+    }
+
     // 🇬🇭 Ghana
-    case 'Accra':
+    case 'Accra': {
       // Droits de douane: 10% de la valeur CIF
       // TVA: 12.5% de la valeur CIF
       const droitsGhana = baseValue * 0.10;
       const tvaGhana = baseValue * 0.125;
       return Math.round(droitsGhana + tvaGhana);
-      
+    }
+
     // 🇨🇲 Cameroun
-    case 'Douala':
+    case 'Douala': {
       // Droits de douane: 10% de la valeur CIF
       // Surtaxe AIC: 0.2% de la valeur CIF
       // TVA: 19.25% de la valeur CIF
@@ -498,10 +503,11 @@ export function calculateCustomsDuties(country: string, cifValue: number): numbe
       const surtaxeAIC = baseValue * 0.002;
       const tvaCameroun = baseValue * 0.1925;
       return Math.round(droitsCameroun + surtaxeAIC + tvaCameroun);
-      
+    }
+
     // 🇧🇫 Burkina Faso et 🇲🇱 Mali - WAEMU + AES
     case 'Ouagadougou':
-    case 'Bamako':
+    case 'Bamako': {
       // Droits CET: 10% de la valeur CIF
       // Surtaxes: 3% de la valeur CIF (statistique 1% + solidarité 1% + CDEAO 0.5% + AES 0.5%)
       // TVA: 18% de la valeur CIF
@@ -509,7 +515,8 @@ export function calculateCustomsDuties(country: string, cifValue: number): numbe
       const surtaxesAES = baseValue * 0.03;
       const tvaAES = baseValue * 0.18;
       return Math.round(droitsAES + surtaxesAES + tvaAES);
-      
+    }
+
     default:
       // Tarif par défaut: 15% de la valeur CIF
       return Math.round(baseValue * 0.15);

@@ -130,7 +130,7 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
     if (!selectedEquipment) return;
 
     try {
-      let updatedImages = [...editEquipmentForm.images];
+      const updatedImages = [...editEquipmentForm.images];
 
       // Upload des nouvelles images si elles existent
       if (selectedEquipmentImages.length > 0) {
@@ -733,7 +733,7 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
                 <h4 className="text-lg font-medium text-gray-900 mb-4">Type d'équipement</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
-                    onClick={() => { try { sessionStorage.setItem('returnToHash', '#pro'); sessionStorage.setItem('publicationContext', 'pro'); } catch {} window.location.hash = '#publication'; }}
+                    onClick={() => { try { sessionStorage.setItem('returnToHash', '#pro'); sessionStorage.setItem('publicationContext', 'pro'); } catch { /* ignore */ } window.location.hash = '#publication'; }}
                     className="p-4 border-2 border-orange-200 rounded-lg hover:border-orange-400 hover:bg-orange-50 transition-colors text-left"
                   >
                     <div className="flex items-center">

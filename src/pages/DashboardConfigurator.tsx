@@ -312,9 +312,9 @@ function generateCompactLayout(selectedWidgets: string[], widgetSizes: {[key: st
   const layout = [];
   let x = 0;
   let y = 0;
-  let rowHeight = 2;
+  const rowHeight = 2;
   selectedWidgets.forEach((id, idx) => {
-    let w = getWidthFromSize(widgetSizes[id] || '1/3');
+    const w = getWidthFromSize(widgetSizes[id] || '1/3');
     if (x + w > 12) {
       x = 0;
       y += rowHeight;
@@ -382,12 +382,12 @@ const DashboardConfigurator: React.FC = () => {
     const layout = [];
     let x = 0;
     let y = 0;
-    let rowHeight = 4;
+    const rowHeight = 4;
     let currentRowMaxY = y;
 
     enabledWidgets.forEach((widget, index) => {
       const size = widgetSizes[widget.id] || (widget as any).size || '1/3';
-      let w = getWidthFromSize(size);
+      const w = getWidthFromSize(size);
       if (x + w > 12) {
         x = 0;
         y = currentRowMaxY;

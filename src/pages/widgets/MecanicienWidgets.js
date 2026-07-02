@@ -1,4 +1,3 @@
-import React from 'react';
 import { Clock, Wrench, Package, Users, ClipboardCheck } from 'lucide-react';
 
 // Widgets pour le métier Mécanicien / Atelier

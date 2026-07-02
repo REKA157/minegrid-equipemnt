@@ -41,7 +41,7 @@ export const ChartWidget = ({
         case 'equipment-availability':
             return <EquipmentAvailabilityWidget data={data} />;
 
-        case 'interventions-today':
+        case 'interventions-today': {
             // S'assurer que les données sont un tableau valide avant de continuer
             if (!data || !Array.isArray(data) || data.length === 0) {
               return <div className="text-center text-gray-500 py-4">Aucune intervention aujourd'hui.</div>;
@@ -129,8 +129,9 @@ export const ChartWidget = ({
                     </div>
                 </div>
             );
+        }
 
-        case 'technician-workload':
+        case 'technician-workload': {
             const detailedWorkloadView = (
               <div>
                 <h3 className="text-xl font-semibold mb-4">Charge de travail détaillée</h3>
@@ -184,8 +185,9 @@ export const ChartWidget = ({
                 )}
               </div>
             );
+        }
 
-        case 'parts-inventory':
+        case 'parts-inventory': {
             const detailedInventoryView = (
                     <div>
                 <h3 className="text-xl font-semibold mb-4">État du stock détaillé</h3>
@@ -511,6 +513,7 @@ export const ChartWidget = ({
                     </div>
     </div>
   );
+        }
 
         default:
             return (

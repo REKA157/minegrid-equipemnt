@@ -77,8 +77,6 @@ function mapEquipmentCategory(row: {
     mappedCategory = 'Chargeur';
   } else if (searchText.includes('bouteur') || searchText.includes('bulldozer')) {
     mappedCategory = 'Bouteur';
-  } else if (searchText.includes('excavatrice') || searchText.includes('excavator')) {
-    mappedCategory = 'Excavatrice';
   } else if (searchText.includes('camion') || searchText.includes('truck') || searchText.includes('dumper')) {
     mappedCategory = 'Camion';
   } else if (searchText.includes('compacteur') || searchText.includes('compactor') || searchText.includes('rouleau')) {
@@ -330,7 +328,7 @@ const StockStatusWidget = () => {
     const briefs = stockBriefsFromEquipments(list);
     const leads = await RealPipelineService.getLeads();
 
-    let monitorBySourceId = await (async () => {
+    const monitorBySourceId = await (async () => {
       const sourceIds = leads
         .map((l) => (l.source_id || '').trim())
         .filter(Boolean);

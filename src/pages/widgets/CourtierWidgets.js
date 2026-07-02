@@ -1,5 +1,4 @@
-import React from 'react';
-import { DollarSign, Shield, FileText, Users, TrendingUp, Calendar, Target, Building2, FolderOpen, Landmark } from 'lucide-react';
+import { DollarSign, Shield, FileText, Users, TrendingUp, FolderOpen, Landmark } from 'lucide-react';
 
 // Widgets pour le métier Courtier en crédit et assurances
 export const CourtierWidgets = {

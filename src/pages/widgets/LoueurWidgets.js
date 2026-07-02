@@ -1,4 +1,3 @@
-import React from 'react';
 import { DollarSign, Building2, Calendar, Users, Receipt } from 'lucide-react';
 
 export const LoueurWidgets = {

@@ -173,12 +173,13 @@ export default function Login() {
 }
 
 function TempAccessBlock() {
-  if (!TEMP_ACCESS_CODE) {
-    return null;
-  }
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
+
+  if (!TEMP_ACCESS_CODE) {
+    return null;
+  }
 
   const handleAccess = (e: React.FormEvent) => {
     e.preventDefault();

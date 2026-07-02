@@ -33,7 +33,7 @@ export async function publishMachine(machineData: MachineData, images: File[]) {
   // une liste blanche, et on remappe `sellerId` vers la vraie colonne `sellerid`
   // (indexée + utilisée par la RLS et les lectures), avec `seller_id` pour la
   // compat du reste du code.
-  const md = machineData as Record<string, unknown>;
+  const md = machineData as unknown as Record<string, unknown>;
   const ALLOWED_COLUMNS = [
     'name', 'brand', 'model', 'category', 'year', 'price',
     'condition', 'description', 'specifications', 'total_hours',

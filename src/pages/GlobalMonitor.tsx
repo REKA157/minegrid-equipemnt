@@ -108,9 +108,10 @@ export default function GlobalMonitor() {
         setIsLive(false);
       }
     } finally {
-      if (reqId !== requestSeqRef.current) return;
-      setLoading(false);
-      setRefreshing(false);
+      if (reqId === requestSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 

@@ -10,14 +10,14 @@ declare namespace google {
       constructor(mapDiv: HTMLElement, opts?: MapOptions);
       setCenter(latlng: LatLng | LatLngLiteral): void;
       setZoom(zoom: number): void;
-      addListener(eventName: string, handler: Function): void;
+      addListener(eventName: string, handler: (...args: unknown[]) => unknown): void;
     }
 
     class Marker {
       constructor(opts?: MarkerOptions);
       setPosition(latlng: LatLng | LatLngLiteral): void;
       setMap(map: Map | null): void;
-      addListener(eventName: string, handler: Function): void;
+      addListener(eventName: string, handler: (...args: unknown[]) => unknown): void;
     }
 
     class Geocoder {

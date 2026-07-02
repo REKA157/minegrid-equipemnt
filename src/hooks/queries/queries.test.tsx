@@ -37,15 +37,10 @@ vi.mock('../../utils/proApi/notifications', () => ({
   deleteReadNotifications: vi.fn(async () => true),
 }));
 
-// eslint-disable-next-line import/first
 import { useMessages } from './useMessages';
-// eslint-disable-next-line import/first
 import { useOffers } from './useOffers';
-// eslint-disable-next-line import/first
 import { useUserProfile } from './useUserProfile';
-// eslint-disable-next-line import/first
 import { useUserMachines } from './useUserMachines';
-// eslint-disable-next-line import/first
 import { useClientNotifications } from './useClientNotifications';
 
 function makeWrapper() {

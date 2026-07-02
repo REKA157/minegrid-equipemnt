@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, Settings, FileText, Bell, User, LogOut, ChevronRight, Shield, Wallet, RefreshCw, Eye, MessageSquare, DollarSign, Camera, X, CreditCard, Gift, Save } from 'lucide-react';
+import { Plus, Package, Settings, Bell, User, LogOut, ChevronRight, Shield, Wallet, RefreshCw, Eye, MessageSquare, DollarSign, X, CreditCard, Gift, Save } from 'lucide-react';
 import StripePaymentForm from '../components/StripePaymentForm';
 import { MyTrustInline } from '../nextgen/integration/inline';
 import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData, getOffers } from '../utils/api';
@@ -83,7 +83,6 @@ export default function Dashboard({ section = 'overview' }) {
     const [messages, setMessages] = useState([]);
     const [offers, setOffers] = useState([]);
     const [activeSettingsTab, setActiveSettingsTab] = useState('profil');
-    const [isSavingSettings, setIsSavingSettings] = useState(false);
     const [selectedMessageForReply, setSelectedMessageForReply] = useState(null);
     const [replyText, setReplyText] = useState('');
     const [isSendingReply, setIsSendingReply] = useState(false);
@@ -105,7 +104,7 @@ export default function Dashboard({ section = 'overview' }) {
 
     const [subscriptionType, setSubscriptionType] = useState('aucun');
 
-    const [isFirstTimeEnterpriseDashboard, setIsFirstTimeEnterpriseDashboard] = useState(true);
+    const [, setIsFirstTimeEnterpriseDashboard] = useState(true);
 
     const [navigation, setNavigation] = useState([
         { name: 'Vue d\'ensemble', href: '#dashboard/overview', icon: Eye },
@@ -486,14 +485,6 @@ export default function Dashboard({ section = 'overview' }) {
         }
     };
 
-    const resetEnterpriseDashboard = () => {
-        if (confirm('Voulez-vous réinitialiser votre tableau de bord entreprise ? Cela vous permettra de le reconfigurer.')) {
-            removeAccountItem(accountId, 'enterpriseDashboardConfigured');
-            setIsFirstTimeEnterpriseDashboard(true);
-            toast('Tableau de bord entreprise réinitialisé. Vous pouvez maintenant le reconfigurer.');
-        }
-    };
-
     const handleActivateSubscription = (type) => {
         // Afficher la page de paiement
         logger.info(`💰 Abonnement ${type} sélectionné - affichage page de paiement`);
@@ -572,7 +563,7 @@ export default function Dashboard({ section = 'overview' }) {
             if (replyError) throw replyError;
 
             // 2. Envoyer l'email de réponse via la fonction Edge
-            const { data: emailData, error: emailError } = await supabase.functions.invoke('send-contact-email', {
+            const { error: emailError } = await supabase.functions.invoke('send-contact-email', {
                 body: {
                     to: selectedMessageForReply.sender_email,
                     from: 'contact@minegrid-equipment.com',
@@ -617,9 +608,9 @@ export default function Dashboard({ section = 'overview' }) {
 
             // 5. Mettre à jour le statut de la réponse
             if (replyData.id) {
-                const { error: replyUpdateError } = await supabase
+                await supabase
                     .from('messages')
-                    .update({ 
+                    .update({
                         status: emailError ? 'failed' : 'sent',
                         sent_at: emailError ? null : new Date().toISOString(),
                         error_message: emailError ? emailError.message : null
@@ -721,7 +712,8 @@ export default function Dashboard({ section = 'overview' }) {
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            const { user_id: _uid, ...updatePayload } = proRow;
+            const { user_id, ...updatePayload } = proRow;
+            void user_id; // exclu volontairement du payload d'update (clé de filtre)
             let upsertError;
 
             if (existingPro?.id) {

@@ -61,27 +61,30 @@ export function NotificationsTab({ notifications }: { notifications: ClientNotif
 
     // Naviguer vers l'entité liée
     switch (notification.related_entity_type) {
-      case 'equipment':
+      case 'equipment': {
         // Aller vers l'onglet équipements
         const equipmentTab = document.querySelector('[data-tab="equipment"]') as HTMLElement;
         if (equipmentTab) {
           equipmentTab.click();
         }
         break;
-      case 'order':
+      }
+      case 'order': {
         // Aller vers l'onglet commandes
         const ordersTab = document.querySelector('[data-tab="orders"]') as HTMLElement;
         if (ordersTab) {
           ordersTab.click();
         }
         break;
-      case 'maintenance':
+      }
+      case 'maintenance': {
         // Aller vers l'onglet maintenance
         const maintenanceTab = document.querySelector('[data-tab="maintenance"]') as HTMLElement;
         if (maintenanceTab) {
           maintenanceTab.click();
         }
         break;
+      }
       default:
         toast('Type d\'entité non reconnu');
     }

@@ -239,7 +239,7 @@ export default function VitrinePersonnalisee() {
       const { data: { user } } = await supabase.auth.getUser();
       let userIdToLoad = sellerId;
       let owner = false;
-      let showTestData = false;
+      const showTestData = false;
       
       // Déterminer quel utilisateur afficher et si c'est le propriétaire
       if (!sellerId && user) {

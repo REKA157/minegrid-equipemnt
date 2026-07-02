@@ -57,7 +57,7 @@ function showDebugPayload(label: string, data: unknown): void {
       // Limiter la taille pour éviter les alertes trop longues
       toast(`${label}:\n` + (text.length > 2000 ? text.slice(0, 2000) + '\n…(tronqué)' : text));
     }
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 function buildDefaultContext(brand: string, model: string) {
@@ -174,7 +174,7 @@ export async function fetchModelSpecsFull(
 ): Promise<{ specs: NormalizedSpecs | null; missing?: string[]; suggestions?: Record<string, any> }>{
   const url = import.meta.env.VITE_N8N_AUTO_SPECS_URL || '';
   const payload = { schema: 'minegrid.auto_specs.v1', includeMissing: true, brand, model, ...(context || {}) } as Record<string, any>;
-  try { console.log('🧪 AutoSpecs payload →', payload); } catch {}
+  try { console.log('🧪 AutoSpecs payload →', payload); } catch { /* ignore */ }
   showDebugPayload('Payload AutoSpecs envoyé', payload);
   const res = await fetch(url, {
     method: 'POST',

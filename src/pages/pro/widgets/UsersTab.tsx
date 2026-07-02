@@ -17,6 +17,21 @@ export function UsersTab() {
   // Vérifier les permissions
   const { permissions } = usePermissions();
 
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteFormData, setInviteFormData] = useState({ email: '', role: '' });
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [invitations, setInvitations] = useState<UserInvitation[]>([]);
+  const [loadingInvitations, setLoadingInvitations] = useState(true);
+
+  // Charger les invitations au montage du composant (uniquement pour les admins)
+  useEffect(() => {
+    if (permissions?.isAdmin) {
+      loadInvitations();
+    }
+  }, [permissions?.isAdmin]);
+
   // Si l'utilisateur n'est pas admin, afficher un message d'accès refusé
   if (!permissions?.isAdmin) {
     return (
@@ -36,18 +51,6 @@ export function UsersTab() {
       </div>
     );
   }
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteFormData, setInviteFormData] = useState({ email: '', role: '' });
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [invitations, setInvitations] = useState<UserInvitation[]>([]);
-  const [loadingInvitations, setLoadingInvitations] = useState(true);
-
-  // Charger les invitations au montage du composant
-  useEffect(() => {
-    loadInvitations();
-  }, []);
 
   const loadInvitations = async () => {
     try {

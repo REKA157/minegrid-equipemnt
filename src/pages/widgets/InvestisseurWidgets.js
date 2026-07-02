@@ -1,4 +1,3 @@
-import React from 'react';
 import { DollarSign, Target, TrendingUp, Shield, FolderOpen, TrendingDown } from 'lucide-react';
 
 // Widgets pour le métier Investisseur
