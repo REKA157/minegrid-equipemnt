@@ -9,7 +9,7 @@ const STEPS: Array<{ n: number; title: string; desc: string; status: DemoStatus 
   { n: 3, title: 'Estimer le juste prix', desc: 'Référentiel de prix propriétaire (estimation live ci-dessous).', status: 'available' },
   { n: 4, title: 'Détecter la fraude', desc: 'Signaux de risque (prix appât, vendeur non vérifié…).', status: 'available' },
   { n: 5, title: 'Inspecter la machine', desc: 'Rapport certifié par un inspecteur au sol.', status: 'awaiting_partner' },
-  { n: 6, title: 'Séquestrer le paiement', desc: 'Escrow conditionné inspection + livraison (PSP).', status: 'awaiting_partner' },
+  { n: 6, title: 'Séquestrer le paiement', desc: 'Paiement sécurisé conditionné inspection + livraison — opérateur PSP à venir (non encore activé).', status: 'awaiting_partner' },
   { n: 7, title: 'Financer (optionnel)', desc: 'Dossier scoré transmis à une banque partenaire.', status: 'awaiting_partner' },
   { n: 8, title: 'Livrer & dédouaner', desc: 'Devis transport + transit.', status: 'awaiting_partner' },
 ];

@@ -186,25 +186,34 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
     button.style.opacity = '0.6';
     button.style.cursor = 'not-allowed';
 
-    const sourceLabel = recommendation.aiSource === 'monitor' ? 'IA (serveur)' : 'IA (analyse locale)';
-    showNotification('success', `${sourceLabel} — ${recommendation.action}`);
-
-    setTimeout(() => {
-      apiCall('POST', '/api/recommendations/execute', {
-        recommendationId: recommendation.id,
-        action: recommendation.action,
-        aiSource: recommendation.aiSource,
-        suggestedActions: recommendation.suggestedActions,
-      }).catch((error) => {
+    // Honnêteté : on ne prétend PAS que l'action a réussi avant de connaître le résultat.
+    // Le backend d'exécution n'est pas câblé (apiCall renvoie notImplemented). On lit le
+    // résultat réel et on affiche un message honnête.
+    apiCall('POST', '/api/recommendations/execute', {
+      recommendationId: recommendation.id,
+      action: recommendation.action,
+      aiSource: recommendation.aiSource,
+      suggestedActions: recommendation.suggestedActions,
+    })
+      .then((result) => {
+        if (result?.success) {
+          showNotification('success', result.message || 'Action exécutée.');
+        } else {
+          showNotification(
+            'info',
+            result?.message || "Action non encore disponible (fonctionnalité en cours d'intégration).",
+          );
+        }
+      })
+      .catch((error) => {
         console.error('Erreur API recommandation:', error);
+        showNotification('error', "Action impossible pour le moment.");
+      })
+      .finally(() => {
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.style.cursor = 'pointer';
       });
-    }, 50);
-
-    setTimeout(() => {
-      button.disabled = false;
-      button.style.opacity = '1';
-      button.style.cursor = 'pointer';
-    }, 400);
   };
 
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -415,9 +424,9 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
             <span className="w-2 h-2 bg-orange-500 rounded-full shrink-0"></span>
-            <span>Recommandations — IA en tête, puis actions pipeline & catalogue</span>
+            <span>Recommandations — actions pipeline &amp; catalogue</span>
             {aiRecsLoading && (
-              <span className="text-xs font-normal text-gray-500">Chargement IA…</span>
+              <span className="text-xs font-normal text-gray-500">Chargement…</span>
             )}
             {!aiRecsLoading && aiRecommendationRows.length > 0 && (
               <span className="text-xs font-normal text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
@@ -460,8 +469,8 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
                     disabled={!agirEnabled}
                     title={
                       agirEnabled
-                        ? 'Exécuter une action liée à cette recommandation IA'
-                        : 'Connectez-vous et attendez les recommandations IA (serveur ou analyse locale)'
+                        ? 'Exécuter une action liée à cette recommandation'
+                        : 'Connectez-vous et attendez les recommandations (serveur ou analyse locale)'
                     }
                     className={`text-xs shrink-0 px-2 py-1 rounded border transition-colors ${
                       agirEnabled

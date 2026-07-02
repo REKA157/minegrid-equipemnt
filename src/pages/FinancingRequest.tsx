@@ -75,7 +75,7 @@ export default function FinancingRequest() {
         name: displayName,
         email: userEmail,
         company: company || null,
-        subject: 'Demande de financement - Accord de principe',
+        subject: 'Pré-demande de financement (sans engagement)',
         service: 'financing',
         message: [
           `Prix machine estimé: ${machinePrice} EUR`,
@@ -84,13 +84,13 @@ export default function FinancingRequest() {
           'Note:',
           note || 'Aucune note',
           '',
-          'Documents transmis:',
-          uploadedList || 'Aucun document joint (noms non fournis)',
+          'Pièces indiquées par le demandeur (noms seulement, fichiers non transmis à ce stade):',
+          uploadedList || 'Aucune pièce indiquée',
         ].join('\n'),
       });
 
       setSuccess(true);
-      toast('Demande de financement envoyée avec succès.');
+      toast('Pré-demande de financement transmise (sans engagement).');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur inconnue';
       toast(`Envoi impossible pour le moment: ${message}`);
@@ -102,16 +102,23 @@ export default function FinancingRequest() {
 
   return (
     <div className="max-w-4xl mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-8 text-gray-900">Demander un financement</h1>
+      <h1 className="text-3xl font-bold mb-4 text-gray-900">Pré-demande de financement</h1>
+      <div className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-start">
+        <Info className="h-5 w-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-800">
+          Cette étape n'engage pas encore un financement. Elle transmet votre intérêt à notre équipe.
+          Vos pièces justificatives vous seront demandées après étude par un partenaire financier.
+        </p>
+      </div>
       {/* Simulateur */}
       <div className="mb-10">
         <FinancingSimulator machinePrice={machinePrice} />
       </div>
-      {/* Formulaire d'accord de principe */}
+      {/* Formulaire de pré-demande */}
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 space-y-8">
         <h2 className="text-xl font-semibold mb-4 flex items-center text-gray-800">
           <ShieldCheck className="h-6 w-6 text-green-600 mr-2" />
-          Accord de principe — Dossier simplifié
+          Pré-demande — Dossier simplifié
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -151,8 +158,12 @@ export default function FinancingRequest() {
         <div>
           <h3 className="font-semibold text-gray-900 mb-2 flex items-center">
             <ClipboardEdit className="h-5 w-5 text-primary-600 mr-2" />
-            Documents à fournir
+            Pièces qui vous seront demandées (à titre indicatif)
           </h3>
+          <p className="text-xs text-gray-500 mb-2">
+            À ce stade, vous n'avez pas besoin de les téléverser : ces pièces vous seront demandées après étude de
+            votre pré-demande par un partenaire financier.
+          </p>
           <ul className="space-y-3">
             {requiredDocs.map(doc => (
               <li key={doc.key} className="flex items-center gap-3 bg-primary-50 rounded-lg px-3 py-2">
@@ -179,19 +190,21 @@ export default function FinancingRequest() {
           disabled={isSubmitting}
           className="w-full bg-primary-600 text-white py-3 rounded-xl font-semibold text-lg hover:bg-primary-700 shadow-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? 'Envoi en cours...' : 'Envoyer la demande'}
+          {isSubmitting ? 'Envoi en cours...' : 'Envoyer ma pré-demande'}
         </button>
         {success && (
           <div className="mt-4 p-3 bg-green-50 text-green-800 rounded-lg border border-green-200">
-            Votre demande a bien été envoyée. Un conseiller vous contactera sous 24h.
+            Votre pré-demande a bien été transmise à notre équipe. Elle n'engage pas encore de financement :
+            un conseiller vous recontactera pour étudier votre dossier et vous indiquer les pièces à fournir.
           </div>
         )}
         <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200 flex items-start">
           <Info className="h-5 w-5 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-yellow-800">
-            <p className="font-medium">Dossier simplifié</p>
+            <p className="font-medium">Pré-demande sans engagement</p>
             <p className="text-xs mt-1">
-              Fournissez au moins les documents principaux pour accélérer l'accord de principe. Les pièces complémentaires pourront être demandées plus tard.
+              Cette pré-demande n'engage ni MineGrid ni vous. Aucun financement n'est encore accordé ni en cours.
+              Les pièces justificatives seront demandées lors de l'étude par un partenaire financier.
             </p>
           </div>
         </div>

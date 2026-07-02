@@ -252,107 +252,13 @@ class AIWidgetService {
     }
   }
 
-  private async buildLocalAIRecommendations(userId: string): Promise<AIRecommendation[]> {
-    const userData = await this.getSellerMachines(userId);
-
-    const recommendations: AIRecommendation[] = [];
-
-    const stockAnalysis = this.analyzeStock(userData);
-    if (stockAnalysis.hasDormantStock) {
-      recommendations.push({
-        id: 'stock_optimization',
-        category: 'inventory',
-        title: 'Optimisation du stock dormant',
-        description: `${stockAnalysis.dormantCount} équipements en stock depuis plus de 60 jours`,
-        impact: 'high',
-        effort: 'medium',
-        roi: 0.25,
-        actions: [
-          'Réduire les prix de 15%',
-          'Booster la visibilité Premium',
-          'Créer des offres flash',
-          'Contacter les prospects qualifiés',
-        ],
-        priority: 1,
-      });
-    }
-
-    const performanceAnalysis = this.analyzePerformance(userData);
-    if (performanceAnalysis.lowVisibility) {
-      recommendations.push({
-        id: 'visibility_boost',
-        category: 'marketing',
-        title: 'Amélioration de la visibilité',
-        description: 'Vos annonces ont une visibilité inférieure à la moyenne',
-        impact: 'high',
-        effort: 'low',
-        roi: 0.4,
-        actions: [
-          'Optimiser les titres SEO',
-          'Ajouter plus de photos',
-          'Compléter les descriptions',
-          'Activer la promotion Premium',
-        ],
-        priority: 2,
-      });
-    }
-
-    const salesAnalysis = this.analyzeSales(userData);
-    if (salesAnalysis.needsFollowUp) {
-      recommendations.push({
-        id: 'follow_up_system',
-        category: 'sales',
-        title: 'Système de suivi client',
-        description: `${salesAnalysis.pendingLeads} prospects nécessitent un suivi`,
-        impact: 'medium',
-        effort: 'low',
-        roi: 0.3,
-        actions: [
-          'Envoyer des emails de relance',
-          'Planifier des appels de suivi',
-          'Créer des devis personnalisés',
-          'Offrir des démonstrations',
-        ],
-        priority: 3,
-      });
-    }
-
-    if (recommendations.length === 0) {
-      recommendations.push(
-        {
-          id: 'starter_profile_quality',
-          category: 'marketing',
-          title: 'Renforcer la qualité du profil vendeur',
-          description: 'Compléter le profil et les informations de confiance pour améliorer la conversion.',
-          impact: 'medium',
-          effort: 'low',
-          roi: 0.2,
-          actions: [
-            'Completer la description entreprise',
-            'Ajouter logo et contacts verifiés',
-            'Activer les notifications de messages',
-          ],
-          priority: 1,
-        },
-        {
-          id: 'starter_listing_structure',
-          category: 'sales',
-          title: 'Structurer un plan de relance commercial',
-          description: 'Mettre en place un pipeline de suivi pour transformer plus de prospects.',
-          impact: 'medium',
-          effort: 'low',
-          roi: 0.22,
-          actions: [
-            'Repondre aux demandes en moins de 2h',
-            'Relancer les prospects a J+1 et J+3',
-            'Utiliser un modele de devis standard',
-          ],
-          priority: 2,
-        },
-      );
-    }
-
-    return recommendations.sort((a, b) => a.priority - b.priority);
+  private async buildLocalAIRecommendations(_userId: string): Promise<AIRecommendation[]> {
+    // Anti-façade : hors service monitor, on NE fabrique AUCUNE recommandation.
+    // L'ancienne version inventait des chiffres (prospects « en attente » = 30 % du stock,
+    // « vues moyennes » = 45, impacts « 15-20 % »…) et poussait 2 recommandations
+    // génériques inconditionnelles. On renvoie [] -> les widgets affichent leur état vide
+    // honnête (« Aucune optimisation / recommandation suggérée »).
+    return [];
   }
 
   // 🎯 RECOMMANDATIONS INTELLIGENTES
@@ -449,85 +355,21 @@ class AIWidgetService {
   }
 
   // 🔧 MÉTHODES PRIVÉES D'ANALYSE
+  //
+  // Les anciens helpers de simulation (calculateCurrentSales ×15000,
+  // predictNextMonthSales ×1.15, calculateConversionRate/predictConversionRate,
+  // analyzeStock/analyzePerformance/analyzeSales avec averageViews=45 et
+  // pendingLeads=0.3×) ont été SUPPRIMÉS : ils fabriquaient des chiffres.
 
-  private calculateCurrentSales(data: any[]): number {
-    // Simulation du calcul des ventes actuelles
-    return data.length * 15000; // Prix moyen estimé
+  private suggestPriceOptimization(_data: any[]): any {
+    // Anti-façade : aucune suggestion prix fabriquée (impact « 15-20 % » inventé).
+    // Hors moteur monitor, on ne détecte pas d'optimisation réelle -> rien.
+    return { hasOptimization: false };
   }
 
-  private predictNextMonthSales(data: any[]): number {
-    // Simulation de prédiction basée sur les tendances
-    const currentSales = this.calculateCurrentSales(data);
-    return currentSales * 1.15; // +15% prédit
-  }
-
-  private calculateConversionRate(data: any[]): number {
-    // Simulation du taux de conversion
-    return 0.12; // 12%
-  }
-
-  private predictConversionRate(data: any[]): number {
-    // Simulation de prédiction du taux de conversion
-    return 0.14; // 14% prédit
-  }
-
-  private analyzeStock(data: any[]): any {
-    const dormantCount = data.filter(item => 
-      new Date(item.created_at).getTime() < Date.now() - (60 * 24 * 60 * 60 * 1000)
-    ).length;
-
-    return {
-      hasDormantStock: dormantCount > 0,
-      dormantCount,
-      totalStock: data.length
-    };
-  }
-
-  private analyzePerformance(data: any[]): any {
-    // Simulation d'analyse de performance
-    return {
-      lowVisibility: data.length > 5, // Si plus de 5 annonces, potentiellement faible visibilité
-      averageViews: 45,
-      targetViews: 100
-    };
-  }
-
-  private analyzeSales(data: any[]): any {
-    // Simulation d'analyse des ventes
-    return {
-      needsFollowUp: data.length > 0,
-      pendingLeads: Math.floor(data.length * 0.3),
-      conversionRate: 0.12
-    };
-  }
-
-  private suggestPriceOptimization(data: any[]): any {
-    // Simulation de suggestions d'optimisation des prix
-    return {
-      hasOptimization: data.length > 0,
-      description: 'Ajustement des prix recommandé basé sur l\'analyse du marché',
-      actions: [
-        'Analyser les prix de la concurrence',
-        'Ajuster les prix de 5-10%',
-        'Créer des offres promotionnelles'
-      ],
-      expectedImpact: 'Augmentation des ventes de 15-20%'
-    };
-  }
-
-  private suggestSEOOptimization(data: any[]): any {
-    // Simulation de suggestions d'optimisation SEO
-    return {
-      hasOptimization: data.length > 0,
-      description: 'Amélioration du référencement recommandée',
-      actions: [
-        'Optimiser les titres avec des mots-clés',
-        'Ajouter des descriptions détaillées',
-        'Utiliser des tags pertinents',
-        'Améliorer la qualité des photos'
-      ],
-      expectedImpact: 'Augmentation de la visibilité de 30-40%'
-    };
+  private suggestSEOOptimization(_data: any[]): any {
+    // Anti-façade : aucune suggestion SEO fabriquée (impact « 30-40 % » inventé).
+    return { hasOptimization: false };
   }
 }
 

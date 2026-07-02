@@ -319,9 +319,11 @@ export async function getSalesPerformanceData(): Promise<SalesPerformanceData> {
 
     const growth = lastMonthViews > 0 ? ((currentMonthViews - lastMonthViews) / lastMonthViews) * 100 : 0;
 
+    // Anti-façade : le montant « Ventes » reflète UNIQUEMENT la valeur réelle du pipeline
+    // gagné (leads conclus). On ne fabrique plus de CA à partir d'un prix moyen inventé
+    // (ancien salesFromOffers = totalOffers × 50000), qui gonflait le chiffre affiché.
     const wonPipelineValue = wonLeads.reduce((s, l) => s + Number(l.value ?? 0), 0);
-    const salesFromOffers = totalOffers * 50000;
-    const salesDisplay = Math.max(wonPipelineValue, salesFromOffers);
+    const salesDisplay = wonPipelineValue;
 
     type Rec = { type: string; action: string; impact: string; priority: 'high' | 'medium' | 'low' };
     const recommendations: Rec[] = [];

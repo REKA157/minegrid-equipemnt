@@ -45,7 +45,12 @@ export async function getEscrowEvents(escrowId: string): Promise<EscrowEvent[]> 
   return (data as EscrowEvent[]) ?? [];
 }
 
-/** Initie un séquestre via l'Edge Function serveur (le client n'écrit pas la table). */
+/**
+ * Initierait un séquestre via une Edge Function serveur (le client n'écrit pas la table).
+ * NON ACTIVÉ : aucun prestataire de paiement (PSP) n'est connecté et l'Edge Function
+ * `create-escrow` n'est pas déployée — cet appel échoue tant que l'opérateur n'est pas intégré.
+ * Aucun fonds ne peut être séquestré, financé ni libéré aujourd'hui.
+ */
 export async function requestEscrow(input: {
   machine_id: string;
   seller_id: string;

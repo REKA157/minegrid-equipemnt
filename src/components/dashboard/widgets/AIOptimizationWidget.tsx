@@ -130,7 +130,7 @@ const AIOptimizationWidget: React.FC<AIOptimizationWidgetProps> = ({ userId, wid
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center space-x-2">
           <Zap className="w-5 h-5 text-orange-600" />
-          <h3 className="font-semibold text-gray-900">Optimisation IA</h3>
+          <h3 className="font-semibold text-gray-900">Recommandations d'optimisation</h3>
         </div>
         <button
           onClick={loadOptimizationData}
@@ -201,7 +201,7 @@ const AIOptimizationWidget: React.FC<AIOptimizationWidgetProps> = ({ userId, wid
           <div className="text-center py-8 text-gray-500">
             <Zap className="w-12 h-12 mx-auto mb-2 text-gray-300" />
             <p>Aucune optimisation suggérée</p>
-            <p className="text-sm">L'IA analysera vos données pour proposer des améliorations</p>
+            <p className="text-sm">Les optimisations apparaîtront ici lorsqu'une amélioration réelle sera détectée sur vos annonces.</p>
           </div>
         ) : (
           filteredSuggestions.map((suggestion, index) => (

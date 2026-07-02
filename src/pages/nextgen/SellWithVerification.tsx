@@ -10,7 +10,7 @@ const STEPS: Array<{ n: number; title: string; desc: string; status: DemoStatus 
   { n: 2, title: 'Se faire vérifier', desc: 'Soumettre identité, RC, fiscal, RIB (revue back-office).', status: 'awaiting_deployment' },
   { n: 3, title: 'Obtenir le badge de confiance', desc: 'Score calculé après approbation (aperçu live ci-dessous).', status: 'available' },
   { n: 4, title: 'Recevoir des leads qualifiés', desc: 'Acheteurs sécurisés par le parcours de confiance.', status: 'awaiting_deployment' },
-  { n: 5, title: 'Vendre sous séquestre', desc: 'Paiement garanti, libéré après inspection + livraison.', status: 'awaiting_partner' },
+  { n: 5, title: 'Vendre sous séquestre', desc: 'Paiement sécurisé (opérateur PSP à venir), libéré après inspection + livraison. Non encore activé.', status: 'awaiting_partner' },
 ];
 
 const KINDS: Array<{ k: VerificationKind; label: string }> = [

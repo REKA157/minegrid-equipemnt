@@ -46,7 +46,6 @@ import {
   type ChainStep,
   type PartnerRole,
 } from '../utils/api/transactionChain';
-import { openCaseEscrow } from '../utils/api/escrowBridge';
 import { buildNetworkForRole } from '../utils/partner/partnerPerformanceService';
 import { trustTierLabel } from '../utils/partner/partnerTrust';
 import type { NetworkRanking } from '../utils/partner/partnerNetwork';
@@ -61,7 +60,7 @@ const STEP_ACTIONS: Array<{ step: ChainStep; label: string }> = [
   { step: 'financing', label: 'Demander un financement' },
   { step: 'transport', label: 'Demander un transport' },
   { step: 'customs', label: 'Ouvrir un dossier douane' },
-  { step: 'payment', label: 'Mettre en escrow (après inspection)' },
+  { step: 'payment', label: 'Préparer le séquestre (après inspection)' },
 ];
 
 /**
@@ -72,7 +71,6 @@ const STEP_ACTIONS: Array<{ step: ChainStep; label: string }> = [
 function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: () => void }) {
   const [pending, setPending] = useState<ChainStep | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [escrowPending, setEscrowPending] = useState(false);
 
   const run = async (step: ChainStep) => {
     setPending(step);
@@ -91,35 +89,16 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
     }
   };
 
-  // Pont escrow : ouvre un séquestre RÉEL (statut 'created' = non financé) lié au dossier.
-  const openEscrow = async () => {
-    setEscrowPending(true);
-    setMsg(null);
-    const r = await openCaseEscrow(caseId);
-    setEscrowPending(false);
-    if (r.ok) {
-      setMsg('Séquestre ouvert (non financé). Le miroir paiement du dossier reflètera l’état réel du PSP.');
-      onDone();
-    } else if (r.reason === 'not_deployed') {
-      setMsg('Pont escrow non déployé : appliquez 0_prerequis_escrow_prix.sql puis 7_pont_escrow.sql.');
-    } else if (r.reason === 'buyer_required') {
-      setMsg('Escrow impossible : ce dossier n’a pas d’acheteur relié (anti-façade : aucun escrow fictif).');
-    } else if (r.reason === 'amount_required') {
-      setMsg('Escrow impossible : le montant du dossier (total_amount) doit être renseigné.');
-    } else if (r.reason === 'machine_required') {
-      setMsg('Escrow impossible : aucune machine liée au dossier.');
-    } else if (r.reason === 'forbidden') {
-      setMsg('Seuls le vendeur ou l’acheteur du dossier peuvent ouvrir un séquestre.');
-    } else {
-      setMsg('Ouverture du séquestre impossible pour le moment.');
-    }
-  };
+  // Pont escrow : le séquestre n'est PAS encore activable côté produit (aucun PSP connecté).
+  // La logique serveur (openCaseEscrow / escrowBridge) reste en place pour l'activation
+  // future, mais l'UI n'offre plus d'action laissant croire qu'un paiement est séquestré.
 
   return (
     <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
       <h2 className="text-sm font-semibold text-gray-900 mb-1">Faire avancer le dossier</h2>
       <p className="text-xs text-gray-500 mb-3">
-        Crée l’étape correspondante (inspection, financement, transport, douane, escrow). Idempotent : pas de doublon.
+        Crée l’étape correspondante (inspection, financement, transport, douane, préparation du séquestre).
+        Idempotent : pas de doublon.
       </p>
       <div className="flex flex-wrap gap-2">
         {STEP_ACTIONS.map((a) => (
@@ -135,14 +114,17 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
         ))}
         <button
           type="button"
-          disabled={escrowPending || pending !== null}
-          onClick={() => void openEscrow()}
-          title="Ouvre un séquestre réel (PSP) lié au dossier — statut 'créé', non financé."
-          className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+          disabled
+          title="Le paiement séquestre n'est pas encore activé (aucun prestataire de paiement connecté)."
+          className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-400 cursor-not-allowed"
         >
-          {escrowPending ? 'Ouverture…' : 'Ouvrir le séquestre (escrow réel)'}
+          Séquestre — activation opérateur requise
         </button>
       </div>
+      <p className="mt-2 text-xs text-gray-500">
+        Le paiement séquestre n'est pas encore activé (aucun prestataire de paiement connecté). Aucun fonds ne peut
+        être séquestré, financé ni libéré pour le moment.
+      </p>
       {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
     </div>
   );

@@ -16,7 +16,11 @@ export default function EscrowFlowWidget() {
   );
 
   return (
-    <SectionCard title="Simuler un séquestre" subtitle="Les fonds ne se libèrent que depuis « delivered » et si les conditions sont réunies." live status="available">
+    <SectionCard title="Simuler un séquestre" subtitle="Simulation de la logique d'état (aucun fonds réel). Le séquestre n'est pas encore activé : opérateur PSP à venir." live status="awaiting_partner">
+      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+        Démonstration de la règle de libération. Le paiement séquestre n'est pas encore activé (aucun prestataire de
+        paiement connecté) : aucun fonds n'est réellement séquestré ni libéré.
+      </p>
       <ol className="flex flex-wrap items-center gap-2">
         {FLOW.map((s, i) => (
           <React.Fragment key={s}>
@@ -34,7 +38,7 @@ export default function EscrowFlowWidget() {
       </div>
       <div className={`mt-4 rounded-lg p-4 text-sm font-medium ${releasable ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
         {releasable
-          ? '✓ Fonds libérables vers le vendeur (toutes conditions satisfaites).'
+          ? '✓ Conditions de libération réunies (simulation — activation opérateur requise pour un paiement réel).'
           : status !== 'delivered'
           ? '✗ Libération bloquée : la transaction doit être à l\'état « delivered ».'
           : '✗ Libération bloquée : une condition (inspection ou livraison) n\'est pas satisfaite.'}
