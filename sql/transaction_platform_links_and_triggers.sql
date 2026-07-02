@@ -228,10 +228,16 @@ create trigger trg_transaction_cases_link_quote_request
   for each row execute function public.transaction_cases_after_insert_link_quote_request();
 
 -- =====================================================================
--- RPC fallback : creation dossier cote serveur (copie deploy : rpc_ensure_transaction_case_for_quote_request.sql)
+-- [DEPRECATED / SUPERSEDED] Ancienne definition SANS total_amount.
+-- La version CANONIQUE vit dans :
+--   supabase/migrations/20260702090000_p2_consolidate_critical_functions.sql
+--   (et sql/rpc_ensure_transaction_case_for_quote_request.sql).
+-- Fonction renommee `__superseded` pour NE PLUS ecraser la canonique si ce
+-- fichier est re-execute. NE PAS re-executer ce fichier : les migrations sont
+-- la source de verite (voir supabase/migrations/README.md).
 -- =====================================================================
 
-create or replace function public.ensure_transaction_case_for_quote_request(p_quote_request_id uuid)
+create or replace function public.ensure_transaction_case_for_quote_request__superseded(p_quote_request_id uuid)
 returns uuid
 language plpgsql
 security definer
@@ -335,4 +341,4 @@ begin
 end;
 $$;
 
-grant execute on function public.ensure_transaction_case_for_quote_request(uuid) to authenticated;
+grant execute on function public.ensure_transaction_case_for_quote_request__superseded(uuid) to authenticated;

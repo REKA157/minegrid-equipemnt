@@ -1,4 +1,10 @@
 -- =====================================================================
+-- [DEPRECATED / SUPERSEDED — 2026-07-02]
+-- Cette copie est PÉRIMÉE. La version CANONIQUE (avec le filet de backfill
+-- total_amount) est sql/2026-06_escrow_bridge.sql. Ne PAS ré-appliquer ce fichier.
+-- Source de vérité : supabase/migrations/ (voir supabase/migrations/README.md).
+-- =====================================================================
+-- =====================================================================
 -- PONT ESCROW — relier payment_records (dossier) <-> escrow_transactions (PSP)
 -- =====================================================================
 -- PROBLÈME (audit 2026-06) : deux systèmes d'escrow réels mais DÉCONNECTÉS.
