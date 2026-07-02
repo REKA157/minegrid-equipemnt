@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models import GeocodeCache
+from app.geocoder_centroids import country_centroid
 
 logger = logging.getLogger("monitor.geocoder")
 
@@ -253,5 +254,10 @@ async def enrich_coordinates(
     result = await geocode(db, title, region, country)
     if result:
         return result.lat, result.lon
+
+    # Repli hors-ligne : centroide pays (la carte ne doit jamais etre vide).
+    centroid = country_centroid(country)
+    if centroid:
+        return centroid
 
     return existing_lat, existing_lon

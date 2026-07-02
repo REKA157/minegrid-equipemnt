@@ -1,69 +1,170 @@
-import React, { useMemo, useState } from 'react';
-import { SectionCard, NumberField, Toggle } from '../ui/primitives';
-import { computeTrustScore } from '../trust/computeTrustScore';
-import type { VerificationKind } from '../trust/types';
-import TrustBadge from '../trust/TrustBadge';
+import React, { useEffect, useState } from 'react';
+import { SectionCard } from '../ui/primitives';
+import { buildNetworkForRole } from '../../utils/partner/partnerPerformanceService';
+import { trustTierLabel } from '../../utils/partner/partnerTrust';
+import type { NetworkPartner, NetworkRanking } from '../../utils/partner/partnerNetwork';
+import type { PartnerRole } from '../../utils/partner/partnerEvents';
 
-const KINDS: Array<{ k: VerificationKind; label: string }> = [
-  { k: 'identity', label: 'Identité (15)' },
-  { k: 'company_registration', label: 'RC / société (15)' },
-  { k: 'tax_id', label: 'Identifiant fiscal (10)' },
-  { k: 'bank_account', label: 'Compte bancaire (10)' },
-  { k: 'address', label: 'Adresse (5)' },
-  { k: 'machine_document', label: 'Document machine (5)' },
+const ROLES: Array<{ role: PartnerRole; label: string }> = [
+  { role: 'mechanic', label: 'Mécaniciens' },
+  { role: 'broker', label: 'Courtiers' },
+  { role: 'carrier', label: 'Transporteurs' },
+  { role: 'forwarder', label: 'Transitaires' },
 ];
 
-/** Outil interactif : CALCULER UN SCORE DE CONFIANCE (logique réelle). */
-export default function TrustScoreWidget() {
-  const [approved, setApproved] = useState<Set<VerificationKind>>(new Set(['identity', 'company_registration']));
-  const [inspPassed, setInspPassed] = useState(2);
-  const [inspTotal, setInspTotal] = useState(2);
-  const [tx, setTx] = useState(3);
-  const [disputes, setDisputes] = useState(0);
-  const [ageDays, setAgeDays] = useState(200);
+/**
+ * Outil de DÉCISION RÉSEAU (plus un calculateur de démo). Branché UNIQUEMENT sur des
+ * moteurs réels : Partner Trust + Partner Performance + Matching + charge, dérivés des
+ * dossiers/transaction_events. Montre recommandés / saturés / à éviter, la RAISON du
+ * classement et une ACTION concrète. Anti-façade : aucun score saisi, aucun partenaire
+ * inventé ; rien (état vide court) si aucune donnée réelle.
+ */
 
-  const result = useMemo(
-    () => computeTrustScore({
-      approvedVerifications: [...approved],
-      inspectionsPassed: inspPassed, inspectionsTotal: inspTotal,
-      completedTransactions: tx, disputes, accountAgeDays: ageDays,
-    }),
-    [approved, inspPassed, inspTotal, tx, disputes, ageDays],
+/** Raison concise du classement, tirée des raisons réelles du Partner Trust. */
+function rankReason(p: NetworkPartner): string {
+  const r = p.trust.reasons;
+  return (
+    r.find((x) => x.toLowerCase().includes('échec') || x.toLowerCase().includes('plafonn')) ||
+    r.find((x) => x.toLowerCase().includes('complétion')) ||
+    r[0] ||
+    ''
+  );
+}
+
+function PartnerRow({ p, action }: { p: NetworkPartner; action?: React.ReactNode }) {
+  return (
+    <li className="px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-xs text-gray-500">{p.partnerId.slice(0, 8)}…</span>
+        <span className="text-sm text-gray-800">
+          {trustTierLabel(p.trust.tier)} · {p.trust.trustScore}/100 · charge {p.openLoad}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">{rankReason(p)}</span>
+        {action}
+      </div>
+    </li>
+  );
+}
+
+export default function TrustScoreWidget() {
+  const [role, setRole] = useState<PartnerRole>('mechanic');
+  const [net, setNet] = useState<NetworkRanking | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void buildNetworkForRole(role).then((n) => {
+      if (!cancelled) {
+        setNet(n);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
+  const empty = !net || net.ranked.length === 0;
+  const avoidIds = new Set((net?.toAvoid ?? []).map((p) => p.partnerId));
+  const satIds = new Set((net?.saturated ?? []).map((p) => p.partnerId));
+  // Disponibles « autres » = classés, hors recommandé, hors saturés, hors à-éviter.
+  const others = (net?.ranked ?? []).filter(
+    (p) => p.partnerId !== net?.best?.partnerId && !avoidIds.has(p.partnerId) && !satIds.has(p.partnerId),
   );
 
-  const toggle = (k: VerificationKind) =>
-    setApproved((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  // Action CONCRÈTE contextuelle aux données réelles : « Relancer » si le partenaire a
+  // déjà des dossiers en cours (openLoad > 0), sinon « Assigner ». (« Contacter » n'est
+  // pas proposé : le moteur réseau ne porte pas de coordonnées — on ne fabrique pas de lien.)
+  const actionFor = (p: NetworkPartner) => (
+    <a href="#dossiers" className="text-xs font-medium text-orange-700 hover:underline">
+      {p.openLoad > 0 ? '→ Relancer ses dossiers' : '→ Assigner sur un dossier'}
+    </a>
+  );
 
   return (
-    <SectionCard title="Calculer un score de confiance" subtitle="Cochez les pièces et ajustez l'historique : le score se recalcule en direct." live status="available">
-      <div className="grid sm:grid-cols-2 gap-5">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-gray-700">Vérifications approuvées</p>
-          {KINDS.map(({ k, label }) => (
-            <Toggle key={k} label={label} checked={approved.has(k)} onChange={() => toggle(k)} />
-          ))}
-        </div>
-        <div className="space-y-2">
-          <NumberField label="Inspections réussies" value={inspPassed} onChange={setInspPassed} min={0} />
-          <NumberField label="Inspections totales" value={inspTotal} onChange={setInspTotal} min={0} />
-          <NumberField label="Transactions complétées" value={tx} onChange={setTx} min={0} />
-          <NumberField label="Litiges" value={disputes} onChange={setDisputes} min={0} />
-          <NumberField label="Ancienneté (jours)" value={ageDays} onChange={setAgeDays} min={0} />
-        </div>
+    <SectionCard
+      title="Réseau partenaire — qui mobiliser"
+      subtitle="Classement par confiance et charge, sur vos dossiers réels."
+      live
+      status="available"
+    >
+      <div className="flex flex-wrap gap-2 mb-4">
+        {ROLES.map((r) => (
+          <button
+            key={r.role}
+            type="button"
+            onClick={() => setRole(r.role)}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+              role === r.role ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
-      <div className="mt-5 flex items-center justify-between rounded-lg bg-gray-50 p-4">
-        <div>
-          <div className="text-3xl font-bold text-gray-900">{result.score}<span className="text-base text-gray-400">/100</span></div>
-          <div className="mt-1"><TrustBadge tier={result.tier} score={result.score} /></div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Chargement du réseau…</p>
+      ) : empty ? (
+        <p className="text-sm text-gray-500">
+          Aucun partenaire évalué pour ce rôle — la confiance se construit avec les dossiers traités.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {net!.best && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50">
+              <div className="px-3 pt-2 text-xs font-semibold text-emerald-800">✅ Recommandé (meilleur disponible)</div>
+              <ul>
+                <PartnerRow p={net!.best} action={actionFor(net!.best)} />
+              </ul>
+            </div>
+          )}
+
+          {others.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-1">Autres disponibles</div>
+              <ul className="rounded-lg border border-gray-200 divide-y divide-gray-100 bg-white">
+                {others.map((p) => (
+                  <PartnerRow key={p.partnerId} p={p} action={actionFor(p)} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {net!.toAvoid.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-amber-700 mb-1">⚠️ À éviter (taux d'échec élevé)</div>
+              <ul className="rounded-lg border border-amber-200 divide-y divide-amber-100 bg-amber-50">
+                {net!.toAvoid.map((p) => (
+                  <PartnerRow
+                    key={p.partnerId}
+                    p={p}
+                    action={<span className="text-xs text-amber-700">éviter d'assigner</span>}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {net!.saturated.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 mb-1">⏳ Saturés (forte charge)</div>
+              <ul className="rounded-lg border border-gray-200 divide-y divide-gray-100 bg-gray-50">
+                {net!.saturated.map((p) => (
+                  <PartnerRow
+                    key={p.partnerId}
+                    p={p}
+                    action={<span className="text-xs text-gray-500">réorienter</span>}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-        <div className="text-xs text-gray-500 text-right space-y-0.5">
-          <div>Vérifications : {result.breakdown.verifications}</div>
-          <div>Inspections : {result.breakdown.inspections}</div>
-          <div>Transactions : {result.breakdown.transactions}</div>
-          <div>Ancienneté : {result.breakdown.tenure}</div>
-          <div>Litiges : {result.breakdown.disputes}</div>
-        </div>
-      </div>
+      )}
     </SectionCard>
   );
 }

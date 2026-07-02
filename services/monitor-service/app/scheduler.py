@@ -66,6 +66,24 @@ async def scheduled_mascus_import():
         logger.info("Mascus import: no machines fetched")
 
 
+async def scheduled_winner_enrich():
+    """Enrichissement periodique des coordonnees des laureats (recherche web Piloterr).
+    Desactive si PILOTERR_API_KEY absente. Plafonne par execution (cout credits)."""
+    settings = get_settings()
+    api_key = settings.piloterr_api_key
+    if not api_key:
+        logger.debug("Winner contact enrichment skipped (PILOTERR_API_KEY not set)")
+        return
+
+    logger.info("Scheduled winner enrichment started")
+    from app.ingestion.company_contacts import enrich_pending_winners
+    async with AsyncSessionLocal() as db:
+        tried, filled = await enrich_pending_winners(
+            db, api_key, limit=settings.enrich_contacts_max_per_run
+        )
+    logger.info("Winner enrichment complete: tried=%d filled=%d", tried, filled)
+
+
 def start_scheduler():
     settings = get_settings()
     scheduler.add_job(
@@ -96,13 +114,21 @@ def start_scheduler():
         id="mascus_job",
         replace_existing=True,
     )
+    scheduler.add_job(
+        scheduled_winner_enrich,
+        "interval",
+        hours=max(1, settings.enrich_contacts_interval_hours),
+        id="winner_enrich_job",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
-        "Scheduler started — ingest %dh, enrich %dh, alerts %dh, mascus %dh",
+        "Scheduler started — ingest %dh, enrich %dh, alerts %dh, mascus %dh, winner_enrich %dh",
         max(1, settings.ingest_interval_hours),
         max(1, settings.enrich_interval_hours),
         max(1, settings.alerts_interval_hours),
         max(1, settings.mascus_interval_hours),
+        max(1, settings.enrich_contacts_interval_hours),
     )
 
 

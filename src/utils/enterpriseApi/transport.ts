@@ -322,3 +322,95 @@ export async function updateDeliveryStatus(id: string, status: DeliveryStatus) {
     { label: 'updateDeliveryStatus', toastOnError: true },
   );
 }
+
+// =====================================================================
+// WIDGET "KM À VIDE / COÛT DU RETOUR À VIDE (DEADHEAD)"
+// Par trajet : km en charge vs km à vide, taux de retour à vide (%),
+// et COÛT du vide en MAD (km à vide × coût/km complet).
+// Le retour à vide est un coût sec 100% non facturé : enjeu marge n°1
+// du transport routier d'engins. RLS : deliveries.created_by = auth.uid().
+// =====================================================================
+
+/** Seuil (%) au-delà duquel un trajet est jugé au pire taux de retour à vide. */
+export const DEADHEAD_ALERT_THRESHOLD = 40;
+
+export type DeadheadItem = {
+  id: string;
+  label: string;
+  client: string | null;
+  destination: string | null;
+  status: DeliveryStatus;
+  loadedKm: number;
+  emptyKm: number;
+  totalKm: number;
+  emptyRate: number; // pourcentage 0-100
+  costPerKm: number;
+  emptyCost: number; // MAD gaspillés sur le retour à vide
+  overThreshold: boolean;
+};
+
+export const getDeadheadCost = async () => {
+  const rows = await supabaseCall<
+    Array<
+      Pick<
+        DeliveryRow,
+        'id' | 'equipment_label' | 'client_name' | 'destination_address' | 'status' | 'distance_km'
+      > & {
+        distance_loaded_km?: number | null;
+        distance_empty_km?: number | null;
+        cost_per_km?: number | null;
+      }
+    >
+  >(
+    () =>
+      supabase
+        .from('deliveries')
+        .select(
+          'id, equipment_label, client_name, destination_address, status, distance_km, distance_loaded_km, distance_empty_km, cost_per_km',
+        )
+        .neq('status', 'Annulée')
+        .order('pickup_date', { ascending: false })
+        .limit(200),
+    { label: 'getDeadheadCost', fallback: [] },
+  );
+
+  const items: DeadheadItem[] = rows
+    .map((r) => {
+      const loadedKm = Number(r.distance_loaded_km ?? r.distance_km ?? 0);
+      const emptyKm = Number(r.distance_empty_km ?? 0);
+      const totalKm = loadedKm + emptyKm;
+      if (totalKm <= 0) return null; // trajet non chiffré -> exclu (démo honnête)
+      const costPerKm = Number(r.cost_per_km ?? 0);
+      const emptyRate = Math.round((emptyKm / totalKm) * 100);
+      const emptyCost = Math.round(emptyKm * costPerKm);
+      return {
+        id: String(r.id),
+        label: String(r.equipment_label || 'Trajet'),
+        client: (r.client_name as string) || null,
+        destination: (r.destination_address as string) || null,
+        status: r.status,
+        loadedKm: Math.round(loadedKm),
+        emptyKm: Math.round(emptyKm),
+        totalKm: Math.round(totalKm),
+        emptyRate,
+        costPerKm,
+        emptyCost,
+        overThreshold: emptyRate > DEADHEAD_ALERT_THRESHOLD,
+      };
+    })
+    .filter((x): x is DeadheadItem => !!x);
+
+  const totalEmptyKm = items.reduce((s, i) => s + i.emptyKm, 0);
+  const totalKmAll = items.reduce((s, i) => s + i.totalKm, 0);
+  const totalEmptyCost = items.reduce((s, i) => s + i.emptyCost, 0);
+  const globalEmptyRate = totalKmAll > 0 ? Math.round((totalEmptyKm / totalKmAll) * 100) : 0;
+
+  return {
+    items: items.sort((a, b) => b.emptyCost - a.emptyCost),
+    totalEmptyKm,
+    totalEmptyCost,
+    globalEmptyRate,
+    aboveThresholdCount: items.filter((i) => i.overThreshold).length,
+    threshold: DEADHEAD_ALERT_THRESHOLD,
+  };
+};

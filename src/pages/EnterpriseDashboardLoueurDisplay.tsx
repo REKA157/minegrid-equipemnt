@@ -7,9 +7,9 @@ const WIDGETS_LOUEUR_IDS = [
   'equipment-availability',
   'upcoming-rentals',
   'rental-pipeline',
-  'daily-actions',
-  'ai-insights',
-  'ai-optimization',
+  'rental-overdue',
+  // 'daily-actions' / 'ai-insights' / 'ai-optimization' retirés : composants VENDEUR
+  // hors-sujet pour le loueur (la logique location alimente déjà l'en-tête cockpit).
 ];
 
 const EnterpriseDashboardLoueurDisplay: React.FC = () => (

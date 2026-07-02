@@ -3,13 +3,13 @@ import { render, screen } from '@testing-library/react';
 import TrustDashboard from './TrustDashboard';
 
 describe('TrustDashboard (démo honnête)', () => {
-  it('rend le calculateur réel et un statut « Disponible »', () => {
+  it('rend l’assistant réseau partenaire (sélecteur + état anti-façade)', () => {
     render(<TrustDashboard />);
-    // widget de calcul réel présent
-    expect(screen.getByText('Calcul réel')).toBeInTheDocument();
     expect(screen.getByText('Disponible')).toBeInTheDocument();
-    // un score /100 est affiché (calcul réel, pas une donnée mockée)
-    expect(screen.getByText('/100')).toBeInTheDocument();
+    // sélecteur de rôle du réseau partenaire (transformation : plus de score saisi à la main)
+    expect(screen.getByText('Mécaniciens')).toBeInTheDocument();
+    // anti-façade : sans données partenaire réelles, chargement puis état vide honnête (jamais un score inventé)
+    expect(screen.getByText(/Chargement du réseau|Aucune donnée partenaire/)).toBeInTheDocument();
   });
 
   it('la section données live reste honnêtement vide (pas de façade)', () => {

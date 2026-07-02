@@ -36,10 +36,24 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'm
     const average = total / values.length;
     const max = Math.max(...values);
     const min = Math.min(...values);
-    const growth = values.length > 1 ? ((values[values.length - 1] - values[0]) / values[0]) * 100 : 0;
+    // Évolution = variation 1re→dernière valeur. Garde anti division par zéro :
+    // si la 1re valeur est 0, le % est indéterminé (évite +Infinity / NaN affichés).
+    const first = values[0];
+    const last = values[values.length - 1];
+    let growth: number | null = 0;
+    if (values.length > 1) {
+      growth = first !== 0 ? ((last - first) / first) * 100 : last === 0 ? 0 : null;
+    }
 
     return { total, average, max, min, growth };
   };
+
+  // Le widget est-il monétaire ? Sinon on n'affiche pas « MAD » sur des comptes / % / niveaux de stock.
+  const MONEY_RE = /revenu|revenue|chiffre|\bca\b|cout|co[uû]t|cost|montant|commission|prix|price|finance|portefeuille|valeur/i;
+  const isMonetary = MONEY_RE.test(
+    `${widget?.id ?? ''} ${(widget as { dataSource?: string })?.dataSource ?? ''} ${widget?.title ?? ''}`,
+  );
+  const fmtStat = (n: number) => (isMonetary ? formatCurrency(n) : formatNumber(n));
 
   // Fonction pour rendre un graphique en barres simple
   const renderBarChart = () => {
@@ -253,28 +267,32 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'm
           <div className={`grid ${getAdaptiveSize('grid')} gap-2 text-xs`}>
             <div className="text-center p-2 bg-orange-50 rounded">
               <div className="font-semibold text-orange-600">
-                {formatCurrency(stats.total)}
+                {fmtStat(stats.total)}
               </div>
               <div className="text-orange-700">Total</div>
             </div>
             <div className="text-center p-2 bg-gray-50 rounded">
               <div className="font-semibold text-gray-900">
-                {formatCurrency(stats.average)}
+                {fmtStat(stats.average)}
               </div>
               <div className="text-gray-600">Moyenne</div>
             </div>
             {stats.growth !== undefined && (
               <div className="text-center p-2 bg-gray-50 rounded">
-                <div className={`font-semibold flex items-center justify-center ${
-                  stats.growth >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {stats.growth >= 0 ? (
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3 mr-1" />
-                  )}
-                  {stats.growth >= 0 ? '+' : ''}{stats.growth.toFixed(1)}%
-                </div>
+                {stats.growth === null ? (
+                  <div className="font-semibold text-gray-400">n/d</div>
+                ) : (
+                  <div className={`font-semibold flex items-center justify-center ${
+                    stats.growth >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {stats.growth >= 0 ? (
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3 mr-1" />
+                    )}
+                    {stats.growth >= 0 ? '+' : ''}{stats.growth.toFixed(1)}%
+                  </div>
+                )}
                 <div className="text-gray-600">Évolution</div>
               </div>
             )}
@@ -359,7 +377,7 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'm
                           <tr key={index} className="border-b hover:bg-gray-50">
                             <td className="py-2">{item.name}</td>
                             <td className="text-right py-2 font-medium">
-                              {formatCurrency(value)}
+                              {fmtStat(value)}
                             </td>
                             <td className="text-right py-2 text-gray-600">
                               {percentage.toFixed(1)}%

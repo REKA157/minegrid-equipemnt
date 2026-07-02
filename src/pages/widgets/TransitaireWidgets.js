@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Globe, BarChart3, FileText as FileText2, FolderOpen } from 'lucide-react';
+import { FileText, Globe, BarChart3, FileText as FileText2, FolderOpen, Timer } from 'lucide-react';
 
 // Widgets pour le métier Transitaire / Freight Forwarder
 export const TransitaireWidgets = {
@@ -38,7 +38,7 @@ export const TransitaireWidgets = {
       id: 'container-tracking',
       type: 'map',
       title: 'Suivi conteneurs',
-      description: 'Localisation des conteneurs',
+      description: 'Statut & ETA des conteneurs (position si renseignée — pas de télématique temps réel)',
       icon: Globe,
       dataSource: 'containers',
       features: {
@@ -46,6 +46,20 @@ export const TransitaireWidgets = {
         export: true,
         analytics: false,
         alerts: false
+      }
+    },
+    {
+      id: 'demurrage-tracking',
+      type: 'list',
+      title: 'Surestaries / détention',
+      description: 'Conteneurs au-delà de la franchise : jours de dépassement + coût cumulé',
+      icon: Timer,
+      dataSource: 'containers',
+      features: {
+        periodSelector: false,
+        export: true,
+        analytics: false,
+        alerts: true
       }
     },
     {

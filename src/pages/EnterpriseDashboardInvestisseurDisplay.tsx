@@ -7,7 +7,8 @@ const WIDGETS_INVESTISSEUR_IDS = [
   'investment-opportunities',
   'roi-analysis',
   'risk-assessment',
-  'opportunities',
+  // 'opportunities' retiré : doublon de 'investment-opportunities' (même source).
+  'yield-realized-vs-expected',
   'transaction-cases',
 ];
 
@@ -16,6 +17,7 @@ const EnterpriseDashboardInvestisseurDisplay: React.FC = () => (
     role="investisseur"
     widgetsSource={InvestisseurWidgets}
     validIds={WIDGETS_INVESTISSEUR_IDS}
+    defaultActiveIds={WIDGETS_INVESTISSEUR_IDS}
     modalLabel="widget investisseur"
   />
 );

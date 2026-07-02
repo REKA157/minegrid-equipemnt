@@ -135,4 +135,34 @@ describe('useShellState', () => {
     expect(r1.current.config?.widgets.map((w) => w.id)).toEqual(['w1']);
     expect(r2.current.config?.widgets.map((w) => w.id)).toEqual(['w2']);
   });
+
+  it('amorce le sous-ensemble par défaut (defaultActiveIds, ordonné) quand aucune config', async () => {
+    const { result } = renderHook(() =>
+      useShellState({
+        role: 'test-role',
+        widgetsSource: fakeSource,
+        validIds,
+        defaultActiveIds: ['w3', 'w1'], // ordre = ordre d'affichage ; w2 reste seulement ajoutable
+      }),
+    );
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+    expect(result.current.config?.widgets.map((w) => w.id)).toEqual(['w3', 'w1']);
+    expect(result.current.layout.lg.map((l) => l.i)).toEqual(['w3', 'w1']);
+  });
+
+  it('ne ré-amorce PAS si une config existe déjà (respecte la personnalisation)', async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        widgets: [{ id: 'w2' }],
+        layout: { lg: [{ i: 'w2', x: 0, y: 0, w: 4, h: 2 }] },
+        widgetSizes: {},
+      }),
+    );
+    const { result } = renderHook(() =>
+      useShellState({ role: 'test-role', widgetsSource: fakeSource, validIds, defaultActiveIds: ['w1', 'w3'] }),
+    );
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+    expect(result.current.config?.widgets.map((w) => w.id)).toEqual(['w2']);
+  });
 });

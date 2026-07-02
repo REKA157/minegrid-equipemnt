@@ -1,16 +1,8 @@
 import React, { useState } from 'react';
-import {
-  Calendar,
-  Edit,
-  Eye,
-  Wrench,
-} from 'lucide-react';
 
 export const EquipmentAvailabilityWidget = ({ data }: { data: any }) => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-
-  console.log('[DEBUG] EquipmentAvailabilityWidget - Données reçues:', data);
 
   if (!data) {
     return (
@@ -199,26 +191,14 @@ export const EquipmentAvailabilityWidget = ({ data }: { data: any }) => {
                 )}
                 </div>
 
-              {/* Actions rapides */}
-              <div className="flex flex-col gap-1 ml-3">
-                {equipment.status === 'Disponible' && (
-                  <button className="p-1 text-green-600 hover:bg-green-100 rounded" title="Louer">
-                    <Calendar className="h-4 w-4" />
-                  </button>
-                )}
-                {equipment.status === 'En location' && (
-                  <button className="p-1 text-orange-600 hover:bg-orange-100 rounded" title="Voir détails location">
-                    <Eye className="h-4 w-4" />
-                  </button>
-                )}
-                {equipment.status === 'Maintenance' && (
-                  <button className="p-1 text-red-600 hover:bg-red-100 rounded" title="Voir détails maintenance">
-                    <Wrench className="h-4 w-4" />
-                  </button>
-                )}
-                <button className="p-1 text-gray-600 hover:bg-gray-100 rounded" title="Modifier">
-                  <Edit className="h-4 w-4" />
-                </button>
+              {/* Action RÉELLE : ouvrir la fiche machine pour gérer (prix, statut, location). */}
+              <div className="ml-3 flex items-center">
+                <a
+                  href={`#machines/${equipment.id}`}
+                  className="whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
+                >
+                  Gérer →
+                </a>
                 </div>
               </div>
                 </div>
@@ -231,16 +211,6 @@ export const EquipmentAvailabilityWidget = ({ data }: { data: any }) => {
           <div className="text-sm">Aucun équipement trouvé</div>
                   </div>
                 )}
-
-      {/* Actions globales */}
-      <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-        <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">
-          Voir tous les équipements
-                </button>
-        <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">
-          Ajouter un équipement
-                </button>
-      </div>
     </div>
   );
 };

@@ -74,8 +74,16 @@ export interface EnterpriseDashboardShellProps {
   role: string;
   /** Source des widgets disponibles pour ce metier */
   widgetsSource: ShellWidgetsSource;
-  /** Liste des IDs de widgets valides pour ce metier */
+  /** Liste des IDs de widgets valides pour ce metier (= catalogue ajoutable) */
   validIds: string[];
+  /** Sous-ensemble ordonné actif PAR DÉFAUT (dashboard épuré) ; le reste reste ajoutable. */
+  defaultActiveIds?: string[];
+  /**
+   * Afficher le bandeau de synthèse « Aujourd'hui » (cockpit). Défaut : true.
+   * Mettre false quand ses signaux (priorités/risques/opportunités) vivent déjà dans
+   * les widgets adaptés (ex. vendeur : Actions + Recommandations IA) -> pas de doublon.
+   */
+  showCockpit?: boolean;
   /** Libelle de la modale "Ajouter un ..." (ex: "widget mecanicien") */
   modalLabel: string;
 }
@@ -89,6 +97,8 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
   role,
   widgetsSource,
   validIds,
+  defaultActiveIds,
+  showCockpit = true,
   modalLabel,
 }) => {
   const { user } = useAuth();
@@ -104,7 +114,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
     removeWidget,
     restoreAllWidgets,
     saveDashboard,
-  } = useShellState({ role, widgetsSource, validIds, storageUserId: user?.id });
+  } = useShellState({ role, widgetsSource, validIds, defaultActiveIds, storageUserId: user?.id });
 
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -273,25 +283,11 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
     );
   };
 
-  // Accès démo (backdoor gardé volontairement) : flag posé uniquement par
-  // DemoEntrepriseAccess. On l'affiche honnêtement au lieu de le masquer.
-  const isDemoAccess =
-    typeof localStorage !== 'undefined' &&
-    localStorage.getItem('widgetsTemporaryAccess') === 'granted';
-
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <NotificationContainer />
       <div className="max-w-6xl mx-auto">
-        {isDemoAccess && (
-          <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-            <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold">
-              Mode démo
-            </span>
-            Accès entreprise temporaire (démonstration). Les données et actions ne reflètent pas un abonnement actif.
-          </div>
-        )}
-        <CockpitSummary role={role} />
+        {showCockpit && <CockpitSummary role={role} />}
         {renderServices()}
 
         <div className="flex justify-between items-center mb-4">

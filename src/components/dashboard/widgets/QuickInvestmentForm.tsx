@@ -281,7 +281,6 @@ const QuickInvestmentForm: React.FC<QuickInvestmentFormProps> = ({ open, onClose
                 </div>
               </div>
 
-              {/* Calcul rendement */}
               {acquisitionPrice && currentRevenueMonthly && (
                 <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
                   <div className="grid grid-cols-2 gap-2 text-center">

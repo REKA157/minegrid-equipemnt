@@ -179,3 +179,87 @@ export async function getLogisticsStockAlertsList(): Promise<ListItem[]> {
     timestamp: r.created_at ? String(r.created_at) : undefined,
   }));
 }
+
+/**
+ * Rentabilité des opérations logistiques : pour chaque route/livraison, rapproche
+ * le coût réel (transport + entreposage) au revenu facturé et calcule la marge.
+ * Douleur métier : repérer les livraisons NON rentables (marge négative) en MAD.
+ */
+export type LogisticsProfitItem = {
+  id: string;
+  route_ref: string;
+  status: string;
+  lane: string | null;
+  distanceKm: number;
+  transportCost: number;
+  warehousingCost: number;
+  totalCost: number;
+  revenue: number;
+  margin: number;
+  marginPct: number;
+  costPerKm: number;
+};
+
+export async function getLogisticsProfitability() {
+  const rows = await supabaseCall<Array<Record<string, unknown>>>(
+    () =>
+      supabase
+        .from('logistics_route_tracking')
+        .select(
+          'id, route_ref, status, origin_label, dest_label, distance_km, transport_cost_mad, warehousing_cost_mad, invoiced_amount_mad',
+        )
+        .neq('status', 'Annulé')
+        .order('updated_at', { ascending: false })
+        .limit(60),
+    { label: 'getLogisticsProfitability', fallback: [] },
+  );
+
+  const items: LogisticsProfitItem[] = rows
+    .map((r) => {
+      const transportCost = Number(r.transport_cost_mad ?? 0);
+      const warehousingCost = Number(r.warehousing_cost_mad ?? 0);
+      const revenue = Number(r.invoiced_amount_mad ?? 0);
+      const distanceKm = Number(r.distance_km ?? 0);
+      const totalCost = transportCost + warehousingCost;
+      const margin = revenue - totalCost;
+      const marginPct = revenue > 0 ? Math.round((margin / revenue) * 1000) / 10 : 0;
+      const originLabel = r.origin_label as string | null;
+      const destLabel = r.dest_label as string | null;
+      const lane =
+        originLabel || destLabel ? `${originLabel ?? '?'} → ${destLabel ?? '?'}` : null;
+      return {
+        id: String(r.id),
+        route_ref: String(r.route_ref || ''),
+        status: String(r.status || ''),
+        lane,
+        distanceKm,
+        transportCost: Math.round(transportCost),
+        warehousingCost: Math.round(warehousingCost),
+        totalCost: Math.round(totalCost),
+        revenue: Math.round(revenue),
+        margin: Math.round(margin),
+        marginPct,
+        costPerKm: distanceKm > 0 ? Math.round((totalCost / distanceKm) * 10) / 10 : 0,
+      };
+    })
+    // On ne garde que les opérations financièrement renseignées (coût OU revenu).
+    .filter((i) => i.totalCost > 0 || i.revenue > 0);
+
+  const totalCost = items.reduce((s, i) => s + i.totalCost, 0);
+  const totalRevenue = items.reduce((s, i) => s + i.revenue, 0);
+  const totalMargin = totalRevenue - totalCost;
+  const marginPct = totalRevenue > 0 ? Math.round((totalMargin / totalRevenue) * 1000) / 10 : 0;
+  const unprofitable = items.filter((i) => i.margin < 0);
+
+  return {
+    // Pires marges en premier pour surfacer les livraisons à perte.
+    items: items.sort((a, b) => a.margin - b.margin),
+    operationsCount: items.length,
+    totalCost: Math.round(totalCost),
+    totalRevenue: Math.round(totalRevenue),
+    totalMargin: Math.round(totalMargin),
+    marginPct,
+    unprofitableCount: unprofitable.length,
+    unprofitableLoss: Math.round(unprofitable.reduce((s, i) => s + i.margin, 0)),
+  };
+}

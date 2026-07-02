@@ -141,6 +141,49 @@ export async function listTransactionParticipants(
   }
 }
 
+/** Invitation partenaire en attente, enrichie du titre du dossier (pour l'affichage cockpit). */
+export interface PendingInvitationRow extends TransactionParticipantRow {
+  case_title: string | null;
+}
+
+const PARTNER_ROLES = ['mechanic', 'broker', 'carrier', 'forwarder', 'logistician', 'investor'];
+
+/**
+ * Invitations partenaire EN ATTENTE pour l'utilisateur courant
+ * (accepted_at NULL, revoked_at NULL, rôle partenaire). La RLS autorise la lecture :
+ * can_access_transaction_case ne filtre que sur revoked_at, donc l'invité non encore
+ * accepté voit déjà sa ligne et le dossier (embed du titre via la FK case_id).
+ */
+export async function listPendingInvitationsWithCase(): Promise<PendingInvitationRow[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) return [];
+
+  try {
+    const rows = await supabaseCall<
+      Array<TransactionParticipantRow & { transaction_cases?: { title: string | null } | null }>
+    >(
+      () =>
+        supabase
+          .from('transaction_participants')
+          .select('*, transaction_cases(title)')
+          .eq('user_id', uid)
+          .in('role', PARTNER_ROLES)
+          .is('accepted_at', null)
+          .is('revoked_at', null)
+          .order('invited_at', { ascending: false }),
+      { label: 'listPendingInvitationsWithCase', fallback: [] },
+    );
+    return rows.map((r) => {
+      const { transaction_cases, ...rest } = r;
+      return { ...(rest as TransactionParticipantRow), case_title: transaction_cases?.title ?? null };
+    });
+  } catch (err) {
+    if (isMissingTableError(err)) return [];
+    throw err;
+  }
+}
+
 export async function listTransactionEvents(caseId: string): Promise<TransactionEventRow[]> {
   try {
     return await supabaseCall<TransactionEventRow[]>(

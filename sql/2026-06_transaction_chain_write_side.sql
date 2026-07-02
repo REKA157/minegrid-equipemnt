@@ -70,7 +70,9 @@ as $$
   );
 $$;
 
--- Cherche un participant d'un rôle donné (NULL si aucun → « à assigner »).
+-- Cherche un participant d'un rôle donné AYANT ACCEPTÉ l'invitation
+-- (NULL si aucun → « à assigner »). Le filtre accepted_at garantit qu'on
+-- n'attribue jamais une étape à un partenaire qui n'a pas confirmé sa participation.
 create or replace function public._tc_participant_of_role(p_case_id uuid, p_role text)
 returns uuid
 language sql
@@ -80,7 +82,8 @@ set search_path = public
 as $$
   select tp.user_id
   from public.transaction_participants tp
-  where tp.case_id = p_case_id and tp.role = p_role and tp.revoked_at is null
+  where tp.case_id = p_case_id and tp.role = p_role
+    and tp.revoked_at is null and tp.accepted_at is not null
   order by tp.invited_at asc
   limit 1;
 $$;

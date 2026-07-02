@@ -33,7 +33,10 @@ export interface RealLead {
   contact_company?: string;
   contact_phone?: string;
   contact_email?: string;
-  source?: 'message' | 'offer' | 'manual' | 'website' | 'quote_request';
+  /** Rôle du contact pour un lead issu d'un AO (Global Monitor) : lauréat vs maître d'ouvrage.
+   *  Colonne OPTIONNELLE (cf. SQL_A_APPLIQUER) ; ignorée si non déployée. */
+  contact_role?: 'winner' | 'buyer' | null;
+  source?: 'message' | 'offer' | 'manual' | 'website' | 'quote_request' | 'monitor';
   source_id?: string;
   machine_id?: string | null;
   quote_request_id?: string | null;
@@ -98,6 +101,18 @@ export class RealPipelineService {
     return e?.code === 'PGRST205' || msg.includes("could not find the table 'public.");
   }
 
+  /** Vrai si l'erreur indique une COLONNE inexistante (ex. `contact_role` pas encore déployée). */
+  private static isUndefinedColumnError(error: unknown): boolean {
+    const e = error as { code?: string; message?: string } | null;
+    const msg = (e?.message || '').toLowerCase();
+    return (
+      e?.code === '42703' ||
+      e?.code === 'PGRST204' ||
+      (msg.includes('column') && msg.includes('does not exist')) ||
+      msg.includes("could not find the '")
+    );
+  }
+
   private static async getCurrentUserId(): Promise<string | null> {
     try {
       const { data: { user } } = await supabaseClient.auth.getUser();
@@ -117,9 +132,20 @@ export class RealPipelineService {
       }
 
       const payload = { ...leadData, seller_id: leadData.seller_id || userId };
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from('leads')
         .insert([payload]);
+
+      // Tolérance déploiement : si `contact_role` (colonne optionnelle) n'existe pas encore
+      // en base, on réessaie SANS elle (le rôle reste porté par le titre + les notes).
+      if (error && this.isUndefinedColumnError(error) && 'contact_role' in payload) {
+        const { contact_role: _omitRole, ...withoutRole } = payload as RealLead & { contact_role?: unknown };
+        const retry = await supabaseClient.from('leads').insert([withoutRole]);
+        if (!retry.error) {
+          return { lead: withoutRole as RealLead, error: null };
+        }
+        error = retry.error;
+      }
 
       if (error) {
         return { lead: null, error };
@@ -145,14 +171,21 @@ export class RealPipelineService {
       const userId = await this.getCurrentUserId();
       if (!userId) return [];
 
-      const { data, error } = await supabaseClient
-        .from('leads')
-        .select(PIPELINE_LEADS_COLUMNS)
-        .eq('seller_id', userId)
-        .order('created_at', { ascending: false });
-      
+      const runSelect = (columns: string) =>
+        supabaseClient
+          .from('leads')
+          .select(columns)
+          .eq('seller_id', userId)
+          .order('created_at', { ascending: false });
+
+      // contact_role est OPTIONNELLE : on la lit si déployée, sinon on relit sans elle.
+      let { data, error } = await runSelect(`${PIPELINE_LEADS_COLUMNS},contact_role`);
+      if (error && this.isUndefinedColumnError(error)) {
+        ({ data, error } = await runSelect(PIPELINE_LEADS_COLUMNS));
+      }
+
       if (error) throw error;
-      return data || [];
+      return (data || []) as unknown as RealLead[];
     } catch (error) {
       if (!this.isMissingTableError(error)) {
         console.error('Erreur récupération leads:', error);

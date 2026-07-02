@@ -13,6 +13,8 @@ import {
   advanceTransactionCaseStep,
   assignTransactionPartner,
   revokeTransactionPartner,
+  acceptTransactionInvitation,
+  declineTransactionInvitation,
 } from './transactionChain';
 
 describe('transactionChain — write-side dossier (L3/L4)', () => {
@@ -146,5 +148,54 @@ describe('transactionChain — réseau partenaire', () => {
     const r = await revokeTransactionPartner('c', 'p');
     expect(r.ok).toBe(false);
     expect(r.reason).toBe('revoked');
+  });
+});
+
+describe('transactionChain — invitation accept/decline (par l invité)', () => {
+  beforeEach(() => rpc.mockReset());
+
+  it('acceptTransactionInvitation appelle la RPC et renvoie accepted', async () => {
+    rpc.mockResolvedValue({ data: 'part-1', error: null });
+    const r = await acceptTransactionInvitation('part-1');
+    expect(rpc).toHaveBeenCalledWith('accept_transaction_invitation', { p_participant_id: 'part-1' });
+    expect(r).toEqual({ ok: true, id: 'part-1', reason: 'accepted' });
+  });
+
+  it('declineTransactionInvitation appelle la RPC et renvoie declined', async () => {
+    rpc.mockResolvedValue({ data: 'part-1', error: null });
+    const r = await declineTransactionInvitation('part-1');
+    expect(rpc).toHaveBeenCalledWith('decline_transaction_invitation', { p_participant_id: 'part-1' });
+    expect(r).toEqual({ ok: true, id: 'part-1', reason: 'declined' });
+  });
+
+  it('accepter l invitation d un autre -> forbidden (anti-usurpation)', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'forbidden' } });
+    expect((await acceptTransactionInvitation('p')).reason).toBe('forbidden');
+  });
+
+  it('invitation absente -> invitation_not_found', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'invitation_not_found' } });
+    expect((await acceptTransactionInvitation('p')).reason).toBe('invitation_not_found');
+  });
+
+  it('invitation révoquée -> invitation_revoked', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'invitation_revoked' } });
+    expect((await acceptTransactionInvitation('p')).reason).toBe('invitation_revoked');
+  });
+
+  it('RPC non déployée -> not_deployed', async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'function public.accept_transaction_invitation(uuid) does not exist' },
+    });
+    expect((await acceptTransactionInvitation('p')).reason).toBe('not_deployed');
+  });
+
+  it('idempotence accept : 2 appels renvoient le même id', async () => {
+    rpc.mockResolvedValue({ data: 'part-1', error: null });
+    const a = await acceptTransactionInvitation('part-1');
+    const b = await acceptTransactionInvitation('part-1');
+    expect(a.id).toBe('part-1');
+    expect(b.id).toBe('part-1');
   });
 });

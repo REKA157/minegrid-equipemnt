@@ -1,38 +1,74 @@
-import React, { useMemo, useState } from 'react';
-import { SectionCard, NumberField, Toggle } from '../ui/primitives';
-import { fraudSignals } from '../ai/fraudSignals';
+import React, { useEffect, useState } from 'react';
+import { SectionCard } from '../ui/primitives';
+import { loadCaseRisks, type CaseRisk } from '../../utils/risk/caseRiskService';
 
-/** Outil interactif : DÉTECTER UN RISQUE DE FRAUDE (règles réelles). */
+/**
+ * Moniteur de RISQUE DOSSIER (plus un simulateur à saisie). Branché sur le Risk Engine
+ * réel (computeTransactionRisk) : n'affiche QUE des risques EXPLICABLES dérivés de faits
+ * (paiement en litige, fonds séquestrés sans inspection, partenaire désengagé…). Chaque
+ * dossier à risque mène à une ACTION : ouvrir le dossier pour corriger. Anti-façade :
+ * aucun risque inventé ; rien si aucun fait à risque.
+ */
 export default function FraudWidget() {
-  const [price, setPrice] = useState(35000);
-  const [estimate, setEstimate] = useState(110000);
-  const [trust, setTrust] = useState(15);
-  const [verified, setVerified] = useState(false);
-  const [images, setImages] = useState(true);
+  const [risks, setRisks] = useState<CaseRisk[] | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const result = useMemo(
-    () => fraudSignals({ price, estimate, sellerTrustScore: trust, sellerVerifiedIdentity: verified, listingAgeMinutes: 30, hasImages: images }),
-    [price, estimate, trust, verified, images],
-  );
-  const cls = { low: 'bg-green-50 text-green-800', medium: 'bg-amber-50 text-amber-800', high: 'bg-red-50 text-red-800' }[result.risk];
+  useEffect(() => {
+    let cancelled = false;
+    loadCaseRisks().then((r) => {
+      if (!cancelled) {
+        setRisks(r);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const empty = !risks || risks.length === 0;
 
   return (
-    <SectionCard title="Détecter un risque de fraude" subtitle="Prix appât, vendeur non vérifié, confiance faible… règles réelles." live status="available">
-      <div className="grid sm:grid-cols-2 gap-3">
-        <NumberField label="Prix annoncé (€)" value={price} onChange={setPrice} min={0} />
-        <NumberField label="Estimation marché (€)" value={estimate} onChange={setEstimate} min={0} />
-        <NumberField label="Score confiance vendeur" value={trust} onChange={setTrust} min={0} max={100} />
-        <Toggle label="Identité vendeur vérifiée" checked={verified} onChange={setVerified} />
-        <Toggle label="Photos présentes" checked={images} onChange={setImages} />
-      </div>
-      <div className={`mt-3 rounded-lg p-4 text-sm font-medium ${cls}`}>
-        Risque : {result.risk.toUpperCase()} ({result.score}/100)
-        {result.reasons.length > 0 && (
-          <ul className="mt-1 list-disc list-inside font-normal text-xs">
-            {result.reasons.map((r) => <li key={r}>{r}</li>)}
-          </ul>
-        )}
-      </div>
+    <SectionCard
+      title="Risques de dossier — alertes explicables"
+      subtitle="Signaux de risque réels sur vos dossiers, avec l'action à mener."
+      live
+      status="available"
+    >
+      {loading ? (
+        <p className="text-sm text-gray-500">Analyse des dossiers…</p>
+      ) : empty ? (
+        <p className="text-sm text-gray-500">
+          Aucun risque détecté sur vos dossiers — rien à signaler.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {risks!.map((r) => {
+            const high = r.risk.level === 'high';
+            return (
+              <li
+                key={r.caseId}
+                className={`rounded-lg border p-3 ${high ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}
+              >
+                <div className={`text-sm font-semibold ${high ? 'text-red-800' : 'text-amber-900'}`}>
+                  {high ? '⛔' : '⚠️'} {r.title} — risque {high ? 'élevé' : 'à surveiller'} (score {r.risk.score}/100)
+                </div>
+                <ul className="mt-1 list-disc list-inside text-xs text-gray-700 space-y-0.5">
+                  {r.risk.signals.map((s) => (
+                    <li key={s.code}>{s.label}</li>
+                  ))}
+                </ul>
+                <a
+                  href={`#dossier/${r.caseId}`}
+                  className="mt-2 inline-block text-xs font-medium text-orange-700 hover:underline"
+                >
+                  → Ouvrir le dossier pour corriger
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </SectionCard>
   );
 }

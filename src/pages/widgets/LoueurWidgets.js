@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Building2, TrendingUp, Calendar, MapPin, Wrench, Truck, Users, FileText, Bell, Target, BarChart3, Sparkles, Cpu } from 'lucide-react';
+import { DollarSign, Building2, Calendar, Users, Receipt } from 'lucide-react';
 
 export const LoueurWidgets = {
   metier: 'Loueur',
@@ -42,32 +42,19 @@ export const LoueurWidgets = {
       features: { periodSelector: true, export: true, analytics: true, alerts: true }
     },
     {
-      id: 'daily-actions',
-      type: 'daily-actions',
-      title: 'Actions Prioritaires du Jour',
-      description: 'Tâches corrélées : locations, maintenance, relances',
-      icon: Target,
-      dataSource: 'daily-actions',
-      features: { periodSelector: false, export: false, analytics: false, alerts: true, aiGenerated: true, dynamicContent: true }
-    },
-    {
-      id: 'ai-insights',
-      type: 'ai-insights',
-      title: 'Insights IA Location',
-      description: 'Analyses prédictives et recommandations pour optimiser le parc',
-      icon: Sparkles,
-      dataSource: 'ai-insights',
-      features: { periodSelector: true, export: true, analytics: true, alerts: true }
-    },
-    {
-      id: 'ai-optimization',
-      type: 'ai-optimization',
-      title: 'Optimisation IA',
-      description: 'Suggestions de tarifs, planning et marketing',
-      icon: Cpu,
-      dataSource: 'ai-optimization',
-      features: { periodSelector: true, export: true, analytics: true, alerts: true }
+      id: 'rental-overdue',
+      type: 'list',
+      title: 'Recouvrement / impayés',
+      description: 'Loyers échus non payés : total MAD, ancienneté du retard (0-30j / 31-60j / 60j+) et clients débiteurs',
+      icon: Receipt,
+      dataSource: 'rental_invoices',
+      features: { periodSelector: false, export: true, analytics: false, alerts: true }
     }
+    // Widgets retirés (hors-sujet pour le loueur — c'étaient des composants VENDEUR
+    // recyclés) : 'daily-actions' (Actions Commerciales), 'ai-insights' (reco CRM),
+    // 'ai-optimization' (SEO/prix d'annonces). La vraie logique location (retours,
+    // maintenance, taux d'occupation) alimente déjà l'en-tête Priorités/Risques/
+    // Opportunités via buildLoueurCockpit.
   ]
 };
 

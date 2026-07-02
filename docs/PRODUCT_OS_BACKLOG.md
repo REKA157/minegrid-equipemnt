@@ -175,6 +175,41 @@ mais peu peuplé. **Espace défendable = trust / inspection / dossier**, pas le 
 
 > Effet : dès qu'un partenaire d'un rôle est assigné, l'étape de chaîne correspondante lui est **attribuée** (au lieu de « à assigner ») et apparaît dans son cockpit (M4 mécanicien, M5/M6 financier/courtier, M7 transporteur/logisticien, transitaire douane).
 >
-> **Reste à faire** : appliquer les **deux migrations SQL** sur la base (dans l'ordre) — `sql/2026-06_transaction_chain_write_side.sql` puis `sql/2026-06_transaction_participant_assign.sql` — pour activer le bout-en-bout. Étape suivante possible : invitation/acceptation par le partenaire (`accepted_at`) + notification.
+> ✅ **Migrations appliquées et vérifiées le 2026-06-15** : les 8 RPC répondent en prod (`P0001 not authenticated` quand on appelle sans session = garde-fou serveur exécuté). Le write-side dossier est actif de bout en bout.
+
+### Invitation / acceptation partenaire (in-app) — livré (code, 2026-06-15)
+
+| Élément | Fichier | Rôle |
+|---|---|---|
+| RPC `SECURITY DEFINER` | `sql/2026-06_transaction_participant_accept.sql` | `accept_transaction_invitation` / `decline_transaction_invitation` — l'invité agit sur SA ligne (`user_id = auth.uid()`), idempotent, audit event ; **policy UPDATE seller-only inchangée** (contournée proprement par DEFINER) |
+| Gating | `sql/2026-06_transaction_chain_write_side.sql` (`_tc_participant_of_role`) | une étape ne s'attribue qu'à un partenaire **ayant accepté** (`accepted_at is not null`) |
+| Reset | `sql/2026-06_transaction_participant_assign.sql` | toute (ré)invitation repart « en attente » (`accepted_at = null` au `on conflict`) |
+| Services | `src/utils/api/transactionChain.ts`, `transactionCases.ts` | `acceptTransactionInvitation`/`declineTransactionInvitation` + `listPendingInvitationsWithCase` |
+| Cockpit | `correlations/chainCorrelation.ts` (`buildPendingInvitationSignals`) + `CockpitSummary.tsx` | carte « N invitation(s) en attente » dans les 6 cockpits partenaires (notification in-app, zéro nouvelle infra) |
+| Page dossier | `src/pages/TransactionCasePage.tsx` | badge En attente / Accepté / Révoqué + boutons Accepter/Refuser pour l'invité |
+
+> **Notification** : décision — pas de système de notifications dédié (aucune table déployée) ; l'invitation est surfacée in-app (cockpit + page dossier). Validation : tsc + 245 tests + build. Revue adversariale multi-agents : 29 trouvailles brutes → **1 confirmée** (effet de bord migration ci-dessous), reste = faux positifs.
+>
+> ⚠️ **Effet de bord migration (voulu, à connaître)** : après déploiement du gating, les dossiers EXISTANTS dont un partenaire est assigné mais `accepted_at` NULL verront leurs **nouvelles** étapes rester « à assigner » jusqu'à acceptation. Les étapes déjà créées ne changent pas. Pour préserver l'auto-assignment des anciens dossiers (optionnel), backfill ponctuel : `update public.transaction_participants set accepted_at = invited_at where revoked_at is null and accepted_at is null;`
+>
+> **Reste à faire** : appliquer le nouveau script `accept` + **ré-appliquer** write-side et assign (modifiés). Étape suivante possible : notification email (réutiliser l'edge function `send-email`) + vue inviteur du refus.
+
+### Partner Performance Engine (P6) — livré (code)
+
+Moteur de performance partenaire **dérivé de `transaction_events` + tables de chaîne** (données réelles uniquement, aucun `Math.random`, aucune valeur inventée).
+
+| Élément | Fichier | Rôle |
+|---|---|---|
+| Events → catégories | `src/utils/partner/partnerEvents.ts` | normalise les event_type réels + config par rôle (statuts succès/terminaux, échéance) |
+| KPIs | `src/utils/partner/partnerKpis.ts` | volume, complétion, délai de traitement, taux de retard, réactivité d'acceptation (pures, testées) |
+| Score | `src/utils/partner/partnerScore.ts` | score 0-100 pondéré ; **n'agrège que le mesurable** (métrique sans donnée = exclue, jamais pénalisée par un 0) ; `hasData=false` → pas de score |
+| Matching | `src/utils/partner/partnerMatching.ts` | classe les partenaires par score réel ; écarte les candidats sans donnée |
+| Intégration | `src/utils/partner/partnerPerformanceService.ts` | adapte les rows réels (inspection/transport/financing/customs) → moteur ; signaux cockpit ; `loadPartnerRankingForRole` |
+| Cockpits | `CockpitSummary.tsx` | carte « Ma performance » dans 5 cockpits (mécanicien/transporteur/courtier/transitaire/financier) — **anti-façade : rien si aucune assignation réelle ; chaque carte mène à une action** |
+| Matching UI | `TransactionCasePage.tsx` | suggestion « meilleur partenaire par performance » dans le panneau d'assignation (si donnée réelle) |
+
+> **KPIs livrés** : volume, taux de complétion, délai moyen de traitement (j), taux de retard (si échéance), taux + délai d'acceptation. **Score** : fiabilité 0.35 · acceptation 0.2 · traitement 0.2 · ponctualité 0.15 · volume 0.1. **Tests** : `partnerEngine.test.ts` (10 cas : calculs, anti-façade, données vides, matching). Mappers événements : `inspection.requested`/`transport.requested`/`financing.requested`/`customs.opened` + `participant.assigned/accepted/declined/revoked`.
+>
+> Limite assumée (données réelles) : avec 1 dossier de test, les cartes restent vides ou minimales — elles se peupleront avec l'usage. Le volet « acceptation » du score est branché dans le moteur mais pas encore alimenté côté cockpit (nécessiterait de charger `transaction_participants` par partenaire).
 
 **Rollback** : `git checkout merge/nextgen-integrated-experience` · ou `git reset --hard backup/before-product-os`.

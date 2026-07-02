@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity, FileText, Users, Wrench, MapPin, Calendar, DollarSign,
   ExternalLink, Loader2, AlertCircle, TrendingUp, Search, Sparkles, Phone, Mail, PlusCircle, Building2,
@@ -6,6 +6,7 @@ import {
 import type { MonitorProjectDetail, EquipmentNeed, ProjectContact } from '../../types/monitor';
 import { PROJECT_TYPE_LABELS, PROJECT_PHASE_LABELS, PROJECT_TYPE_COLORS } from '../../types/monitor';
 import { enrichEquipmentNeed, machinesCatalogHref } from '../../utils/monitorEquipmentMapping';
+import { matchNeedsToStock, loadSellerStockCategories } from '../../utils/monitorProspectMatch';
 import type { ProjectAnalysisCompare } from '../../services/monitorApi';
 
 interface ProjectDetailsProps {
@@ -295,6 +296,19 @@ export default function ProjectDetails({
   onCreateLeadsFromProject,
   createLeadsFromProjectLoading = false,
 }: ProjectDetailsProps) {
+  // Stock du vendeur (pour le croiser avec les besoins de l'AO à la sélection).
+  // Hook AVANT les retours conditionnels ci-dessous (règle des hooks React).
+  const [stock, setStock] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    loadSellerStockCategories().then((s) => {
+      if (!cancelled) setStock(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-white rounded-xl border border-gray-200">
@@ -327,17 +341,52 @@ export default function ProjectDetails({
   const documents = project.documents ?? [];
   const entities = project.entities ?? [];
   const contacts = project.contacts ?? [];
-  const buyerCandidates = entities.filter((ent) =>
-    ['client', 'buyer', 'acheteur', 'adjudicateur', 'authority'].some((k) =>
-      (ent.role || '').toLowerCase().includes(k),
-    ),
-  );
-  const winnerCandidates = entities.filter((ent) =>
-    ['winner', 'attributaire', 'adjudicataire', 'contractor', 'operator'].some((k) =>
-      (ent.role || '').toLowerCase().includes(k),
-    ),
-  );
+  // Réconciliation ENTITÉS (IA/OCDS) + CONTACTS structurés en parties UNIQUES (dédup par nom) :
+  // le contact structuré prime sur l'entité, un acheteur n'est jamais le gagnant, pas de doublon.
+  const _normName = (s: string | null | undefined) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+  const _collectParties = (entityKeys: string[], role: string): { name: string; role: string }[] => {
+    const out: { name: string; role: string }[] = [];
+    const seen = new Set<string>();
+    const push = (name: string) => {
+      const k = _normName(name);
+      if (!name || !k || seen.has(k)) return;
+      seen.add(k);
+      out.push({ name, role });
+    };
+    contacts.filter((c) => (c.role || '').toLowerCase() === role)
+      .forEach((c) => push(c.organization || c.person_name || ''));
+    entities.filter((e) => entityKeys.some((k) => (e.role || '').toLowerCase().includes(k)))
+      .forEach((e) => push(e.name || ''));
+    return out;
+  };
+  const buyerCandidates = _collectParties(['client', 'buyer', 'acheteur', 'adjudicateur', 'authority'], 'buyer');
+  const _buyerSet = new Set(buyerCandidates.map((b) => _normName(b.name)));
+  const winnerCandidates = _collectParties(['winner', 'attributaire', 'adjudicataire', 'contractor', 'operator'], 'winner')
+    .filter((w) => !_buyerSet.has(_normName(w.name)));
+  const _winnerSet = new Set(winnerCandidates.map((w) => _normName(w.name)));
+  // Contacts à afficher : dédupliqués par organisation, rôle reconcilié (lauréat/maître d'ouvrage).
+  const _seenContact = new Set<string>();
+  const contactsForDisplay = contacts
+    .filter((c) => {
+      const k = _normName(c.organization || c.person_name);
+      if (!k || _seenContact.has(k)) return false;
+      _seenContact.add(k);
+      return true;
+    })
+    .map((c) => {
+      const k = _normName(c.organization || c.person_name);
+      const displayRole = _winnerSet.has(k) ? 'winner' : _buyerSet.has(k) ? 'buyer' : (c.role || 'unknown');
+      return { contact: c, displayRole };
+    });
+  const roleLabel = (r: string): string => {
+    const x = (r || '').toLowerCase();
+    if (x === 'winner') return 'Lauréat (attributaire)';
+    if (x === 'buyer') return "Maître d'ouvrage";
+    if (x === 'operator') return 'Opérateur';
+    return 'Contact';
+  };
   const equipmentForDisplay = computeEquipmentForDisplay(project);
+  const stockMatch = matchNeedsToStock(equipmentForDisplay, stock);
   const evidenceItems = [
     ...(project.source_url ? [`Source: ${project.source || 'Lien'} (${sourceKind})`] : []),
     ...documents.slice(0, 3).map((d) => `Document: ${d.title || 'sans titre'}`),
@@ -637,19 +686,19 @@ export default function ProjectDetails({
           </div>
         )}
 
-        {/* Prospects AO (acheteur / gagnant / contacts publics) */}
-        {contacts.length > 0 && (
+        {/* Prospects AO (acheteur / gagnant / contacts publics) — dédupliqués, rôle reconcilié */}
+        {contactsForDisplay.length > 0 && (
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                <Users className="h-3 w-3" /> Prospects AO ({contacts.length})
+                <Users className="h-3 w-3" /> Prospects AO ({contactsForDisplay.length})
               </h4>
               {onCreateLeadsFromProject && (
                 <span className="text-[10px] text-gray-400">Action disponible en haut: « Vers Kanban »</span>
               )}
             </div>
             <div className="space-y-2">
-              {contacts.map((contact) => (
+              {contactsForDisplay.map(({ contact, displayRole }) => (
                 <div key={contact.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -657,7 +706,7 @@ export default function ProjectDetails({
                         {contact.organization || contact.person_name || 'Organisation non précisée'}
                       </p>
                       <p className="text-[10px] text-gray-500">
-                        {contact.role || 'role non précisé'} · confiance {Math.round((contact.confidence ?? 0.6) * 100)}%
+                        {roleLabel(displayRole)} · confiance {Math.round((contact.confidence ?? 0.6) * 100)}%
                       </p>
                     </div>
                     {onCreateLeadFromContact && (
@@ -688,13 +737,18 @@ export default function ProjectDetails({
                         <ExternalLink className="h-3 w-3" /> site
                       </a>
                     )}
+                    {contact.address && (
+                      <span className="inline-flex items-center gap-1 text-gray-500">
+                        <MapPin className="h-3 w-3" /> {contact.address}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-        {contacts.length === 0 && (
+        {contactsForDisplay.length === 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
             Aucun contact direct (email/téléphone/site) détecté pour l’instant dans l’AO.
             Lance « Comparer IA » puis « Kanban » dès qu’un contact apparaît.
@@ -737,6 +791,25 @@ export default function ProjectDetails({
                 <EquipmentCard key={eq.id} eq={eq} />
               ))}
             </div>
+            {stockMatch.needsTotal > 0 && (
+              <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] text-orange-900">
+                <span className="font-semibold">Votre stock</span> : compatible sur{' '}
+                <span className="font-bold">
+                  {stockMatch.needsCovered}/{stockMatch.needsTotal}
+                </span>{' '}
+                besoin(s)
+                {stockMatch.needsCovered > 0 && (
+                  <span className="text-orange-700">
+                    {' — '}
+                    {stockMatch.rows
+                      .filter((r) => r.stockCount > 0)
+                      .slice(0, 4)
+                      .map((r) => `${r.label} (${r.stockCount})`)
+                      .join(', ')}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -94,6 +94,9 @@ function isBudgetPlausible(country: string | null, budget: number | null): boole
 }
 
 export function normalizeBudget(project: MonitorProject): MonitorProject {
+  // Le montant signé World Bank est autoritaire (vrai prix du contrat) -> on lui fait
+  // confiance sans le passer par la fourchette de plausibilité (conçue pour le bruit scrapé).
+  if ((project.source || '').includes('World Bank')) return project;
   if (isBudgetPlausible(project.country, project.budget_usd)) return project;
   return { ...project, budget_usd: null };
 }

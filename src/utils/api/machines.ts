@@ -26,9 +26,29 @@ export async function publishMachine(machineData: MachineData, images: File[]) {
 
   }
   
+  // N'envoyer QUE les colonnes réellement présentes dans la table `machines`.
+  // Le formulaire porte des champs additionnels (ex: `type`) et une clé
+  // camelCase `sellerId` qui n'existent pas comme colonnes → ils déclenchaient
+  // des erreurs PGRST204 "Could not find the '<x>' column". On filtre donc sur
+  // une liste blanche, et on remappe `sellerId` vers la vraie colonne `sellerid`
+  // (indexée + utilisée par la RLS et les lectures), avec `seller_id` pour la
+  // compat du reste du code.
+  const md = machineData as Record<string, unknown>;
+  const ALLOWED_COLUMNS = [
+    'name', 'brand', 'model', 'category', 'year', 'price',
+    'condition', 'description', 'specifications', 'total_hours',
+  ];
+  const row: Record<string, unknown> = {};
+  for (const col of ALLOWED_COLUMNS) {
+    if (md[col] !== undefined) row[col] = md[col];
+  }
+  row.sellerid = md.sellerId;
+  row.seller_id = md.sellerId;
+  row.images = uploadedImageURLs;
+
   const { data, error } = await supabase
     .from('machines')
-    .insert([{ ...machineData, images: uploadedImageURLs }]);
+    .insert([row]);
 
   if (error) throw error;
 

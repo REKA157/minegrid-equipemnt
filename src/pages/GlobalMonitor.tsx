@@ -16,13 +16,15 @@ import {
   fetchProjectAnalysisCompare,
   type ProjectAnalysisCompare,
 } from '../services/monitorApi';
-import {
-  normalizeBudget as normalizeBudgetUtil,
-  ensureCountryCoverage as ensureCountryCoverageUtil,
-  ensureLayerCoverageByCountry as ensureLayerCoverageByCountryUtil,
-  enrichForDisplay as enrichForDisplayUtil,
-} from '../utils/globalMonitorCoverage';
+import { normalizeBudget as normalizeBudgetUtil } from '../utils/globalMonitorCoverage';
 import { equipmentNeedsToNotesBlock } from '../utils/globalMonitorEquipmentNeedsText';
+import {
+  classifyRole,
+  prospectAngle,
+  matchNeedsToStock,
+  stockMatchNotesBlock,
+  loadSellerStockCategories,
+} from '../utils/monitorProspectMatch';
 
 /**
  * N'enregistre pas contact_company si c'est le même libellé que le titre projet
@@ -39,11 +41,6 @@ function contactCompanyForPipeline(projectTitle: string, organization: string | 
   if (pLow.length >= 8 && oLow.includes(pLow)) return undefined;
   return o;
 }
-
-const DEMO_PROJECTS: MonitorProject[] = [
-  { id: '1', title: "Mine d'or de Kédougou", type: 'mine', phase: 'construction', country: 'Senegal', region: 'Kédougou', lat: 12.56, lon: -12.18, budget_usd: 350_000_000, start_date: '2025-06-01', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd1', confidence: 0.8, updated_at: '2026-03-01' },
-  { id: '2', title: 'Autoroute Dakar-Saint-Louis', type: 'road', phase: 'tender', country: 'Senegal', region: 'Saint-Louis', lat: 15.95, lon: -16.27, budget_usd: 820_000_000, start_date: '2026-01-15', end_date: null, source: 'Demo', source_url: '', fingerprint: 'd2', confidence: 0.7, updated_at: '2026-03-02' },
-];
 
 export default function GlobalMonitor() {
   const [filters, setFilters] = useState<ProjectFilters>({});
@@ -91,14 +88,11 @@ export default function GlobalMonitor() {
       }
 
       if (reqId !== requestSeqRef.current) return;
-      const normalized = allItems.map(normalizeBudgetUtil);
-      const covered = ensureLayerCoverageByCountryUtil(
-        ensureCountryCoverageUtil(normalized, filtersRef.current),
-        filtersRef.current,
-      );
-      const display = enrichForDisplayUtil(covered, DEMO_PROJECTS, filtersRef.current);
+      // Anti-façade : on affiche UNIQUEMENT les vrais projets du monitor-service,
+      // sans remplissage par seeds/démo (ensureCoverage/enrichForDisplay retirés).
+      const display = allItems.map(normalizeBudgetUtil);
       setProjects(display);
-      setTotal(Math.max(totalFromApi, display.length));
+      setTotal(totalFromApi || display.length);
       setPage(1);
       setHasMore(false);
       setIsLive(true);
@@ -108,8 +102,9 @@ export default function GlobalMonitor() {
       const message = error instanceof Error ? error.message : 'Erreur API Monitor';
       setLiveError(message);
       if (!hadLiveSuccessRef.current) {
-        setProjects(DEMO_PROJECTS.map(normalizeBudgetUtil));
-        setTotal(DEMO_PROJECTS.length);
+        // API injoignable et jamais de succès : on n'invente rien (anti-façade) -> vide + erreur.
+        setProjects([]);
+        setTotal(0);
         setIsLive(false);
       }
     } finally {
@@ -179,27 +174,37 @@ export default function GlobalMonitor() {
       return;
     }
     const gmNeedsNote = equipmentNeedsToNotesBlock(selectedDetail.equipment_needs ?? []);
+    const stockNote = stockMatchNotesBlock(
+      matchNeedsToStock(selectedDetail.equipment_needs ?? [], await loadSellerStockCategories()),
+    );
+    const kind = classifyRole(contact.role);
+    const angle = prospectAngle(kind);
 
     const { lead, error } = await RealPipelineService.createLeadWithStatus({
-      title: `Prospect AO - ${selectedDetail.title}`,
+      title: `${angle.titlePrefix} - ${selectedDetail.title}`,
       stage: 'Prospection',
       priority: (contact.confidence ?? 0.6) >= 0.75 ? 'high' : 'medium',
       value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
       probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
-      next_action: 'Prendre contact et qualifier le besoin',
+      next_action: angle.nextAction,
       assigned_to: assignedToLabel,
       last_contact: new Date().toISOString(),
       notes: [
         `Source AO: ${selectedDetail.source || 'inconnue'}`,
         `Organisation: ${contact.organization || 'n/a'}`,
+        contact.address ? `Adresse: ${contact.address}` : null,
+        contact.website ? `Site: ${contact.website}` : null,
+        angle.roleNote,
         contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
         gmNeedsNote,
+        stockNote,
       ].filter(Boolean).join('\n'),
       contact_name: contact.person_name || undefined,
       contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
       contact_phone: contact.phone || undefined,
       contact_email: contact.email || undefined,
-      source: 'manual',
+      contact_role: kind === 'unknown' ? null : kind, // lauréat vs maître d'ouvrage (colonne optionnelle)
+      source: 'monitor', // lead RÉELLEMENT issu du Global Monitor (AO) -> convergence moteur 'monitor'
       source_id: selectedDetail.id,
     });
     if (lead) {
@@ -244,6 +249,11 @@ export default function GlobalMonitor() {
 
     setCreateLeadsLoading(true);
     const gmNeedsNote = equipmentNeedsToNotesBlock(selectedDetail.equipment_needs ?? []);
+    // Croisement besoins de l'AO <-> stock RÉEL du vendeur (« vous avez X compatibles »).
+    const stockCategories = await loadSellerStockCategories();
+    const stockNote = stockMatchNotesBlock(
+      matchNeedsToStock(selectedDetail.equipment_needs ?? [], stockCategories),
+    );
 
     try {
       const contactKey = (contact: ProjectContact) => {
@@ -278,28 +288,36 @@ export default function GlobalMonitor() {
           continue;
         }
 
+        // Angle commercial selon le rôle : LAURÉAT (négocier) vs maître d'ouvrage (soumissionner).
+        const kind = classifyRole(contact.role);
+        const angle = prospectAngle(kind);
         const { lead, error } = await RealPipelineService.createLeadWithStatus({
-          title: `Prospect AO - ${selectedDetail.title}`,
+          title: `${angle.titlePrefix} - ${selectedDetail.title}`,
           stage: 'Prospection',
           priority: (contact.confidence ?? 0.6) >= 0.75 ? 'high' : 'medium',
           value: Math.round((selectedDetail.budget_usd || 0) * 0.03) || 0,
           probability: Math.min(65, Math.max(15, Math.round((contact.confidence ?? 0.6) * 100))),
-          next_action: 'Prendre contact et qualifier le besoin',
+          next_action: angle.nextAction,
           assigned_to: assignedToLabel,
           last_contact: new Date().toISOString(),
           notes: [
             `Source AO: ${selectedDetail.source || 'inconnue'}`,
             `Organisation: ${contact.organization || 'n/a'}`,
+            contact.address ? `Adresse: ${contact.address}` : null,
+            contact.website ? `Site: ${contact.website}` : null,
+            angle.roleNote,
             selectedDetail.phase ? `Phase: ${selectedDetail.phase}` : null,
             selectedDetail.type ? `Type projet: ${selectedDetail.type}` : null,
             contact.rationale ? `Preuve extraction: ${contact.rationale}` : null,
             gmNeedsNote,
+            stockNote,
           ].filter(Boolean).join('\n'),
           contact_name: contact.person_name || undefined,
           contact_company: contactCompanyForPipeline(selectedDetail.title, contact.organization),
           contact_phone: contact.phone || undefined,
           contact_email: contact.email || undefined,
-          source: 'manual',
+          contact_role: kind === 'unknown' ? null : kind, // lauréat vs maître d'ouvrage (colonne optionnelle)
+          source: 'monitor', // lead RÉELLEMENT issu du Global Monitor (AO) -> convergence moteur 'monitor'
           source_id: selectedDetail.id,
         });
 

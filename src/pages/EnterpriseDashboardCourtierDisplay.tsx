@@ -8,6 +8,7 @@ const WIDGETS_COURTIER_IDS = [
   'commission-tracking',
   'client-portfolio',
   'performance-analytics',
+  'bank-comparator',
   'transaction-cases',
   // 'transaction-broker-financing' : widget planifié, volontairement exclu tant que non branché
   // (voir widgets/plannedEnterpriseWidgets.ts + docs/PLANNED_ENTERPRISE_WIDGETS.md)
@@ -18,6 +19,7 @@ const EnterpriseDashboardCourtierDisplay: React.FC = () => (
     role="courtier"
     widgetsSource={CourtierWidgets}
     validIds={WIDGETS_COURTIER_IDS}
+    defaultActiveIds={WIDGETS_COURTIER_IDS}
     modalLabel="widget courtier"
   />
 );

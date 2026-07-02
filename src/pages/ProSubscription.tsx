@@ -57,7 +57,7 @@ const plans: Plan[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 299,
+    price: 200, // aligné sur l'affichage « À partir de 200 USD » (était 299)
     period: 'mois',
     maxUsers: 50,
     maxEquipment: 1000,

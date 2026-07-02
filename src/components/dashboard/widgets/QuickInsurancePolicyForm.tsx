@@ -325,7 +325,9 @@ const QuickInsurancePolicyForm: React.FC<QuickInsurancePolicyFormProps> = ({
                     placeholder="38500"
                     className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   />
-                  <div className="mt-0.5 text-[10px] text-gray-500">Suggestion auto selon type</div>
+                  <div className="mt-0.5 text-[10px] text-gray-500">
+                    Pré-rempli à titre indicatif (taux standards par type) — à confirmer avec le devis assureur.
+                  </div>
                 </div>
               </div>
 

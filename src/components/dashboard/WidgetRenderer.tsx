@@ -5,6 +5,7 @@ import { supabaseClient } from '../../utils/supabaseClient';
 import {
   getRentalRevenue,
   getUpcomingRentals,
+  getRentalOverdue,
 } from '../../utils/enterpriseApi/rentals';
 import { getEquipmentAvailability } from '../../utils/enterpriseApi/equipment';
 import { buildCorrelatedRentalActions } from '../../utils/buildCorrelatedRentalActions';
@@ -20,6 +21,7 @@ import {
   getDeliveryMapData,
   getTransportCosts,
   getDriverSchedule,
+  getDeadheadCost,
 } from '../../utils/enterpriseApi/transport';
 import {
   getCreditApplications,
@@ -27,6 +29,7 @@ import {
   getCommissionTracking,
   getClientPortfolio,
   getPerformanceAnalytics,
+  getBankComparison,
   renewInsurancePolicy,
   type CreditApplicationRow,
   type InsurancePolicyRow,
@@ -39,6 +42,7 @@ import {
   getRoiAnalysis,
   getRiskAssessment,
   getOpportunitiesScore,
+  getYieldRealizedVsExpected,
   convertOpportunityToInvestment,
   type OpportunityRow,
 } from '../../utils/enterpriseApi/investisseur';
@@ -50,6 +54,7 @@ import {
   getContainerTrackingRows,
   getImportExportStats,
   getFreightDocumentsForList,
+  getDemurrageExposure,
 } from '../../utils/enterpriseApi/transitaire';
 import LogisticsRoutesMap from './widgets/LogisticsRoutesMap';
 import {
@@ -57,8 +62,9 @@ import {
   getRouteTrackingRows,
   getSupplyChainKpisChart,
   getLogisticsStockAlertsList,
+  getLogisticsProfitability,
 } from '../../utils/enterpriseApi/logisticien';
-import { Plus, ShoppingCart, Truck, Package, AlertTriangle, Clock, Shield, FileText, DollarSign, RefreshCw, Building2, Target, TrendingUp, Briefcase, ArrowRight, Ship, Anchor } from 'lucide-react';
+import { Plus, ShoppingCart, Truck, Package, AlertTriangle, Clock, Shield, FileText, DollarSign, RefreshCw, Building2, Target, TrendingUp, Briefcase, ArrowRight, Ship, Anchor, Landmark, Wallet } from 'lucide-react';
 
 // Import des widgets avancés avec IA
 import SalesPerformanceScoreWidget from './widgets/SalesPerformanceScoreWidget';
@@ -74,9 +80,8 @@ import AIOptimizationWidget from './widgets/AIOptimizationWidget';
 import MetricWidget from './widgets/MetricWidget';
 import ChartWidget from './widgets/ChartWidget';
 import ListWidget from './widgets/ListWidget';
-import InventoryWidget from './widgets/InventoryWidget';
+import { InventoryStatusWidget } from '../../pages/enterprise/widgets/InventoryStatusWidget';
 import PerformanceWidget from './widgets/PerformanceWidget';
-import DailyActionsWidget from './widgets/DailyActionsWidget';
 import StockStatusWidget from './widgets/StockStatusWidget';
 import EquipmentAvailabilityWidget from './widgets/EquipmentAvailabilityWidget';
 import UpcomingRentalsWidget from './widgets/UpcomingRentalsWidget';
@@ -336,6 +341,22 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
     Awaited<ReturnType<typeof getFreightDocumentsForList>> | null
   >(null);
   const [liveFreightDocumentsLoading, setLiveFreightDocumentsLoading] = useState(false);
+  const [liveDemurrage, setLiveDemurrage] = useState<
+    Awaited<ReturnType<typeof getDemurrageExposure>> | null
+  >(null);
+  const [liveDemurrageLoading, setLiveDemurrageLoading] = useState(false);
+  const [liveRentalOverdue, setLiveRentalOverdue] = useState<
+    Awaited<ReturnType<typeof getRentalOverdue>> | null
+  >(null);
+  const [liveRentalOverdueLoading, setLiveRentalOverdueLoading] = useState(false);
+  const [liveBankComparison, setLiveBankComparison] = useState<Awaited<ReturnType<typeof getBankComparison>> | null>(null);
+  const [liveBankComparisonLoading, setLiveBankComparisonLoading] = useState(false);
+  const [liveLogisticsProfit, setLiveLogisticsProfit] = useState<Awaited<ReturnType<typeof getLogisticsProfitability>> | null>(null);
+  const [liveLogisticsProfitLoading, setLiveLogisticsProfitLoading] = useState(false);
+  const [liveDeadhead, setLiveDeadhead] = useState<Awaited<ReturnType<typeof getDeadheadCost>> | null>(null);
+  const [liveDeadheadLoading, setLiveDeadheadLoading] = useState(false);
+  const [liveYieldGap, setLiveYieldGap] = useState<Awaited<ReturnType<typeof getYieldRealizedVsExpected>> | null>(null);
+  const [liveYieldGapLoading, setLiveYieldGapLoading] = useState(false);
 
   // --- LOGISTICIEN / SUPPLY CHAIN ---
   const [liveWarehouseOccupancy, setLiveWarehouseOccupancy] = useState<
@@ -782,7 +803,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         if (!cancelled) setLiveCommissions(data);
       } catch (e) {
         console.error('WidgetRenderer getCommissionTracking', e);
-        if (!cancelled) setLiveCommissions({ totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, creditCount: 0, policyCount: 0 });
+        if (!cancelled) setLiveCommissions({ totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, commissionDue: 0, commissionEarned: 0, creditCount: 0, policyCount: 0 });
       } finally {
         if (!cancelled) setLiveCommissionsLoading(false);
       }
@@ -985,6 +1006,108 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         if (!cancelled) setLiveFreightDocuments([]);
       } finally {
         if (!cancelled) setLiveFreightDocumentsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'demurrage-tracking') return;
+    let cancelled = false;
+    (async () => {
+      setLiveDemurrageLoading(true);
+      try {
+        const data = await getDemurrageExposure();
+        if (!cancelled) setLiveDemurrage(data);
+      } catch (e) {
+        console.error('WidgetRenderer getDemurrageExposure', e);
+      } finally {
+        if (!cancelled) setLiveDemurrageLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'rental-overdue') return;
+    let cancelled = false;
+    (async () => {
+      setLiveRentalOverdueLoading(true);
+      try {
+        const data = await getRentalOverdue();
+        if (!cancelled) setLiveRentalOverdue(data);
+      } catch (e) {
+        console.error('WidgetRenderer getRentalOverdue', e);
+      } finally {
+        if (!cancelled) setLiveRentalOverdueLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'bank-comparator') return;
+    let cancelled = false;
+    (async () => {
+      setLiveBankComparisonLoading(true);
+      try {
+        const data = await getBankComparison();
+        if (!cancelled) setLiveBankComparison(data);
+      } catch (e) {
+        console.error('WidgetRenderer getBankComparison', e);
+      } finally {
+        if (!cancelled) setLiveBankComparisonLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'logistics-profitability') return;
+    let cancelled = false;
+    (async () => {
+      setLiveLogisticsProfitLoading(true);
+      try {
+        const data = await getLogisticsProfitability();
+        if (!cancelled) setLiveLogisticsProfit(data);
+      } catch (e) {
+        console.error('WidgetRenderer getLogisticsProfitability', e);
+      } finally {
+        if (!cancelled) setLiveLogisticsProfitLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'deadhead-cost') return;
+    let cancelled = false;
+    (async () => {
+      setLiveDeadheadLoading(true);
+      try {
+        const data = await getDeadheadCost();
+        if (!cancelled) setLiveDeadhead(data);
+      } catch (e) {
+        console.error('WidgetRenderer getDeadheadCost', e);
+      } finally {
+        if (!cancelled) setLiveDeadheadLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widget.id]);
+
+  useEffect(() => {
+    if (widget.id !== 'yield-realized-vs-expected') return;
+    let cancelled = false;
+    (async () => {
+      setLiveYieldGapLoading(true);
+      try {
+        const data = await getYieldRealizedVsExpected();
+        if (!cancelled) setLiveYieldGap(data);
+      } catch (e) {
+        console.error('WidgetRenderer getYieldRealizedVsExpected', e);
+      } finally {
+        if (!cancelled) setLiveYieldGapLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -1425,6 +1548,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             </div>
             <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">
               Distance totale : {totalKm.toLocaleString('fr-FR')} km
+              {totalKm > 0 && (
+                <> · <span className="font-semibold text-gray-600">Coût moyen : {Math.round(totalCost / totalKm).toLocaleString('fr-FR')} MAD/km</span></>
+              )}
             </div>
           </div>
         );
@@ -1681,6 +1807,364 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
       );
 
     case 'list':
+      if (widget.id === 'demurrage-tracking') {
+        if (liveDemurrageLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mr-2" />
+              Chargement des surestaries…
+            </div>
+          );
+        }
+        const dem = liveDemurrage;
+        if (!dem || dem.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Ship className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucun conteneur suivi</div>
+              <div className="text-xs text-gray-400 mt-1">Renseignez date d'arrivée, franchise et tarif/jour sur vos conteneurs</div>
+            </div>
+          );
+        }
+        const overdue = dem.items.filter((i) => i.daysOver > 0 && !i.returned);
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className={`rounded p-2 ${dem.totalCost > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${dem.totalCost > 0 ? 'text-red-700' : 'text-green-700'}`}>{dem.totalCost.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Exposition surestaries</div>
+              </div>
+              <div className="rounded bg-amber-50 p-2">
+                <div className="text-sm font-bold text-amber-700">{dem.inDemurrageCount}</div>
+                <div className="text-[10px] text-amber-700/80">En dépassement</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{dem.maxDaysOver} j</div>
+                <div className="text-[10px] text-gray-600">Pire dépassement</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {(overdue.length ? overdue : dem.items).slice(0, 8).map((i) => (
+                <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.container_number}</div>
+                    <div className="text-[10px] text-gray-500">{i.status}{i.port ? ' · ' + i.port : ''} · franchise → {i.freeUntil}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    {i.daysOver > 0 ? (
+                      <>
+                        <div className="font-bold text-red-700">+{i.daysOver} j</div>
+                        <div className="text-[10px] text-red-600">{i.cost.toLocaleString('fr-FR')} MAD</div>
+                      </>
+                    ) : (
+                      <div className="text-[10px] text-green-700">Dans la franchise</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {dem.watchCount > 0 && (
+              <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">{dem.watchCount} conteneur(s) dans la franchise à surveiller</div>
+            )}
+          </div>
+        );
+      }
+      if (widget.id === 'rental-overdue') {
+        if (liveRentalOverdueLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mr-2" />
+              Chargement des impayés…
+            </div>
+          );
+        }
+        const ovd = liveRentalOverdue;
+        if (!ovd || ovd.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <DollarSign className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucun loyer impayé</div>
+              <div className="text-xs text-gray-400 mt-1">Trésorerie à jour, ou renseignez vos factures de location (échéance + montant) pour suivre les retards</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className={`rounded p-2 ${ovd.totalOverdue > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${ovd.totalOverdue > 0 ? 'text-red-700' : 'text-green-700'}`}>{ovd.totalOverdue.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Total impayé</div>
+              </div>
+              <div className="rounded bg-amber-50 p-2">
+                <div className="text-sm font-bold text-amber-700">{ovd.overdueCount}</div>
+                <div className="text-[10px] text-amber-700/80">Factures en retard</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{ovd.maxDaysLate} j</div>
+                <div className="text-[10px] text-gray-600">Pire retard</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className="rounded bg-amber-50/60 p-1.5">
+                <div className="text-xs font-bold text-amber-700">{ovd.bucket0_30.toLocaleString('fr-FR')}</div>
+                <div className="text-[10px] text-gray-600">0-30 j</div>
+              </div>
+              <div className="rounded bg-orange-50 p-1.5">
+                <div className="text-xs font-bold text-orange-700">{ovd.bucket31_60.toLocaleString('fr-FR')}</div>
+                <div className="text-[10px] text-gray-600">31-60 j</div>
+              </div>
+              <div className="rounded bg-red-50 p-1.5">
+                <div className="text-xs font-bold text-red-700">{ovd.bucket60plus.toLocaleString('fr-FR')}</div>
+                <div className="text-[10px] text-gray-600">60 j+</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {ovd.items.slice(0, 8).map((i) => (
+                <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.clientName}</div>
+                    <div className="text-[10px] text-gray-500">{i.invoiceNumber}{i.dueDate ? ' · éch. ' + i.dueDate : ''}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className="font-bold text-red-700">{i.remaining.toLocaleString('fr-FR')} MAD</div>
+                    <div className={`text-[10px] ${i.bucket === '60+' ? 'text-red-600' : i.bucket === '31-60' ? 'text-orange-600' : 'text-amber-600'}`}>+{i.daysLate} j de retard</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      if (widget.id === 'logistics-profitability') {
+        if (liveLogisticsProfitLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mr-2" />
+              Chargement de la rentabilité…
+            </div>
+          );
+        }
+        const prof = liveLogisticsProfit;
+        if (!prof || prof.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Wallet className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucune opération chiffrée</div>
+              <div className="text-xs text-gray-400 mt-1">Renseignez coût transport, coût entreposage et montant facturé sur vos routes</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className={`rounded p-2 ${prof.totalMargin >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className={`text-sm font-bold ${prof.totalMargin >= 0 ? 'text-green-700' : 'text-red-700'}`}>{prof.totalMargin.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Marge globale ({prof.marginPct}%)</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{prof.totalCost.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Coût total</div>
+              </div>
+              <div className={`rounded p-2 ${prof.unprofitableCount > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${prof.unprofitableCount > 0 ? 'text-red-700' : 'text-green-700'}`}>{prof.unprofitableCount}</div>
+                <div className="text-[10px] text-gray-600">Livraisons à perte</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {prof.items.slice(0, 8).map((i) => (
+                <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.route_ref}{i.lane ? ' · ' + i.lane : ''}</div>
+                    <div className="text-[10px] text-gray-500">{i.status} · coût {i.totalCost.toLocaleString('fr-FR')} · facturé {i.revenue.toLocaleString('fr-FR')} MAD</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className={`font-bold ${i.margin < 0 ? 'text-red-700' : 'text-green-700'}`}>{i.margin >= 0 ? '+' : ''}{i.margin.toLocaleString('fr-FR')} MAD</div>
+                    <div className={`text-[10px] ${i.margin < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.marginPct}%</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {prof.unprofitableCount > 0 && (
+              <div className="px-1 pt-1 text-[10px] text-red-500 text-right">{prof.unprofitableCount} livraison(s) à perte · {prof.unprofitableLoss.toLocaleString('fr-FR')} MAD</div>
+            )}
+          </div>
+        );
+      }
+      if (widget.id === 'deadhead-cost') {
+        if (liveDeadheadLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mr-2" />
+              Chargement des km à vide…
+            </div>
+          );
+        }
+        const dh = liveDeadhead;
+        if (!dh || dh.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Truck className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucun trajet chiffré</div>
+              <div className="text-xs text-gray-400 mt-1">Renseignez km en charge, km à vide et coût/km sur vos livraisons pour suivre le retour à vide</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className={`rounded p-2 ${dh.totalEmptyCost > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${dh.totalEmptyCost > 0 ? 'text-red-700' : 'text-green-700'}`}>{dh.totalEmptyCost.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Coût du vide</div>
+              </div>
+              <div className={`rounded p-2 ${dh.globalEmptyRate > dh.threshold ? 'bg-red-50' : dh.globalEmptyRate > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${dh.globalEmptyRate > dh.threshold ? 'text-red-700' : dh.globalEmptyRate > 0 ? 'text-amber-700' : 'text-green-700'}`}>{dh.globalEmptyRate}%</div>
+                <div className="text-[10px] text-gray-600">Taux de vide global</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{dh.totalEmptyKm.toLocaleString('fr-FR')} km</div>
+                <div className="text-[10px] text-gray-600">Km à vide cumulés</div>
+              </div>
+            </div>
+            {dh.aboveThresholdCount > 0 && (
+              <div className="px-1 pb-2 flex items-center gap-1 text-[10px] text-red-600">
+                <AlertTriangle className="h-3 w-3" />
+                {dh.aboveThresholdCount} trajet(s) au-dessus de {dh.threshold}% de retour à vide
+              </div>
+            )}
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {dh.items.slice(0, 8).map((i) => (
+                <div key={i.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${i.overThreshold ? 'border-red-200 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.label}{i.client ? ' · ' + i.client : ''}</div>
+                    <div className="text-[10px] text-gray-500">{i.status} · {i.loadedKm} km charge / {i.emptyKm} km vide{i.destination ? ' · ' + i.destination : ''}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className={`font-bold ${i.overThreshold ? 'text-red-700' : 'text-amber-700'}`}>{i.emptyRate}%</div>
+                    <div className={`text-[10px] ${i.overThreshold ? 'text-red-600' : 'text-gray-500'}`}>{i.emptyCost.toLocaleString('fr-FR')} MAD</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      if (widget.id === 'bank-comparator') {
+        if (liveBankComparisonLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mr-2" />
+              Comparaison des offres bancaires…
+            </div>
+          );
+        }
+        const cmp = liveBankComparison;
+        if (!cmp || cmp.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Landmark className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucune banque partenaire configurée</div>
+              <div className="text-xs text-gray-400 mt-1">Ajoutez vos baremes bancaires (taux, duree max, frais) dans la table bank_offers</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className="rounded bg-green-50 p-2">
+                <div className="text-sm font-bold text-green-700 truncate">{cmp.bestBankName || '—'}</div>
+                <div className="text-[10px] text-gray-600">Meilleure offre</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{cmp.bestMonthlyPayment.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Mensualite mini</div>
+              </div>
+              <div className={`rounded p-2 ${cmp.savingsVsWorst > 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
+                <div className={`text-sm font-bold ${cmp.savingsVsWorst > 0 ? 'text-green-700' : 'text-gray-900'}`}>{cmp.savingsVsWorst.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Économie vs pire</div>
+              </div>
+            </div>
+            <div className="px-1 pb-1 text-[10px] text-gray-500">
+              {cmp.usingRealApp
+                ? <>Sur demande : <span className="font-medium text-gray-700">{cmp.refLabel || 'derniere demande'}</span> · {cmp.refAmount.toLocaleString('fr-FR')} MAD / {cmp.refDuration} mois</>
+                : <>Montant de reference : {cmp.refAmount.toLocaleString('fr-FR')} MAD / {cmp.refDuration} mois (aucune demande enregistree)</>}
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {cmp.items.slice(0, 8).map((b) => (
+                <div key={b.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${b.isBest ? 'border-green-300 bg-green-50' : b.eligible ? 'border-gray-100 bg-white' : 'border-amber-200 bg-amber-50'}`}>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">
+                      {b.bankName}{b.isBest && <span className="ml-1 text-[10px] font-semibold text-green-700">• Recommandée</span>}
+                    </div>
+                    <div className="text-[10px] text-gray-500">Taux {b.annualRate.toLocaleString('fr-FR')}% · {b.durationMonths} mois{b.fileFees > 0 ? ' · frais ' + b.fileFees.toLocaleString('fr-FR') + ' MAD' : ''}{!b.eligible ? ' · hors criteres' : ''}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className={`font-bold ${b.isBest ? 'text-green-700' : 'text-gray-900'}`}>{b.monthlyPayment.toLocaleString('fr-FR')} MAD/mois</div>
+                    <div className="text-[10px] text-gray-500">Cout credit {b.totalCost.toLocaleString('fr-FR')} MAD</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {cmp.eligibleCount < cmp.bankCount && (
+              <div className="px-1 pt-1 text-[10px] text-amber-600 text-right">{cmp.bankCount - cmp.eligibleCount} banque(s) hors criteres (montant/duree)</div>
+            )}
+          </div>
+        );
+      }
+      if (widget.id === 'yield-realized-vs-expected') {
+        if (liveYieldGapLoading) {
+          return (
+            <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mr-2" />
+              Chargement du rendement…
+            </div>
+          );
+        }
+        const yg = liveYieldGap;
+        if (!yg || yg.items.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+              <Target className="h-10 w-10 text-gray-300 mb-2" />
+              <div>Aucun rendement à comparer</div>
+              <div className="text-xs text-gray-400 mt-1">Renseignez le revenu attendu (loyer cible ou rendement %) et le revenu encaissé de vos actifs détenus</div>
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-full flex-col">
+            <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{yg.totalExpected.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Revenu attendu</div>
+              </div>
+              <div className="rounded bg-gray-50 p-2">
+                <div className="text-sm font-bold text-gray-900">{yg.totalRealized.toLocaleString('fr-FR')} MAD</div>
+                <div className="text-[10px] text-gray-600">Revenu réalisé</div>
+              </div>
+              <div className={`rounded p-2 ${yg.totalGap < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <div className={`text-sm font-bold ${yg.totalGap < 0 ? 'text-red-700' : 'text-green-700'}`}>{yg.totalGap >= 0 ? '+' : ''}{yg.totalGap.toLocaleString('fr-FR')} MAD</div>
+                <div className={`text-[10px] ${yg.totalGap < 0 ? 'text-red-600' : 'text-green-700/80'}`}>Écart global ({yg.totalGapPercent >= 0 ? '+' : ''}{yg.totalGapPercent}%)</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
+              {yg.items.slice(0, 8).map((i) => (
+                <div key={i.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${i.underperforming ? 'border-red-100 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{i.label}</div>
+                    <div className="text-[10px] text-gray-500">{i.status} · attendu {i.expectedRevenue.toLocaleString('fr-FR')} · réalisé {i.realizedRevenue.toLocaleString('fr-FR')} MAD · {i.monthsHeld} mois</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <div className={`font-bold ${i.gap < 0 ? 'text-red-700' : 'text-green-700'}`}>{i.gap >= 0 ? '+' : ''}{i.gap.toLocaleString('fr-FR')} MAD</div>
+                    <div className={`text-[10px] ${i.gap < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.gapPercent >= 0 ? '+' : ''}{i.gapPercent}%</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {yg.underperformingCount > 0 && (
+              <div className="px-1 pt-1 text-[10px] text-red-500 text-right">{yg.underperformingCount} actif(s) sous-performant(s) · {Math.abs(yg.shortfall).toLocaleString('fr-FR')} MAD de manque à gagner</div>
+            )}
+          </div>
+        );
+      }
       if (widget.id === 'sales-pipeline' || widget.id === 'leads-pipeline') {
         return (
           <div className="flex-1 overflow-y-auto min-h-0 p-4" style={{ maxHeight: '100%' }}>
@@ -2605,7 +3089,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             </div>
           );
         }
-        const c = liveCommissions ?? { totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, creditCount: 0, policyCount: 0 };
+        const c = liveCommissions ?? { totalCommission: 0, creditCommission: 0, policyCommission: 0, monthCommission: 0, creditMonth: 0, policyMonth: 0, commissionDue: 0, commissionEarned: 0, creditCount: 0, policyCount: 0 };
         const policyShare = c.totalCommission > 0 ? Math.round((c.policyCommission / c.totalCommission) * 100) : 0;
         const creditShare = c.totalCommission > 0 ? Math.round((c.creditCommission / c.totalCommission) * 100) : 0;
         return (
@@ -2644,6 +3128,18 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                   <div className="flex h-full">
                     <div className="bg-purple-500" style={{ width: `${creditShare}%` }} />
                     <div className="bg-blue-500" style={{ width: `${policyShare}%` }} />
+                  </div>
+                </div>
+              )}
+              {(c.commissionDue > 0 || c.commissionEarned > 0) && (
+                <div className="mt-3 grid w-full grid-cols-2 gap-2 text-center">
+                  <div className="rounded bg-green-50 p-2">
+                    <div className="text-xs font-bold text-green-700">{Math.round(c.commissionEarned).toLocaleString('fr-FR')} MAD</div>
+                    <div className="text-[10px] text-green-700/80">Encaissées (décaissé)</div>
+                  </div>
+                  <div className="rounded bg-amber-50 p-2">
+                    <div className="text-xs font-bold text-amber-700">{Math.round(c.commissionDue).toLocaleString('fr-FR')} MAD</div>
+                    <div className="text-[10px] text-amber-700/80">Dues — à recouvrer</div>
                   </div>
                 </div>
               )}
@@ -2727,13 +3223,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
       );
 
     case 'inventory':
-      return (
-        <InventoryWidget 
-          widget={widget} 
-          widgetSize={widgetSize as any}
-          onShowDetails={() => {}}
-        />
-      );
+      return <InventoryStatusWidget />;
 
     case 'equipment':
       if (widget.id === 'equipment-availability') {
@@ -2904,9 +3394,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           return (
             <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
               <Package className="h-10 w-10 text-gray-300 mb-2" />
-              <div>Aucune position GPS disponible</div>
+              <div>Aucune position renseignée</div>
               <div className="text-xs text-gray-400 mt-1">
-                Renseignez les coordonnées de vos véhicules et destinations
+                Suivi statut/ETA — position affichée si renseignée (pas de télématique temps réel)
               </div>
             </div>
           );
@@ -2949,8 +3439,8 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           return (
             <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
               <Ship className="h-10 w-10 text-gray-300 mb-2" />
-              <div>Aucune position GPS enregistrée</div>
-              <div className="text-xs text-gray-400 mt-1">Ajoutez lat/lng aux conteneurs dans la base</div>
+              <div>Aucune position renseignée</div>
+              <div className="text-xs text-gray-400 mt-1">Suivi statut/ETA — ajoutez lat/lng aux conteneurs (pas de télématique temps réel)</div>
             </div>
           );
         }

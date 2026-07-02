@@ -105,9 +105,13 @@ export type PartnerRole = 'mechanic' | 'broker' | 'carrier' | 'forwarder' | 'log
 export type PartnerAssignReason =
   | 'assigned'
   | 'revoked'
+  | 'accepted'
+  | 'declined'
   | 'not_deployed'
   | 'forbidden'
   | 'partner_not_found'
+  | 'invitation_not_found'
+  | 'invitation_revoked'
   | 'error';
 
 export interface PartnerAssignResult {
@@ -168,4 +172,45 @@ export async function revokeTransactionPartner(
     logger.warn('[transactionChain:revoke_transaction_partner]', e);
     return { ok: false, id: null, reason: 'error' };
   }
+}
+
+/* -------------------------------------------------------------------------
+ * Invitation partenaire — acceptation / refus PAR L'INVITÉ
+ * (cf. sql/2026-06_transaction_participant_accept.sql).
+ * Le partenaire confirme (accepted_at) ou décline (revoked_at) sa propre
+ * participation. Tant qu'il n'a pas accepté, aucune étape ne lui est attribuée.
+ * ---------------------------------------------------------------------- */
+
+async function callInvitationRpc(
+  fn: 'accept_transaction_invitation' | 'decline_transaction_invitation',
+  participantId: string,
+  okReason: 'accepted' | 'declined',
+): Promise<PartnerAssignResult> {
+  try {
+    const { data, error } = await supabase.rpc(fn, { p_participant_id: participantId });
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (isMissingFunction(error)) return { ok: false, id: null, reason: 'not_deployed' };
+      if (msg.includes('invitation_not_found')) return { ok: false, id: null, reason: 'invitation_not_found' };
+      if (msg.includes('invitation_revoked')) return { ok: false, id: null, reason: 'invitation_revoked' };
+      if (msg.includes('forbidden')) return { ok: false, id: null, reason: 'forbidden' };
+      logger.warn(`[transactionChain:${fn}]`, error);
+      return { ok: false, id: null, reason: 'error' };
+    }
+    const id = data == null || data === '' ? null : String(data);
+    return id ? { ok: true, id, reason: okReason } : { ok: false, id: null, reason: 'error' };
+  } catch (e) {
+    logger.warn(`[transactionChain:${fn}]`, e);
+    return { ok: false, id: null, reason: 'error' };
+  }
+}
+
+/** L'invité accepte sa participation → pose accepted_at (idempotent côté serveur). */
+export function acceptTransactionInvitation(participantId: string): Promise<PartnerAssignResult> {
+  return callInvitationRpc('accept_transaction_invitation', participantId, 'accepted');
+}
+
+/** L'invité décline sa participation → pose revoked_at (réversible). */
+export function declineTransactionInvitation(participantId: string): Promise<PartnerAssignResult> {
+  return callInvitationRpc('decline_transaction_invitation', participantId, 'declined');
 }

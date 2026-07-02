@@ -325,3 +325,102 @@ export async function updateRental(
     { label: 'updateRental', toastOnError: true },
   );
 }
+
+// =====================================================
+// WIDGET "RECOUVREMENT / IMPAYÉS DE LOCATION"
+// Loyers échus et non soldés : total impayé MAD, nb de factures en retard,
+// aging (0-30j / 31-60j / 60j+) et clients débiteurs triés par montant.
+// Enjeu trésorerie n°1 du loueur d'engins.
+// =====================================================
+
+export type OverdueInvoiceItem = {
+  id: string;
+  invoiceNumber: string;
+  clientName: string;
+  status: string;
+  amountDue: number;
+  amountPaid: number;
+  remaining: number;
+  dueDate: string | null;
+  daysLate: number;
+  bucket: '0-30' | '31-60' | '60+';
+};
+
+function overdueBucket(daysLate: number): '0-30' | '31-60' | '60+' {
+  if (daysLate > 60) return '60+';
+  if (daysLate > 30) return '31-60';
+  return '0-30';
+}
+
+export async function getRentalOverdue() {
+  const { userId, machineIds } = await scopedRentalsFilter();
+  if (!userId) {
+    return {
+      items: [] as OverdueInvoiceItem[],
+      totalOverdue: 0,
+      overdueCount: 0,
+      maxDaysLate: 0,
+      bucket0_30: 0,
+      bucket31_60: 0,
+      bucket60plus: 0,
+    };
+  }
+
+  const scopeOr = rentalScopeOrFilter(userId, machineIds);
+
+  const rows = await supabaseCall<Array<Record<string, any>>>(
+    () =>
+      supabase
+        .from('rental_invoices')
+        .select(
+          'id, invoice_number, client_name, status, amount_due, amount_paid, due_date, equipment_id, created_by',
+        )
+        .or(scopeOr)
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .limit(200),
+    { label: 'getRentalOverdue', fallback: [] },
+  );
+
+  const DAY = 1000 * 3600 * 24;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const items: OverdueInvoiceItem[] = rows
+    .map((r) => {
+      const status = String(r.status || '');
+      const st = status.toLowerCase();
+      if (st.includes('annul') || st.includes('sold') || st.includes('pay')) return null;
+      const amountDue = Number(r.amount_due || 0);
+      const amountPaid = Number(r.amount_paid || 0);
+      const remaining = Math.round(amountDue - amountPaid);
+      if (remaining <= 0) return null;
+      if (!r.due_date) return null;
+      const due = new Date(String(r.due_date));
+      due.setHours(0, 0, 0, 0);
+      const daysLate = Math.floor((today.getTime() - due.getTime()) / DAY);
+      if (daysLate <= 0) return null; // pas encore échu -> pas un impayé
+      return {
+        id: String(r.id),
+        invoiceNumber: String(r.invoice_number || '—'),
+        clientName: String(r.client_name || 'Client'),
+        status,
+        amountDue: Math.round(amountDue),
+        amountPaid: Math.round(amountPaid),
+        remaining,
+        dueDate: String(r.due_date).slice(0, 10),
+        daysLate,
+        bucket: overdueBucket(daysLate),
+      };
+    })
+    .filter((x): x is OverdueInvoiceItem => !!x);
+
+  return {
+    items: items.sort((a, b) => b.remaining - a.remaining),
+    totalOverdue: items.reduce((s, i) => s + i.remaining, 0),
+    overdueCount: items.length,
+    maxDaysLate: items.reduce((m, i) => Math.max(m, i.daysLate), 0),
+    bucket0_30: items.filter((i) => i.bucket === '0-30').reduce((s, i) => s + i.remaining, 0),
+    bucket31_60: items.filter((i) => i.bucket === '31-60').reduce((s, i) => s + i.remaining, 0),
+    bucket60plus: items.filter((i) => i.bucket === '60+').reduce((s, i) => s + i.remaining, 0),
+  };
+}

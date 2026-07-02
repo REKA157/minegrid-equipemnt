@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, FolderOpen, Loader2, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Check, FolderOpen, Loader2, UserPlus, X } from 'lucide-react';
+import supabase from '../utils/supabaseClient';
 import {
   getTransactionCase,
   listTransactionEvents,
@@ -40,9 +41,16 @@ import {
   advanceTransactionCaseStep,
   assignTransactionPartner,
   revokeTransactionPartner,
+  acceptTransactionInvitation,
+  declineTransactionInvitation,
   type ChainStep,
   type PartnerRole,
 } from '../utils/api/transactionChain';
+import { openCaseEscrow } from '../utils/api/escrowBridge';
+import { buildNetworkForRole } from '../utils/partner/partnerPerformanceService';
+import { trustTierLabel } from '../utils/partner/partnerTrust';
+import type { NetworkRanking } from '../utils/partner/partnerNetwork';
+import { computeTransactionRisk } from '../utils/risk/transactionRisk';
 
 export interface TransactionCasePageProps {
   caseId: string;
@@ -64,6 +72,7 @@ const STEP_ACTIONS: Array<{ step: ChainStep; label: string }> = [
 function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: () => void }) {
   const [pending, setPending] = useState<ChainStep | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [escrowPending, setEscrowPending] = useState(false);
 
   const run = async (step: ChainStep) => {
     setPending(step);
@@ -79,6 +88,30 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
       setMsg('Action non autorisée : vous devez être partie prenante de ce dossier.');
     } else {
       setMsg('Action impossible pour le moment.');
+    }
+  };
+
+  // Pont escrow : ouvre un séquestre RÉEL (statut 'created' = non financé) lié au dossier.
+  const openEscrow = async () => {
+    setEscrowPending(true);
+    setMsg(null);
+    const r = await openCaseEscrow(caseId);
+    setEscrowPending(false);
+    if (r.ok) {
+      setMsg('Séquestre ouvert (non financé). Le miroir paiement du dossier reflètera l’état réel du PSP.');
+      onDone();
+    } else if (r.reason === 'not_deployed') {
+      setMsg('Pont escrow non déployé : appliquez 0_prerequis_escrow_prix.sql puis 7_pont_escrow.sql.');
+    } else if (r.reason === 'buyer_required') {
+      setMsg('Escrow impossible : ce dossier n’a pas d’acheteur relié (anti-façade : aucun escrow fictif).');
+    } else if (r.reason === 'amount_required') {
+      setMsg('Escrow impossible : le montant du dossier (total_amount) doit être renseigné.');
+    } else if (r.reason === 'machine_required') {
+      setMsg('Escrow impossible : aucune machine liée au dossier.');
+    } else if (r.reason === 'forbidden') {
+      setMsg('Seuls le vendeur ou l’acheteur du dossier peuvent ouvrir un séquestre.');
+    } else {
+      setMsg('Ouverture du séquestre impossible pour le moment.');
     }
   };
 
@@ -100,6 +133,15 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
             {pending === a.step ? 'Envoi…' : a.label}
           </button>
         ))}
+        <button
+          type="button"
+          disabled={escrowPending || pending !== null}
+          onClick={() => void openEscrow()}
+          title="Ouvre un séquestre réel (PSP) lié au dossier — statut 'créé', non financé."
+          className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+        >
+          {escrowPending ? 'Ouverture…' : 'Ouvrir le séquestre (escrow réel)'}
+        </button>
       </div>
       {msg && <p className="mt-2 text-xs text-gray-600">{msg}</p>}
     </div>
@@ -128,6 +170,24 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
+  // Matching intelligent (B/F) : meilleur partenaire DISPONIBLE + à éviter + saturés,
+  // par confiance & charge réelles (anti-façade : rien si pas de donnée).
+  const [network, setNetwork] = useState<NetworkRanking | null>(null);
+  useEffect(() => {
+    const RANKABLE = ['mechanic', 'carrier', 'broker', 'forwarder'];
+    if (!RANKABLE.includes(role)) {
+      setNetwork(null);
+      return;
+    }
+    let cancelled = false;
+    void buildNetworkForRole(role as 'mechanic' | 'carrier' | 'broker' | 'forwarder').then((n) => {
+      if (!cancelled) setNetwork(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
   const submit = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
@@ -140,7 +200,10 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
     setBusy(false);
     if (r.ok) {
       setEmail('');
-      setMsg({ tone: 'ok', text: 'Partenaire assigné. Les nouvelles étapes de ce rôle lui seront attribuées.' });
+      setMsg({
+        tone: 'ok',
+        text: 'Invitation envoyée. Le partenaire doit l’accepter dans son espace avant de recevoir les étapes de ce rôle.',
+      });
       onChanged();
     } else if (r.reason === 'partner_not_found') {
       setMsg({ tone: 'err', text: 'Aucun utilisateur avec cet email. Le partenaire doit avoir un compte MineGrid.' });
@@ -160,7 +223,8 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
         Assigner un partenaire
       </h2>
       <p className="text-xs text-gray-500 mb-3">
-        Rattachez un partenaire (par email) à un rôle du dossier. Ses étapes lui seront attribuées et apparaîtront dans son cockpit.
+        Rattachez un partenaire (par email) à un rôle du dossier. Il reçoit une invitation à accepter ;
+        une fois acceptée, les étapes de ce rôle lui sont attribuées et apparaissent dans son cockpit.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
@@ -199,6 +263,25 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
           {busy ? 'Envoi…' : 'Assigner'}
         </button>
       </div>
+      {/* Indice calculé sur VOS dossiers accessibles (RLS) — pas une disponibilité absolue. */}
+      {network?.best && network.best.trust.trustScore != null && (
+        <p className="mt-2 text-xs text-emerald-700">
+          💡 Suggéré (d’après vos dossiers) :{' '}
+          <span className="font-mono">{network.best.partnerId.slice(0, 8)}…</span> · confiance{' '}
+          {trustTierLabel(network.best.trust.tier)} ({network.best.trust.trustScore}/100, {network.best.openLoad} en
+          cours chez vous).
+        </p>
+      )}
+      {network && network.toAvoid.length > 0 && (
+        <p className="mt-1 text-xs text-amber-700">
+          ⚠️ {network.toAvoid.length} partenaire(s) à fiabilité faible (taux d’échec élevé) écarté(s).
+        </p>
+      )}
+      {network && network.saturated.length > 0 && (
+        <p className="mt-1 text-xs text-gray-500">
+          ⏳ {network.saturated.length} partenaire(s) chargé(s) sur vos dossiers.
+        </p>
+      )}
       {msg && (
         <p className={`mt-2 text-xs ${msg.tone === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</p>
       )}
@@ -356,6 +439,31 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
     [caseId, refreshMeta],
   );
 
+  // Utilisateur courant : pour décider quelles invitations sont actionnables par lui.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setCurrentUserId(data.user?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const [invAction, setInvAction] = useState<string | null>(null);
+  const handleInvitation = useCallback(
+    async (participantId: string, accept: boolean) => {
+      setInvAction(participantId);
+      const r = accept
+        ? await acceptTransactionInvitation(participantId)
+        : await declineTransactionInvitation(participantId);
+      setInvAction(null);
+      if (r.ok) await refreshMeta();
+    },
+    [refreshMeta],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -481,6 +589,36 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
         )}
       </header>
 
+      {(() => {
+        // Chantier E — risque dossier (faits réels). Anti-façade : rien si risque 'low'.
+        const risk = computeTransactionRisk({
+          events: events.map((e) => ({ event_type: e.event_type })),
+          payments: bundle.payments.map((p) => ({
+            status: p.status,
+            amount: p.amount ?? null,
+            payment_type: p.payment_type,
+          })),
+          inspections: bundle.inspections.map((i) => ({ status: i.status })),
+        });
+        if (risk.level === 'low') return null;
+        const cls =
+          risk.level === 'high'
+            ? 'border-red-200 bg-red-50 text-red-800'
+            : 'border-amber-200 bg-amber-50 text-amber-900';
+        return (
+          <div className={`mt-6 rounded-lg border px-4 py-3 text-sm ${cls}`}>
+            <div className="font-semibold">
+              {risk.level === 'high' ? '⛔ Risque élevé' : '⚠️ Risque à surveiller'} (score {risk.score}/100)
+            </div>
+            <ul className="mt-1 list-disc list-inside text-xs space-y-0.5">
+              {risk.signals.map((s) => (
+                <li key={s.code}>{s.label}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
+
       <TransactionCaseActions caseId={caseRow.id} onDone={() => setActionTick((t) => t + 1)} />
       <AssignPartnerPanel caseId={caseRow.id} onChanged={() => void refreshMeta()} />
 
@@ -508,21 +646,62 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
                   const isPartner = ['mechanic', 'broker', 'carrier', 'forwarder', 'logistician', 'investor'].includes(
                     p.role,
                   );
+                  const status = p.revoked_at ? 'revoked' : p.accepted_at ? 'accepted' : 'pending';
+                  const isMyPendingInvite = isPartner && p.user_id === currentUserId && status === 'pending';
+                  const badge =
+                    !isPartner
+                      ? null
+                      : status === 'accepted'
+                        ? { text: 'Accepté', cls: 'bg-green-100 text-green-800' }
+                        : status === 'revoked'
+                          ? { text: 'Révoqué', cls: 'bg-gray-100 text-gray-500' }
+                          : { text: 'En attente', cls: 'bg-amber-100 text-amber-800' };
                   return (
                     <li key={p.id} className="px-3 py-2 flex items-center justify-between gap-2">
                       <span className="font-medium text-gray-800">{p.role}</span>
                       <span className="flex items-center gap-2 min-w-0">
-                        <span className="text-gray-500 font-mono text-xs truncate">{p.user_id}</span>
-                        {isPartner && (
-                          <button
-                            type="button"
-                            title="Révoquer ce partenaire"
-                            disabled={revoking === p.id}
-                            onClick={() => void handleRevoke(p.id)}
-                            className="shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                        {badge && (
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.cls}`}
                           >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                            {badge.text}
+                          </span>
+                        )}
+                        <span className="text-gray-500 font-mono text-xs truncate">{p.user_id}</span>
+                        {isMyPendingInvite ? (
+                          <span className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              title="Accepter l’invitation"
+                              disabled={invAction === p.id}
+                              onClick={() => void handleInvitation(p.id, true)}
+                              className="rounded p-0.5 text-gray-400 transition hover:bg-green-50 hover:text-green-600 disabled:opacity-40"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Refuser l’invitation"
+                              disabled={invAction === p.id}
+                              onClick={() => void handleInvitation(p.id, false)}
+                              className="rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        ) : (
+                          isPartner &&
+                          status !== 'revoked' && (
+                            <button
+                              type="button"
+                              title="Révoquer ce partenaire"
+                              disabled={revoking === p.id}
+                              onClick={() => void handleRevoke(p.id)}
+                              className="shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )
                         )}
                       </span>
                     </li>

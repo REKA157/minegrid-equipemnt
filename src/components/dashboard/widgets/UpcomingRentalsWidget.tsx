@@ -21,38 +21,6 @@ interface UpcomingRentalsWidgetProps {
   onAction?: (action: string, data: any) => void;
 }
 
-const MOCK_RENTALS: Rental[] = [
-  {
-    id: 'r1', equipment: 'Excavatrice CAT 320', client: 'BTP Maroc SA',
-    clientPhone: '+212 5 22 34 56 78', location: 'Casablanca',
-    startDate: '2026-03-15', endDate: '2026-03-20', dailyRate: 9000,
-    status: 'confirmed', notes: 'Livraison à 7h sur chantier Hay Hassani',
-  },
-  {
-    id: 'r2', equipment: 'Chargeur frontal JCB 3CX', client: 'Construction Plus',
-    clientPhone: '+212 5 24 12 34 56', location: 'Rabat',
-    startDate: '2026-03-18', endDate: '2026-03-25', dailyRate: 5500,
-    status: 'confirmed',
-  },
-  {
-    id: 'r3', equipment: 'Bouteur Komatsu D6', client: 'Mines Atlas',
-    clientPhone: '+212 5 28 98 76 54', location: 'Agadir',
-    startDate: '2026-03-22', endDate: '2026-03-30', dailyRate: 12000,
-    status: 'pending', notes: 'En attente confirmation transport',
-  },
-  {
-    id: 'r4', equipment: 'Compacteur CAT CS56', client: 'Autoroutes du Maroc',
-    clientPhone: '+212 5 37 11 22 33', location: 'Tanger',
-    startDate: '2026-03-25', endDate: '2026-04-10', dailyRate: 7500,
-    status: 'pending',
-  },
-  {
-    id: 'r5', equipment: 'Grue mobile Liebherr LTM', client: 'Port de Casablanca',
-    location: 'Casablanca', startDate: '2026-03-14', endDate: '2026-03-16',
-    dailyRate: 25000, status: 'in_progress',
-  },
-];
-
 const STATUS_MAP = {
   confirmed: { label: 'Confirmé', color: 'text-green-700', bg: 'bg-green-50', dot: 'bg-green-500', Icon: CheckCircle },
   pending: { label: 'En attente', color: 'text-amber-700', bg: 'bg-amber-50', dot: 'bg-amber-500', Icon: AlertCircle },
@@ -76,8 +44,8 @@ function daysUntil(iso: string) {
 }
 
 export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: UpcomingRentalsWidgetProps) {
-  /** Données réelles : tableau vide affiche « aucune location » ; undefined → démo */
-  const rentals = data !== undefined && data !== null ? data : MOCK_RENTALS;
+  /** Anti-façade : données RÉELLES uniquement ; aucune location de démo. Liste vide -> état vide honnête. */
+  const rentals = data ?? [];
   const [selected, setSelected] = useState<string | null>(null);
   const { formatCurrency, madToDisplay, currentCurrency } = useWidgetMadCurrency();
 
@@ -116,6 +84,9 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
 
       {/* Timeline */}
       <div className="space-y-2">
+        {sortedRentals.length === 0 && (
+          <p className="py-4 text-center text-sm text-gray-500">Aucune location à venir.</p>
+        )}
         {sortedRentals.map((rental) => {
           const cfg = STATUS_MAP[rental.status];
           const days = daysBetween(rental.startDate, rental.endDate);

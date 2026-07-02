@@ -11,7 +11,6 @@ import {
   getUpcomingRentals,
 } from '../../../utils/enterpriseApi';
 import { getChartData } from './getChartData';
-import { mockData } from './mockData';
 import { iconMap } from './iconMap';
 import {
   DollarSign,
@@ -36,7 +35,7 @@ import { getEquipmentAvailabilityData } from './getEquipmentAvailabilityData';
 import { PreventiveMaintenanceWidget } from './PreventiveMaintenanceWidget';
 import { getMaintenanceData } from './getMaintenanceData';
 import DashboardSalesPerformanceScoreWidget from '../../../components/dashboard/widgets/SalesPerformanceScoreWidget';
-import { DailyActionsPriorityWidget } from '../../DailyActionsWidgetFixed';
+import DailyActionsPriorityWidget from '../../../components/dashboard/widgets/DailyActionsPriorityWidget';
 import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 
 export const WidgetComponent = ({
@@ -285,8 +284,9 @@ export const WidgetComponent = ({
             setData(result);
             break;
           default:
-            result = (mockData as any)[widget.dataSource] || null;
-            setData(result);
+            // Anti-façade : aucun mock de repli. dataSource non géré -> état vide honnête
+            // (le widget rend son absence de données ou « Type de widget non supporté »).
+            setData(null);
         }
       } catch (err: any) {
         setError(err.message);
@@ -437,8 +437,9 @@ export const WidgetComponent = ({
               case 'map':
                 return <MapWidget widget={widget} data={getMapData(widget.id)} />;
               case 'equipment':
-                console.log('[DEBUG] Rendu du widget equipment pour:', widget.id);
-                return <EquipmentAvailabilityWidget data={getEquipmentAvailabilityData(widget.id)} />;
+                // Donnée RÉELLE chargée plus haut via getEquipmentAvailability() (machines ×
+                // rentals × interventions), au lieu du mock à 3 engins inventés (anti-façade).
+                return <EquipmentAvailabilityWidget data={data} />;
               case 'maintenance':
                 console.log('[DEBUG] Rendu du widget maintenance pour:', widget.id);
                 return <PreventiveMaintenanceWidget data={getMaintenanceData(widget.id)} />;

@@ -96,6 +96,73 @@ export async function getContainerTrackingRows(): Promise<FreightContainerRow[]>
   }));
 }
 
+/**
+ * Surestaries / détention : conteneurs au-delà de la période de franchise au port.
+ * Coût = jours de dépassement × tarif/jour. Exposition = somme des coûts en cours.
+ * Enjeu financier n°1 du transitaire sur le marché Maroc/Afrique de l'Ouest.
+ */
+export type DemurrageItem = {
+  id: string;
+  container_number: string;
+  status: string;
+  port: string | null;
+  daysOver: number;
+  cost: number;
+  ratePerDay: number;
+  freeUntil: string | null;
+  returned: boolean;
+};
+
+export async function getDemurrageExposure() {
+  const rows = await supabaseCall<Array<Record<string, unknown>>>(
+    () =>
+      supabase
+        .from('freight_containers')
+        .select(
+          'id, container_number, status, next_port, last_port, arrival_date, free_days, demurrage_rate_per_day, returned_date',
+        )
+        .order('arrival_date', { ascending: true, nullsFirst: false }),
+    { label: 'getDemurrageExposure', fallback: [] },
+  );
+
+  const DAY = 1000 * 3600 * 24;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const items: DemurrageItem[] = rows
+    .map((r) => {
+      const arrival = r.arrival_date ? new Date(String(r.arrival_date)) : null;
+      if (!arrival) return null;
+      const freeDays = Number(r.free_days ?? 0);
+      const rate = Number(r.demurrage_rate_per_day ?? 0);
+      const returned = r.returned_date ? new Date(String(r.returned_date)) : null;
+      const freeUntil = new Date(arrival.getTime() + freeDays * DAY);
+      const endRef = returned ?? today;
+      const daysOver = Math.max(0, Math.floor((endRef.getTime() - freeUntil.getTime()) / DAY));
+      return {
+        id: String(r.id),
+        container_number: String(r.container_number || ''),
+        status: String(r.status || ''),
+        port: (r.next_port as string) || (r.last_port as string) || null,
+        daysOver,
+        cost: Math.round(daysOver * rate),
+        ratePerDay: rate,
+        freeUntil: freeUntil.toISOString().slice(0, 10),
+        returned: !!returned,
+      };
+    })
+    .filter((x): x is DemurrageItem => !!x);
+
+  const inDemurrage = items.filter((i) => i.daysOver > 0 && !i.returned);
+  return {
+    items: items.sort((a, b) => b.cost - a.cost),
+    inDemurrageCount: inDemurrage.length,
+    totalCost: inDemurrage.reduce((s, i) => s + i.cost, 0),
+    maxDaysOver: inDemurrage.reduce((m, i) => Math.max(m, i.daysOver), 0),
+    watchCount: items.filter((i) => i.daysOver === 0 && !i.returned).length,
+  };
+}
+
 /** Séries mensuelles TEU Import / Export + données graphique */
 export async function getImportExportStats() {
   const rows = await supabaseCall<Array<{ period_month: string; direction: string; teu_count: number; value_mad: number }>>(

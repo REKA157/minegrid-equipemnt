@@ -6,6 +6,7 @@ import {
 import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
 import { getDashboardStats } from '../../../utils/api';
 import { RealPipelineService } from '../../../services/realPipelineService';
+import { prospectKindOfLead, prospectKindLabel } from '../../../utils/monitorProspectMatch';
 import { toast } from '../../../utils/toast';
 import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 import { getRentalPipelineLeads } from '../../../utils/enterpriseApi/rentals';
@@ -55,6 +56,7 @@ const SalesPipelineWidget = ({
   // Correction : initialiser leadsData une seule fois
   const [leadsData, setLeadsData] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'timeline'>('list');
+  const [prospectFilter, setProspectFilter] = useState<'all' | 'winner' | 'buyer'>('all');
   const [showPipelineAlertsOpen, setShowPipelineAlertsOpen] = useState(false);
   const [showConversionRates, setShowConversionRates] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -113,6 +115,7 @@ const SalesPipelineWidget = ({
         lastContact: lead.last_contact,
         notes: lead.notes || '',
         source: lead.source || 'manual',
+        prospectKind: prospectKindOfLead(lead), // lauréat / maître d'ouvrage (AO) — badge + filtre
         transaction_case_id: lead.transaction_case_id ?? null,
         contact: {
           name: lead.contact_name || 'Non spécifié',
@@ -288,6 +291,9 @@ const SalesPipelineWidget = ({
     if (selectedStage) {
       sorted = sorted.filter(lead => lead.stage === selectedStage);
     }
+    if (prospectFilter !== 'all') {
+      sorted = sorted.filter((lead) => lead.prospectKind === prospectFilter);
+    }
     switch (sortBy) {
       case 'value':
         return sorted.sort((a, b) => (b.value || 0) - (a.value || 0));
@@ -298,7 +304,7 @@ const SalesPipelineWidget = ({
       default:
         return sorted;
     }
-  }, [leadsData, selectedStage, sortBy]);
+  }, [leadsData, selectedStage, sortBy, prospectFilter]);
 
   const getStageColor = (stage: string) => {
     const colors = {
@@ -843,7 +849,7 @@ const SalesPipelineWidget = ({
       {/* En-tête avec bouton d'ajout */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-semibold text-orange-900">Pipeline Commercial</h3>
+          <h3 className="text-lg font-semibold text-orange-900">{variant === 'rental' ? 'Pipeline de location' : 'Pipeline Commercial'}</h3>
           <p className="text-sm text-orange-600">
             {loading ? 'Chargement des données réelles...' : error ? 'Erreur de connexion' : realData ? 'Données en temps réel' : 'Aucune donnée'}
           </p>
@@ -890,6 +896,27 @@ const SalesPipelineWidget = ({
               Timeline
             </button>
           </div>
+
+          {/* Filtre par rôle AO (lauréat / maître d'ouvrage) — visible s'il y a des prospects AO. */}
+          {leadsData.some((l) => l.prospectKind && l.prospectKind !== 'unknown') && (
+            <div className="flex bg-gray-100 rounded-md p-0.5 gap-0.5 flex-wrap" title="Filtrer les prospects d'appels d'offres par rôle">
+              {([
+                ['all', 'Tous'],
+                ['winner', 'Lauréats'],
+                ['buyer', "M. d'ouvrage"],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setProspectFilter(key)}
+                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                    prospectFilter === key ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <button
             onClick={handleAddNewLead}
@@ -1140,6 +1167,22 @@ const SalesPipelineWidget = ({
                       <span className={`text-xs px-2 py-1 rounded-full ${getPriorityColor(lead.priority)}`}>
                         {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}
                       </span>
+                      {prospectKindLabel(lead.prospectKind) && (
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            lead.prospectKind === 'winner'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-sky-100 text-sky-800'
+                          }`}
+                          title={
+                            lead.prospectKind === 'winner'
+                              ? 'Lauréat du marché — angle négociation'
+                              : "Maître d'ouvrage — angle soumission"
+                          }
+                        >
+                          {prospectKindLabel(lead.prospectKind)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">

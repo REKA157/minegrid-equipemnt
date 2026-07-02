@@ -175,28 +175,11 @@ class AIWidgetService {
     return [];
   }
 
-  private async buildLocalSalesPredictions(userId: string): Promise<AIPrediction[]> {
-    const salesData = await this.getSellerMachines(userId);
-    return [
-      {
-        metric: 'Ventes mensuelles',
-        currentValue: this.calculateCurrentSales(salesData),
-        predictedValue: this.predictNextMonthSales(salesData),
-        confidence: 0.85,
-        timeframe: '30d',
-        trend: 'up',
-        factors: ['Saisonnalité positive', 'Nouveaux prospects', 'Optimisation SEO'],
-      },
-      {
-        metric: 'Taux de conversion',
-        currentValue: this.calculateConversionRate(salesData),
-        predictedValue: this.predictConversionRate(salesData),
-        confidence: 0.78,
-        timeframe: '30d',
-        trend: 'stable',
-        factors: ['Qualité des leads', 'Prix compétitifs', 'Support client'],
-      },
-    ];
+  private async buildLocalSalesPredictions(_userId: string): Promise<AIPrediction[]> {
+    // Anti-façade : aucune prédiction fabriquée (confiance/tendance/facteurs inventés).
+    // Quand le service IA (monitor) est indisponible, on ne fabrique RIEN -> le widget
+    // affiche son état honnête « aucune donnée de prévision ».
+    return [];
   }
 
   // 🧠 ANALYSE PRÉDICTIVE DES VENTES
@@ -230,23 +213,8 @@ class AIWidgetService {
     }
   }
 
-  private async buildLocalSalesBenchmark(userId: string): Promise<AISalesBenchmark> {
-    const machines = await this.getSellerMachines(userId);
-    const count = machines.length;
-    const yourPerformance = count * 15000;
-    return {
-      sector: 'Équipements BTP',
-      average: 65000,
-      top25: 85000,
-      yourPerformance,
-      currency: 'MAD',
-      note:
-        'Estimation alignée sur le référentiel interne (annonces actives × base mensuelle indicative).',
-    };
-  }
-
   async getSalesBenchmarkWithSource(userId: string): Promise<{
-    data: AISalesBenchmark;
+    data: AISalesBenchmark | null;
     source: 'monitor' | 'local';
   }> {
     try {
@@ -270,13 +238,15 @@ class AIWidgetService {
         };
       }
       return {
-        data: await this.buildLocalSalesBenchmark(userId),
+        // Anti-façade : pas de benchmark secteur fabriqué hors monitor (moyenne/top25 inventés).
+        data: null,
         source: 'local',
       };
     } catch (error) {
       console.error('Erreur benchmark ventes:', error);
       return {
-        data: await this.buildLocalSalesBenchmark(userId),
+        // Anti-façade : pas de benchmark secteur fabriqué hors monitor (moyenne/top25 inventés).
+        data: null,
         source: 'local',
       };
     }
@@ -424,59 +394,9 @@ class AIWidgetService {
       const remote = await this.callAiEndpoint('/ai/widgets/insights');
       if (remote) return remote as AIInsight[];
 
-      const userData = await this.getSellerMachines(userId);
-
-      const insights: AIInsight[] = [];
-
-      // Analyse des patterns de vente
-      const salesPatterns = this.analyzeSalesPatterns(userData);
-      if (salesPatterns.bestPerformingCategory) {
-        insights.push({
-          id: 'best_category',
-          type: 'recommendation',
-          title: 'Catégorie performante détectée',
-          description: `Les ${salesPatterns.bestPerformingCategory} génèrent ${salesPatterns.performanceGain}% plus de vues`,
-          confidence: 0.92,
-          priority: 'high',
-          action: 'Augmenter l\'inventaire de cette catégorie',
-          data: salesPatterns,
-          createdAt: new Date()
-        });
-      }
-
-      // Détection d'opportunités
-      const opportunities = this.detectOpportunities(userData);
-      if (opportunities.hasOpportunity) {
-        insights.push({
-          id: 'market_opportunity',
-          type: 'prediction',
-          title: 'Opportunité de marché identifiée',
-          description: opportunities.description,
-          confidence: 0.78,
-          priority: 'medium',
-          action: 'Analyser la concurrence et ajuster les prix',
-          data: opportunities,
-          createdAt: new Date()
-        });
-      }
-
-      // Alertes de performance
-      const alerts = this.generatePerformanceAlerts(userData);
-      alerts.forEach(alert => {
-        insights.push({
-          id: `alert_${Date.now()}`,
-          type: 'alert',
-          title: alert.title,
-          description: alert.description,
-          confidence: alert.confidence,
-          priority: alert.priority,
-          action: alert.action,
-          data: alert.data,
-          createdAt: new Date()
-        });
-      });
-
-      return insights;
+      // Anti-façade : hors monitor IA, AUCUN insight fabriqué (catégorie/gain/confiance
+      // inventés). Le chemin monitor ci-dessus reste actif pour la roadmap ; sinon [].
+      return [];
     } catch (error) {
       console.error('Erreur insights IA:', error);
       return [];
@@ -517,34 +437,10 @@ class AIWidgetService {
         });
       }
 
-      // Garantir un socle d'optimisations affichables pour éviter les widgets vides.
-      if (suggestions.length === 0) {
-        suggestions.push(
-          {
-            type: 'seo_optimization',
-            title: 'Optimiser les titres des annonces',
-            description: 'Des titres plus précis augmentent la visibilite dans les recherches.',
-            actions: [
-              'Inclure marque, modele et annee',
-              'Ajouter la localisation dans le titre',
-              'Eviter les titres generiques',
-            ],
-            expectedImpact: 'Amelioration de la visibilite de 15-25%',
-          },
-          {
-            type: 'content_optimization',
-            title: 'Completer les descriptions techniques',
-            description: 'Les annonces detaillees convertissent mieux les visiteurs en contacts.',
-            actions: [
-              'Ajouter specs principales (heures, etat, accessoires)',
-              'Preciser disponibilite et delai de livraison',
-              'Ajouter un appel a l action clair',
-            ],
-            expectedImpact: 'Hausse du taux de contact de 10-15%',
-          }
-        );
-      }
-
+      // Anti-façade : PAS de socle d'optimisations génériques aux impacts inventés pour
+      // « remplir » le widget. Si aucune optimisation réelle (prix/SEO) n'est détectée sur
+      // les annonces du vendeur, on renvoie [] -> le widget affiche son état vide honnête
+      // (« Aucune optimisation suggérée »).
       return suggestions;
     } catch (error) {
       console.error('Erreur suggestions optimisation:', error);
@@ -603,52 +499,6 @@ class AIWidgetService {
       pendingLeads: Math.floor(data.length * 0.3),
       conversionRate: 0.12
     };
-  }
-
-  private analyzeSalesPatterns(data: any[]): any {
-    // Simulation d'analyse des patterns de vente
-    return {
-      bestPerformingCategory: 'Excavatrices',
-      performanceGain: 25,
-      trend: 'up'
-    };
-  }
-
-  private detectOpportunities(data: any[]): any {
-    // Simulation de détection d'opportunités
-    return {
-      hasOpportunity: data.length > 3,
-      description: 'Marché en croissance détecté pour les équipements de construction',
-      marketGrowth: 0.18
-    };
-  }
-
-  private generatePerformanceAlerts(data: any[]): any[] {
-    const alerts = [];
-
-    if (data.length === 0) {
-      alerts.push({
-        title: 'Aucune annonce active',
-        description: 'Créez votre première annonce pour commencer à vendre',
-        confidence: 1.0,
-        priority: 'critical',
-        action: 'Créer une annonce',
-        data: { type: 'no_listings' }
-      });
-    }
-
-    if (data.length > 10) {
-      alerts.push({
-        title: 'Inventaire important',
-        description: 'Vous avez beaucoup d\'équipements en stock. Considérez des promotions.',
-        confidence: 0.85,
-        priority: 'medium',
-        action: 'Créer des promotions',
-        data: { type: 'high_inventory' }
-      });
-    }
-
-    return alerts;
   }
 
   private suggestPriceOptimization(data: any[]): any {
