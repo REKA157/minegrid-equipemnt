@@ -8,6 +8,7 @@ import AlertsPanel from '../components/global-monitor/AlertsPanel';
 import type { LayerKey } from '../components/global-monitor/LayersToggle';
 import type { MonitorProject, MonitorProjectDetail, ProjectFilters, ProjectContact } from '../types/monitor';
 import { RealPipelineService } from '../services/realPipelineService';
+import { summarizeBudgets } from '../utils/monitorBudget';
 import { toast } from '../utils/toast';
 import { supabaseClient } from '../utils/supabaseClient';
 import {
@@ -359,8 +360,10 @@ export default function GlobalMonitor() {
   }, [selectedDetail]);
 
   const stats = useMemo(() => {
-    const totalBudget = projects.reduce((sum, p) => sum + (p.budget_usd || 0), 0);
-    return { count: total, totalBudget };
+    // Parsing robuste : exclut les budgets non exploitables (null, "N/A", chaînes)
+    // pour ne JAMAIS afficher NaN. summarizeBudgets renvoie toujours un nombre fini.
+    const budget = summarizeBudgets(projects);
+    return { count: total, ...budget };
   }, [projects, total]);
 
   return (
@@ -373,7 +376,10 @@ export default function GlobalMonitor() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">Minegrid Global Monitor</h1>
-              <p className="text-xs text-gray-500">{stats.count} projets · Budget total ${Math.round(stats.totalBudget / 1e6)}M</p>
+              <p className="text-xs text-gray-500">
+                {stats.count} projets · Budget total ${Math.round(stats.totalUsd / 1e6)}M USD
+                {stats.withoutBudgetCount > 0 ? ` · ${stats.withoutBudgetCount} sans budget exploitable` : ''}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
