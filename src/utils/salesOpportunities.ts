@@ -34,6 +34,7 @@ export interface SalesOpportunity {
   budgetUsd: number | null;
   daysToDeadline: number | null; // via end_date ; null si inconnu ; négatif si passé
   kind: ProspectKind; // rôle du contact principal (maître d'ouvrage / lauréat)
+  primaryContact: ProjectContact | null; // contact le plus actionnable (pour créer un prospect)
   angle: ProspectAngle;
   score: number; // 0..100
   scoreReasons: string[];
@@ -70,11 +71,15 @@ function roleScore(kind: ProspectKind): number {
 }
 
 /** Choisit le contact le plus actionnable : maître d'ouvrage prioritaire, sinon lauréat, sinon 1er. */
-function primaryContactKind(contacts: ProjectContact[] | null | undefined): ProspectKind {
-  const kinds = (contacts ?? []).map((c) => classifyRole(c.role));
-  if (kinds.includes('buyer')) return 'buyer';
-  if (kinds.includes('winner')) return 'winner';
-  return 'unknown';
+function pickPrimaryContact(
+  contacts: ProjectContact[] | null | undefined,
+): { contact: ProjectContact | null; kind: ProspectKind } {
+  const list = contacts ?? [];
+  const buyer = list.find((c) => classifyRole(c.role) === 'buyer');
+  if (buyer) return { contact: buyer, kind: 'buyer' };
+  const winner = list.find((c) => classifyRole(c.role) === 'winner');
+  if (winner) return { contact: winner, kind: 'winner' };
+  return { contact: list[0] ?? null, kind: 'unknown' };
 }
 
 function daysBetween(fromMs: number, dateStr: string | null): number | null {
@@ -106,7 +111,7 @@ export function rankSalesOpportunities(
     const coverage = match.needsTotal ? match.needsCovered / match.needsTotal : 0;
     const budgetUsd = parseBudgetUsd(p.budget_usd);
     const daysToDeadline = daysBetween(now, p.end_date);
-    const kind = primaryContactKind(p.contacts);
+    const { contact: primaryContact, kind } = pickPrimaryContact(p.contacts);
     const angle = prospectAngle(kind);
 
     const sCoverage = Math.round(coverage * 50);
@@ -130,6 +135,7 @@ export function rankSalesOpportunities(
       budgetUsd,
       daysToDeadline,
       kind,
+      primaryContact,
       angle,
       score,
       scoreReasons: reasons,
