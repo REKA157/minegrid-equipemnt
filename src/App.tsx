@@ -86,6 +86,7 @@ const ApiDocs = lazy(() => import('./pages/ApiDocs'));
 const PrioritySupport = lazy(() => import('./pages/PrioritySupport'));
 const MultiUserManagement = lazy(() => import('./pages/MultiUserManagement'));
 const GlobalMonitor = lazy(() => import('./pages/GlobalMonitor'));
+const SalesOpportunities = lazy(() => import('./pages/SalesOpportunities'));
 const SourcesAdmin = lazy(() => import('./pages/SourcesAdmin'));
 const DemoEntrepriseAccess = lazy(() => import('./pages/DemoEntrepriseAccess'));
 const LegalStaticPage = lazy(() => import('./pages/LegalStaticPage'));
@@ -131,6 +132,7 @@ const APP_ONLY_ROUTES = new Set<string>([
   'priority-support',
   'multi-user-management',
   'global-monitor',
+  'opportunites-vente',
   'admin-sources',
   'leads',
   'dossiers',
@@ -308,6 +310,13 @@ function AppContent() {
         return (
           <ProtectedRoute>
             <GlobalMonitor />
+          </ProtectedRoute>
+        );
+
+      case 'opportunites-vente':
+        return (
+          <ProtectedRoute>
+            <SalesOpportunities />
           </ProtectedRoute>
         );
 
