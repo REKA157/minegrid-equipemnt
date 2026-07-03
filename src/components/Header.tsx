@@ -337,6 +337,13 @@ const Header = () => {
               Global Monitor
             </a>
 
+            <a
+              href="#opportunites-vente"
+              className="text-gray-700 hover:text-primary-600 font-semibold"
+            >
+              Opportunités
+            </a>
+
             <a href="#blog" className="text-gray-700 hover:text-primary-600">Blog</a>
             <a href="#contact" className="text-gray-700 hover:text-primary-600">Contact</a>
           </nav>
@@ -523,6 +530,13 @@ const Header = () => {
             >
               <Globe className="h-4 w-4" />
               Global Monitor
+            </a>
+            <a
+              href="#opportunites-vente"
+              onClick={closeMobileMenu}
+              className="py-2 text-gray-800 font-semibold border-b border-gray-100"
+            >
+              Opportunités
             </a>
             <a href="#blog" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 border-b border-gray-100">
               Blog
