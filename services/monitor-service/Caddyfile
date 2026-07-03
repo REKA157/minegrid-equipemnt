@@ -1,0 +1,8 @@
+# Reverse proxy HTTPS pour le monitor-service.
+# Caddy obtient et renouvelle AUTOMATIQUEMENT le certificat TLS (Let's Encrypt)
+# pour MONITOR_DOMAIN. L'API interne (monitor-api:8000) n'est jamais exposée en clair.
+{$MONITOR_DOMAIN} {
+	encode gzip
+	tls {$ACME_EMAIL}
+	reverse_proxy monitor-api:8000
+}

@@ -1,0 +1,70 @@
+# =====================================================================
+# PRODUCTION — Postgres NON exposé + HTTPS automatique (Caddy / Let's Encrypt).
+# =====================================================================
+# Usage :
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Prérequis dans .env :
+#   MONITOR_DOMAIN=monitor.votre-domaine.ma     (sous-domaine pointant vers l'IP du VPS)
+#   ACME_EMAIL=vous@votre-domaine.ma            (pour le certificat Let's Encrypt)
+#   POSTGRES_PASSWORD=<un mot de passe FORT>     (recommandé ; défaut = 'monitor')
+#   + toutes les variables Supabase / ALLOWED_ORIGINS / ADMIN_TOKEN (voir .env.example)
+#
+# ⚠️ NE PAS utiliser docker-compose.yml en production : il publie Postgres (5432)
+#    sur Internet. Ce fichier-ci garde Postgres PRIVÉ et met l'API derrière HTTPS.
+# =====================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: monitor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-monitor}
+      POSTGRES_DB: monitor_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitor -d monitor_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    # Aucun `ports:` -> Postgres reste PRIVÉ (réseau Docker interne uniquement).
+
+  monitor-api:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://monitor:${POSTGRES_PASSWORD:-monitor}@postgres:5432/monitor_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./sources.yaml:/app/sources.yaml:ro
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    restart: unless-stopped
+    # Aucun `ports:` -> l'API n'est joignable QUE par Caddy (donc uniquement en HTTPS).
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - monitor-api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      MONITOR_DOMAIN: ${MONITOR_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

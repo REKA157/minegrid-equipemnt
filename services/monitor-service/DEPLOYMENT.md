@@ -51,6 +51,13 @@ Renseigne au **minimum** (le reste peut rester par défaut) :
 
 ## Étape 3 — Lancer
 
+> ℹ️ **Deux modes** :
+> - **Local / test** : `docker-compose.yml` (expose l'API sur `:8000`, et Postgres sur `:5432`).
+> - **Production** : `docker-compose.prod.yml` — Postgres **privé** (non exposé) + **HTTPS
+>   automatique** (voir Étape 5-bis). **À utiliser dès que le serveur est sur Internet.**
+
+Local / test :
+
 ```bash
 docker-compose up -d --build
 ```
@@ -95,6 +102,36 @@ l'enrichissement LLM nécessite `LLM_PROVIDER=openai` + `LLM_API_KEY`.)
 C'est fait : le Global Monitor affiche désormais de **vrais appels d'offres**.
 
 ---
+
+## Étape 5-bis — Production : HTTPS + Postgres privé (en 1 commande)
+
+En production, **n'utilise pas** `docker-compose up` (il expose Postgres sur Internet).
+Utilise le mode prod fourni : **Postgres privé** + **HTTPS automatique** (certificat
+Let's Encrypt géré par Caddy, renouvelé tout seul).
+
+1. **DNS** : crée un enregistrement **A** `monitor.ton-domaine.ma` → l'**IP de ton VPS**.
+2. Dans `.env`, renseigne :
+   ```
+   MONITOR_DOMAIN=monitor.ton-domaine.ma
+   ACME_EMAIL=toi@ton-domaine.ma
+   POSTGRES_PASSWORD=<un mot de passe long et aléatoire>
+   ALLOWED_ORIGINS=https://www.minegrid.ma,https://minegrid.ma
+   ```
+3. Ouvre les ports **80 et 443** du VPS (firewall / security group).
+4. Lance :
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+5. Vérifie (depuis n'importe où) :
+   ```bash
+   curl https://monitor.ton-domaine.ma/health      # doit répondre OK, en HTTPS
+   ```
+
+Puis à l'Étape 5 ci-dessus, mets `VITE_MONITOR_API_URL=https://monitor.ton-domaine.ma`
+et rebuild le front.
+
+> Le port `8000` n'est plus exposé directement : tout passe par Caddy en HTTPS. Postgres
+> n'est joignable que par l'API, sur le réseau Docker interne (jamais depuis Internet).
 
 ## Sécurité & bonnes pratiques
 
