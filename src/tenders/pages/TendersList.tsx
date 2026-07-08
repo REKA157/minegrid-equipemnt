@@ -58,11 +58,25 @@ export function nextAction(t: Tender): { label: string; to: string } {
 export default function TendersList() {
   const navigate = useNavigate();
   const tenders = useTendersStore((s) => s.tenders);
+  const currentUserName = useTendersStore((s) => s.settings.currentUserName);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenderStatus | 'tous' | 'actifs'>('actifs');
+  const [mineOnly, setMineOnly] = useState(false);
+
+  // Dossiers où l'utilisateur courant est affecté (rédacteur du dossier, ou
+  // responsable/assigné d'une exigence ou d'une tâche).
+  const isMine = (t: (typeof tenders)[number]): boolean => {
+    const me = currentUserName.trim().toLowerCase();
+    if (!me) return false;
+    if ((t.leadWriter ?? '').trim().toLowerCase() === me) return true;
+    if (t.requirements.some((r) => r.responsible.trim().toLowerCase() === me)) return true;
+    return t.tasks.some((tk) => tk.assignee.trim().toLowerCase() === me);
+  };
+  const mineCount = tenders.filter(isMine).length;
 
   const filtered = useMemo(() => {
     let list = [...tenders];
+    if (mineOnly) list = list.filter(isMine);
     if (statusFilter === 'actifs') {
       list = list.filter((t) => !['gagne', 'perdu', 'abandonne'].includes(t.status));
     } else if (statusFilter !== 'tous') {
@@ -78,7 +92,8 @@ export default function TendersList() {
       );
     }
     return list.sort((a, b) => daysUntil(a.deadline) - daysUntil(b.deadline));
-  }, [tenders, query, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenders, query, statusFilter, mineOnly, currentUserName]);
 
   return (
     <div>
@@ -117,6 +132,18 @@ export default function TendersList() {
             ))}
           </Select>
         </div>
+        <button
+          type="button"
+          onClick={() => setMineOnly((v) => !v)}
+          className={`shrink-0 whitespace-nowrap rounded-lg border px-3.5 py-2 text-sm font-medium ${
+            mineOnly
+              ? 'border-primary-600 bg-primary-600 text-white'
+              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+          title="N'afficher que les dossiers où je suis affecté (rédacteur, responsable ou assigné)"
+        >
+          Mes affectations ({mineCount})
+        </button>
       </div>
 
       {filtered.length === 0 ? (

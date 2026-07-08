@@ -33,14 +33,20 @@ import DocumentEditorPage from './pages/DocumentEditorPage';
 import LibraryPage from './pages/LibraryPage';
 import CompanyPage from './pages/CompanyPage';
 import SettingsPage from './pages/SettingsPage';
+import { useTendersSync } from './store/tendersSync';
+import { isTendersSharedConfigured } from '../utils/api/tendersWorkspace';
 
 export default function TendersApp() {
   const { segments } = useRouteParams();
   const seedIfNeeded = useTendersStore((s) => s.seedIfNeeded);
 
-  // Injecte les données de démonstration au premier lancement.
+  // Synchronise l'espace de travail avec la société (opt-in ; no-op en local).
+  useTendersSync();
+
+  // Injecte les données de démonstration au premier lancement — SAUF en mode
+  // partagé (la synchro charge les vraies données de la société).
   useEffect(() => {
-    seedIfNeeded();
+    if (!isTendersSharedConfigured()) seedIfNeeded();
   }, [seedIfNeeded]);
 
   const sub = segments[1] ?? '';

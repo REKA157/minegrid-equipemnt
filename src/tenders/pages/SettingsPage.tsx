@@ -6,9 +6,10 @@
  */
 
 import React, { useState } from 'react';
-import { Bot, PlugZap, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { Bot, PlugZap, RefreshCcw, ShieldCheck, Users } from 'lucide-react';
 import { useTendersStore } from '../store/tendersStore';
 import { isAiConnected, pingAi } from '../ai/aiService';
+import { isTendersSharedConfigured } from '../../utils/api/tendersWorkspace';
 import {
   ConfirmDialog,
   Field,
@@ -165,8 +166,58 @@ export default function SettingsPage() {
         </SectionCard>
 
         <SectionCard
+          title="Collaboration d'équipe (partage)"
+          hint="Partager les dossiers entre l'admin et les salariés via votre base Supabase."
+        >
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              isTendersSharedConfigured()
+                ? 'border-green-200 bg-green-50 text-green-900'
+                : 'border-gray-200 bg-gray-50 text-gray-700'
+            }`}
+          >
+            <Users className="mr-1.5 inline h-4 w-4" />
+            {isTendersSharedConfigured() ? (
+              <>Partage d'équipe activé — les dossiers sont synchronisés avec votre société (si vous êtes connecté à une organisation).</>
+            ) : (
+              <>
+                <strong>Mode local (par défaut).</strong> Chaque navigateur a ses propres dossiers.
+                Activez le partage pour que l'admin affecte des AO et que les salariés les voient
+                sur leur poste.
+              </>
+            )}
+          </div>
+          <div className="mt-3 text-sm text-gray-600">
+            <p className="mb-2 font-medium text-gray-800">Activer le partage d'équipe (une seule fois) :</p>
+            <ol className="mb-3 list-inside list-decimal space-y-1.5">
+              <li>
+                Déployer la migration de base de données (crée l'espace de travail partagé) :
+                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
+{`supabase db push`}
+                </pre>
+                <span className="text-xs text-gray-400">
+                  (applique <code>supabase/migrations/20260708160000_teamE_tender_workspace.sql</code>)
+                </span>
+              </li>
+              <li>
+                Activer côté application dans <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.env.local</code>, puis redémarrer :
+                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
+{`VITE_TENDERS_SHARED=true`}
+                </pre>
+              </li>
+            </ol>
+            <p className="text-xs text-gray-400">
+              Le partage réutilise votre système d'équipe existant (invitations, rôles, sécurité
+              RLS). Chaque salarié doit être membre de la société (via un lien d'invitation) et
+              connecté. Les affectations (rédacteur, responsable) deviennent visibles par toute
+              l'équipe. En l'absence de connexion, l'app retombe automatiquement en mode local.
+            </p>
+          </div>
+        </SectionCard>
+
+        <SectionCard
           title="Données"
-          hint="Les données sont stockées localement dans votre navigateur (aucun envoi externe)."
+          hint="En mode local, les données sont dans votre navigateur. En mode partagé, dans votre société (Supabase)."
         >
           <p className="text-sm text-gray-600">
             {tenders.length} appel(s) d'offres · {documents.length} document(s) généré(s).
