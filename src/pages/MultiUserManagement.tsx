@@ -28,15 +28,16 @@ import {
   Check,
   Link2
 } from 'lucide-react';
-import { 
-  createUserAccount, 
-  inviteUser, 
-  getUserInvitations, 
+import {
+  inviteUser,
+  getUserInvitations,
   cancelInvitation,
-  type UserInvitation 
+  type UserInvitation,
 } from '../utils/userManagement';
 import { setupUserInvitationsTable } from '../utils/setupUserInvitations';
 import { getOrgMembers, type OrgMember, type OrgRole } from '../utils/api/organization';
+import { useSubscription } from '../hooks/useSubscription';
+import { hasEnterprise } from '../utils/api/subscription';
 import { toast } from '../utils/toast';
 interface TeamMember {
   id: string;
@@ -93,7 +94,10 @@ const MultiUserManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [hasEnterpriseService, setHasEnterpriseService] = useState(false);
+  // Bandeau « démonstration » : basé sur l'abonnement SERVEUR (Phase 5). Un
+  // propriétaire OU un membre invité d'une société entreprise le voit disparaître.
+  const { subscription, isLoading: subLoading } = useSubscription();
+  const hasEnterpriseService = hasEnterprise(subscription);
   const [isLoading, setIsLoading] = useState(true);
   
   // États pour la gestion des invitations
@@ -135,31 +139,11 @@ const MultiUserManagement: React.FC = () => {
     { id: 'support', name: 'Support prioritaire', description: 'Accès au support technique' }
   ];
 
-  // Vérifier si l'utilisateur a le service entreprise
+  // (Legacy) l'ancien check localStorage a été remplacé par useSubscription() —
+  // l'état enterprise vient désormais du serveur (Phase 5, avec héritage société).
   useEffect(() => {
     const checkEnterpriseService = () => {
-      try {
-        // Vérifier dans localStorage
-        const userServices = localStorage.getItem('userServices');
-        const userSubscription = localStorage.getItem('userSubscription');
-        const enterpriseDashboardConfigured = localStorage.getItem('enterpriseDashboardConfigured');
-        
-        // Vérifier si l'utilisateur a le service entreprise ou une configuration dashboard
-        const hasEnterprise = userServices?.includes('enterprise') || 
-                             userSubscription === 'enterprise' ||
-                             localStorage.getItem('enterpriseService') === 'true' ||
-                             enterpriseDashboardConfigured === 'true';
-        
-        setHasEnterpriseService(!!hasEnterprise);
-        setIsLoading(false);
-        
-        // Ne plus rediriger automatiquement - permettre l'accès
-        console.log('✅ Accès à la gestion multi-utilisateur autorisé');
-      } catch (error) {
-        console.error('Erreur lors de la vérification du service:', error);
-        setHasEnterpriseService(true); // Autoriser l'accès par défaut
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     };
 
     checkEnterpriseService();
@@ -359,8 +343,10 @@ const MultiUserManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Bannière informative pour les utilisateurs sans service entreprise */}
-      {!hasEnterpriseService && (
+      {/* Bannière informative pour les utilisateurs sans service entreprise.
+          Ne s'affiche qu'une fois l'abonnement CHARGÉ et confirmé insuffisant,
+          pour éviter un flash « démonstration » au montage. */}
+      {!subLoading && !hasEnterpriseService && (
         <div className="bg-gradient-to-r from-orange-50 to-orange-100 border-l-4 border-orange-400 p-4 mb-6">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center">
@@ -446,24 +432,6 @@ const MultiUserManagement: React.FC = () => {
                      >
                        <UserPlus className="h-4 w-4 mr-2" />
                        Inviter un membre
-                     </button>
-                     <button
-                       onClick={async () => {
-                         const result = await createUserAccount({
-                           email: 'test-direct@example.com',
-                           name: 'Test Direct',
-                           role: 'viewer'
-                         });
-                         if (result.success) {
-                           toast('✅ Utilisateur créé avec succès !');
-                         } else {
-                           toast(`❌ Erreur: ${result.error}`);
-                         }
-                       }}
-                       className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                     >
-                       <UserPlus className="h-4 w-4 mr-2" />
-                       Test Création Directe
                      </button>
                    </div>
                  </div>
