@@ -26,9 +26,11 @@ begin
   end if;
 
   for r in
-    select user_id, coalesce(nullif(trim(company_name), ''), 'Ma société') as company_name
-    from public.pro_clients
-    where user_id is not null
+    select p.user_id, coalesce(nullif(trim(p.company_name), ''), 'Ma société') as company_name
+    from public.pro_clients p
+    where p.user_id is not null
+      -- Ignorer les pro_clients dont le compte n'existe pas (données de démo/orphelines).
+      and exists (select 1 from auth.users u where u.id = p.user_id)
   loop
     -- Déjà rattaché à une organisation ? On ne recrée pas.
     select organization_id into v_org
@@ -53,8 +55,11 @@ where l.organization_id is null
   and m.user_id = l.seller_id
   and m.role = 'owner';
 
--- Assignation par défaut = le vendeur (compte réel).
-update public.leads
-set assigned_to_user_id = seller_id
-where assigned_to_user_id is null
-  and seller_id is not null;
+-- Assignation par défaut = le vendeur, UNIQUEMENT si c'est un vrai compte
+-- (la clé étrangère assigned_to_user_id -> auth.users l'exige ; les leads dont
+--  le seller_id est un UUID de démo/orphelin restent simplement non assignés).
+update public.leads l
+set assigned_to_user_id = l.seller_id
+where l.assigned_to_user_id is null
+  and l.seller_id is not null
+  and exists (select 1 from auth.users u where u.id = l.seller_id);
