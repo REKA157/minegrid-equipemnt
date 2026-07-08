@@ -26,6 +26,8 @@ export interface TenderWorkspaceData {
   documents?: unknown[];
   library?: unknown[];
   company?: unknown;
+  /** Rôles attribués aux salariés (qui peut lire / rédiger / valider / administrer). */
+  roleAssignments?: unknown[];
 }
 
 export type WorkspaceLoad =

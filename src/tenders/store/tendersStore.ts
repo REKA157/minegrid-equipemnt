@@ -20,6 +20,7 @@ import type {
   HistoryEntry,
   LibraryItem,
   ResponseStrategy,
+  RoleAssignment,
   Tender,
   TenderRequirement,
   TenderSettings,
@@ -41,6 +42,8 @@ interface TendersState {
   library: LibraryItem[];
   company: CompanyProfile;
   settings: TenderSettings;
+  /** Rôles attribués aux membres de l'équipe (qui peut quoi). */
+  roleAssignments: RoleAssignment[];
 
   // --- Appels d'offres ---
   addTender: (tender: Tender) => void;
@@ -69,6 +72,10 @@ interface TendersState {
   updateCompany: (patch: Partial<CompanyProfile>) => void;
   updateSettings: (patch: Partial<TenderSettings>) => void;
 
+  // --- Équipe & rôles ---
+  upsertRoleAssignment: (assignment: RoleAssignment) => void;
+  removeRoleAssignment: (memberId: string) => void;
+
   // --- Données démo ---
   seedIfNeeded: () => void;
   resetDemoData: () => void;
@@ -91,6 +98,7 @@ export const useTendersStore = create<TendersState>()(
         currentUserRole: 'admin',
         aiApiConfigured: false,
       },
+      roleAssignments: [],
 
       addTender: (tender) =>
         set((s) => ({ tenders: [tender, ...s.tenders] })),
@@ -235,6 +243,23 @@ export const useTendersStore = create<TendersState>()(
 
       updateSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
+
+      upsertRoleAssignment: (assignment) =>
+        set((s) => {
+          const exists = s.roleAssignments.some((a) => a.memberId === assignment.memberId);
+          return {
+            roleAssignments: exists
+              ? s.roleAssignments.map((a) =>
+                  a.memberId === assignment.memberId ? { ...a, ...assignment } : a,
+                )
+              : [...s.roleAssignments, assignment],
+          };
+        }),
+
+      removeRoleAssignment: (memberId) =>
+        set((s) => ({
+          roleAssignments: s.roleAssignments.filter((a) => a.memberId !== memberId),
+        })),
 
       seedIfNeeded: () => {
         const s = get();

@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Bot, PlugZap, RefreshCcw, ShieldCheck, Users } from 'lucide-react';
+import { Bot, PlugZap, RefreshCcw, ShieldCheck, UserCog, Users } from 'lucide-react';
 import { useTendersStore } from '../store/tendersStore';
 import { isAiConnected, pingAi } from '../ai/aiService';
 import { isTendersSharedConfigured } from '../../utils/api/tendersWorkspace';
@@ -21,15 +21,23 @@ import {
   TextInput,
 } from '../components/ui';
 import type { UserRole } from '../types';
-import { ROLE_LABELS } from '../types';
+import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '../types';
 import { toast } from '../../utils/toast';
 
-const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  admin: 'Tous les droits : édition, validation, suppression, Base entreprise.',
-  redacteur: 'Crée et modifie les dossiers et documents ; ne peut pas valider ni supprimer.',
-  validateur: 'Valide les documents et acte les décisions go/no-go ; ne modifie pas le contenu.',
-  lecteur: 'Consultation seule de tous les écrans.',
-};
+/**
+ * Repli « configuration technique » : masque par défaut les commandes
+ * d'installation (à faire une seule fois) pour ne pas noyer l'utilisateur.
+ */
+function TechnicalDetails({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="mt-3 rounded-lg border border-gray-200 bg-gray-50/60">
+      <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-gray-700">
+        Configuration technique (installation — une seule fois)
+      </summary>
+      <div className="border-t border-gray-200 px-4 py-3 text-sm text-gray-600">{children}</div>
+    </details>
+  );
+}
 
 export default function SettingsPage() {
   const settings = useTendersStore((s) => s.settings);
@@ -56,7 +64,7 @@ export default function SettingsPage() {
       <PageHeader
         overline="Appels d'offres"
         title="Paramètres"
-        description="Utilisateur courant, rôles, connexion IA et données de démonstration."
+        description="Votre compte, connexion IA, partage d'équipe et données de démonstration."
       />
 
       <div className="space-y-6">
@@ -89,10 +97,13 @@ export default function SettingsPage() {
             <ShieldCheck className="mr-1.5 inline h-4 w-4 text-primary-500" />
             {ROLE_DESCRIPTIONS[settings.currentUserRole]}
           </div>
-          <p className="mt-2 text-xs text-gray-400">
-            En production multi-utilisateurs, les rôles seront portés par les comptes (Supabase
-            Auth + RLS) — l'interface et les droits resteront identiques.
-          </p>
+          <a
+            href="#appels-offres/equipe-roles"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
+          >
+            <UserCog className="h-4 w-4" />
+            Attribuer les rôles de vos salariés (lecteur, rédacteur, validateur…) →
+          </a>
         </SectionCard>
 
         <SectionCard title="Intelligence artificielle" hint="Analyse réelle des PDF du DCE, génération et amélioration de documents via l'API Claude.">
@@ -127,9 +138,9 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div className="mt-4 text-sm text-gray-600">
+          <TechnicalDetails>
             <p className="mb-2 font-medium text-gray-800">
-              Activer l'IA réelle (3 étapes, une seule fois) :
+              Activer l'IA réelle — 3 étapes :
             </p>
             <ol className="mb-3 list-inside list-decimal space-y-1.5 text-sm">
               <li>
@@ -162,7 +173,7 @@ export default function SettingsPage() {
               connectés (protège votre crédit API). En cas de panne ou de quota, l'application
               retombe automatiquement sur la simulation — personne n'est bloqué.
             </p>
-          </div>
+          </TechnicalDetails>
         </SectionCard>
 
         <SectionCard
@@ -187,8 +198,15 @@ export default function SettingsPage() {
               </>
             )}
           </div>
-          <div className="mt-3 text-sm text-gray-600">
-            <p className="mb-2 font-medium text-gray-800">Activer le partage d'équipe (une seule fois) :</p>
+          <a
+            href="#appels-offres/equipe-roles"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
+          >
+            <UserCog className="h-4 w-4" />
+            Attribuer un rôle à chaque salarié (Équipe & rôles) →
+          </a>
+          <TechnicalDetails>
+            <p className="mb-2 font-medium text-gray-800">Activer le partage d'équipe :</p>
             <ol className="mb-3 list-inside list-decimal space-y-1.5">
               <li>
                 Déployer la migration de base de données (crée l'espace de travail partagé) :
@@ -212,7 +230,7 @@ export default function SettingsPage() {
               connecté. Les affectations (rédacteur, responsable) deviennent visibles par toute
               l'équipe. En l'absence de connexion, l'app retombe automatiquement en mode local.
             </p>
-          </div>
+          </TechnicalDetails>
         </SectionCard>
 
         <SectionCard

@@ -553,6 +553,49 @@ export interface TenderSettings {
   aiApiConfigured: boolean;
 }
 
+/** Description courte de ce que chaque rôle peut faire (affichée dans l'UI). */
+export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  admin: 'Tous les droits : édition, validation, suppression, Base entreprise et attribution des rôles.',
+  redacteur: 'Crée et modifie les dossiers et documents ; ne peut pas valider ni supprimer.',
+  validateur: 'Valide les documents et acte les décisions go/no-go ; ne modifie pas le contenu.',
+  lecteur: 'Consultation seule de tous les écrans.',
+};
+
+/**
+ * Attribution d'un rôle du module à une personne de l'équipe.
+ * L'admin décide « qui peut quoi » : chaque salarié reçoit un rôle
+ * (lecteur / rédacteur / validateur / admin) qui pilote réellement ses
+ * droits (cf. `can`). En mode partagé, le salarié connecté hérite
+ * automatiquement de ce rôle sur son poste.
+ */
+export interface RoleAssignment {
+  /** user_id du compte société, ou id local si personne saisie manuellement. */
+  memberId: string;
+  name: string;
+  email?: string;
+  role: UserRole;
+  /** true = compte réel de la société ; false = personne ajoutée manuellement. */
+  fromOrg: boolean;
+}
+
+/**
+ * Rôle du module déduit par défaut du rôle « société » (organization_members :
+ * owner/admin/manager/viewer) tant que l'admin n'a pas attribué de rôle explicite.
+ */
+export function defaultTenderRole(orgRole?: string | null): UserRole {
+  switch (orgRole) {
+    case 'owner':
+    case 'admin':
+      return 'admin';
+    case 'manager':
+      return 'redacteur';
+    case 'viewer':
+      return 'lecteur';
+    default:
+      return 'lecteur';
+  }
+}
+
 /** Droits par rôle — volontairement simple mais réellement appliqué dans l'UI. */
 export function can(
   role: UserRole,

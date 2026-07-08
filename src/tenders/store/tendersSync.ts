@@ -22,7 +22,13 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { GeneratedDocument, LibraryItem, Tender, CompanyProfile } from '../types';
+import type {
+  GeneratedDocument,
+  LibraryItem,
+  Tender,
+  CompanyProfile,
+  RoleAssignment,
+} from '../types';
 import { useTendersStore } from './tendersStore';
 import {
   getCurrentUserId,
@@ -55,6 +61,13 @@ export function useTendersSync(): SyncStatus {
         const ws = res.data;
         // Renseigne l'identité de compte (pour « Mes affectations »).
         const userId = await getCurrentUserId();
+        const roleAssignments = (ws.roleAssignments as RoleAssignment[] | undefined) ?? [];
+        // HÉRITAGE DU RÔLE : si l'admin a attribué un rôle à mon compte, je
+        // l'applique automatiquement (mes droits reflètent ce que l'admin a
+        // décidé). Sinon, on garde le rôle courant (défaut admin en local).
+        const mine = userId
+          ? roleAssignments.find((a) => a.memberId === userId)
+          : undefined;
         hydrating.current = true;
         useTendersStore.setState((s) => ({
           seeded: true, // pas de démo en mode partagé
@@ -62,7 +75,12 @@ export function useTendersSync(): SyncStatus {
           documents: (ws.documents as GeneratedDocument[] | undefined) ?? [],
           library: (ws.library as LibraryItem[] | undefined) ?? s.library,
           company: (ws.company as CompanyProfile | undefined) ?? s.company,
-          settings: userId ? { ...s.settings, currentUserId: userId } : s.settings,
+          roleAssignments,
+          settings: {
+            ...s.settings,
+            ...(userId ? { currentUserId: userId } : {}),
+            ...(mine ? { currentUserRole: mine.role } : {}),
+          },
         }));
         hydrating.current = false;
         ready.current = true; // ARME la sauvegarde seulement maintenant
@@ -90,6 +108,7 @@ export function useTendersSync(): SyncStatus {
           documents: state.documents,
           library: state.library,
           company: state.company,
+          roleAssignments: state.roleAssignments,
         });
         setStatus(ok ? 'partage' : 'erreur');
       }, 1500);

@@ -15,7 +15,8 @@
  *   #appels-offres/document/:id       → éditeur de document
  *   #appels-offres/bibliotheque       → bibliothèque de contenus
  *   #appels-offres/entreprise         → base entreprise
- *   #appels-offres/parametres         → paramètres (rôles, IA, données)
+ *   #appels-offres/equipe-roles       → équipe & rôles (qui peut quoi)
+ *   #appels-offres/parametres         → paramètres (IA, partage, données)
  */
 
 import React, { useEffect } from 'react';
@@ -32,6 +33,7 @@ import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
 import LibraryPage from './pages/LibraryPage';
 import CompanyPage from './pages/CompanyPage';
+import TeamRolesPage from './pages/TeamRolesPage';
 import SettingsPage from './pages/SettingsPage';
 import { useTendersSync } from './store/tendersSync';
 import { isTendersSharedConfigured } from '../utils/api/tendersWorkspace';
@@ -72,6 +74,8 @@ export default function TendersApp() {
         return <LibraryPage />;
       case 'entreprise':
         return <CompanyPage />;
+      case 'equipe-roles':
+        return <TeamRolesPage />;
       case 'parametres':
         return <SettingsPage />;
       default:

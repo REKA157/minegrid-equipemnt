@@ -1,7 +1,7 @@
 /**
  * Shell du module Appels d'offres : sidebar de navigation + zone de contenu.
  *
- * La sidebar est volontairement courte (7 entrées) et chaque entrée porte
+ * La sidebar est volontairement courte (8 entrées) et chaque entrée porte
  * un sous-titre d'usage. Sur mobile/tablette, elle devient une barre
  * horizontale scrollable en haut.
  */
@@ -15,6 +15,7 @@ import {
   Library,
   ScrollText,
   Settings,
+  UserCog,
 } from 'lucide-react';
 import { useRouteParams } from '../../router';
 import { useTendersStore } from '../store/tendersStore';
@@ -37,7 +38,8 @@ const NAV: NavItem[] = [
   { segment: 'documents', label: 'Documents générés', sub: 'Tous vos documents', icon: FileText, match: ['document'] },
   { segment: 'bibliotheque', label: 'Bibliothèque', sub: 'Contenus réutilisables', icon: Library },
   { segment: 'entreprise', label: 'Base entreprise', sub: 'Vos infos, équipes, refs', icon: Building2 },
-  { segment: 'parametres', label: 'Paramètres', sub: 'Rôles, IA, données', icon: Settings },
+  { segment: 'equipe-roles', label: 'Équipe & rôles', sub: 'Qui peut quoi (droits)', icon: UserCog },
+  { segment: 'parametres', label: 'Paramètres', sub: 'IA, partage, données', icon: Settings },
 ];
 
 export function TendersShell({ children }: { children: React.ReactNode }) {
