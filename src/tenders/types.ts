@@ -366,6 +366,12 @@ export interface Tender {
   requirements: TenderRequirement[];
   /** Stratégie de réponse (alimente le mémoire et la réponse point par point). */
   strategy?: ResponseStrategy;
+  /** Origine Global Monitor si le dossier vient d'un AO récupéré (back-link + déduplication). */
+  sourceProjectId?: string;
+  sourceUrl?: string;
+  /** Rédacteur affecté au dossier (nom affiché + id compte si membre réel de l'équipe). */
+  leadWriter?: string;
+  leadWriterId?: string;
   dceAnalysis?: DceAnalysisResult;
   goNoGo: GoNoGoState;
   tasks: TenderTask[];

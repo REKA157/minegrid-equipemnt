@@ -17,6 +17,7 @@ import {
   WarningBanner,
 } from '../../components/ui';
 import { nextAction } from '../TendersList';
+import { MemberSelect } from '../../components/MemberSelect';
 import type { Tender, TenderStatus } from '../../types';
 import {
   MARKET_TYPE_LABELS,
@@ -32,6 +33,7 @@ import { toast } from '../../../utils/toast';
 export default function TenderOverview({ tender }: { tender: Tender }) {
   const navigate = useNavigate();
   const setTenderStatus = useTendersStore((s) => s.setTenderStatus);
+  const updateTender = useTendersStore((s) => s.updateTender);
   const deleteTender = useTendersStore((s) => s.deleteTender);
   const role = useTendersStore((s) => s.settings.currentUserRole);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -162,7 +164,41 @@ export default function TenderOverview({ tender }: { tender: Tender }) {
               <dt className="text-gray-500">Date limite</dt>
               <dd className="font-medium text-gray-900">{formatDate(tender.deadline)}</dd>
             </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="shrink-0 text-gray-500">Rédacteur affecté</dt>
+              <dd className="min-w-0 flex-1">
+                {editable ? (
+                  <MemberSelect
+                    value={tender.leadWriter ?? ''}
+                    onChange={(name, member) =>
+                      updateTender(
+                        tender.id,
+                        {
+                          leadWriter: name || undefined,
+                          leadWriterId: member?.fromOrg ? member.id : undefined,
+                        },
+                        name ? `Rédacteur affecté : ${name}` : 'Rédacteur retiré',
+                      )
+                    }
+                  />
+                ) : (
+                  <span className="block text-right font-medium text-gray-900">
+                    {tender.leadWriter || '—'}
+                  </span>
+                )}
+              </dd>
+            </div>
           </dl>
+          {tender.sourceUrl && (
+            <a
+              href={tender.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-700 hover:underline"
+            >
+              <ArrowRight className="h-3 w-3" /> Voir l'appel d'offres d'origine (Global Monitor)
+            </a>
+          )}
           {tender.description && (
             <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-600">{tender.description}</p>
           )}

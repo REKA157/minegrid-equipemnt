@@ -19,6 +19,8 @@ interface ProjectDetailsProps {
   onCreateLeadFromContact?: (contact: ProjectContact) => void;
   onCreateLeadsFromProject?: () => void;
   createLeadsFromProjectLoading?: boolean;
+  /** Transforme cet AO en dossier de réponse (module Appels d'offres). */
+  onCreateTenderFromProject?: () => void;
 }
 
 type EqTemplate = {
@@ -295,6 +297,7 @@ export default function ProjectDetails({
   onCreateLeadFromContact,
   onCreateLeadsFromProject,
   createLeadsFromProjectLoading = false,
+  onCreateTenderFromProject,
 }: ProjectDetailsProps) {
   // Stock du vendeur (pour le croiser avec les besoins de l'AO à la sélection).
   // Hook AVANT les retours conditionnels ci-dessous (règle des hooks React).
@@ -437,6 +440,17 @@ export default function ProjectDetails({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {onCreateTenderFromProject && (
+              <button
+                type="button"
+                onClick={onCreateTenderFromProject}
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                title="Créer un dossier de réponse (mémoire technique) à partir de cet appel d'offres"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Répondre à cet AO
+              </button>
+            )}
             {onCreateLeadsFromProject && (
               <button
                 type="button"

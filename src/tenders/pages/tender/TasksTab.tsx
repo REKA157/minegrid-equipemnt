@@ -15,6 +15,7 @@ import {
   SectionCard,
   TextInput,
 } from '../../components/ui';
+import { MemberSelect } from '../../components/MemberSelect';
 import type { Tender, TenderTask } from '../../types';
 import { can, daysUntil, uid } from '../../types';
 
@@ -121,10 +122,10 @@ export default function TasksTab({ tender }: { tender: Tender }) {
                         />
                       </td>
                       <td className="py-2 pr-3">
-                        <TextInput
+                        <MemberSelect
                           value={t.assignee}
                           disabled={!editable}
-                          onChange={(e) => update(t, { assignee: e.target.value })}
+                          onChange={(name) => update(t, { assignee: name })}
                         />
                       </td>
                       <td className="py-2 pr-3">

@@ -50,6 +50,7 @@ import {
   TextInput,
   WarningBanner,
 } from '../../components/ui';
+import { MemberSelect } from '../../components/MemberSelect';
 import type {
   RequirementCoverage,
   RequirementLevel,
@@ -453,11 +454,10 @@ export default function RequirementsTab({ tender }: { tender: Tender }) {
                       </label>
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-gray-500">Responsable</span>
-                        <TextInput
+                        <MemberSelect
                           value={req.responsible}
                           disabled={!editable}
-                          onChange={(e) => update(req.id, { responsible: e.target.value })}
-                          placeholder="Qui rédige la réponse ?"
+                          onChange={(name) => update(req.id, { responsible: name })}
                         />
                       </label>
                       <label className="block">

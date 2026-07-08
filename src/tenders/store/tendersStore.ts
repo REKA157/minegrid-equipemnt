@@ -237,7 +237,14 @@ export const useTendersStore = create<TendersState>()(
         set((s) => ({ settings: { ...s.settings, ...patch } })),
 
       seedIfNeeded: () => {
-        if (get().seeded) return;
+        const s = get();
+        if (s.seeded) return;
+        // Ne JAMAIS écraser des données déjà présentes (ex. dossier créé
+        // depuis le Global Monitor avant la première ouverture du module).
+        if (s.tenders.length > 0 || s.documents.length > 0) {
+          set({ seeded: true });
+          return;
+        }
         set({
           seeded: true,
           tenders: buildDemoTenders(),

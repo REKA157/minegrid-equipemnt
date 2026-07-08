@@ -19,6 +19,9 @@ import {
 } from '../services/monitorApi';
 import { normalizeBudget as normalizeBudgetUtil } from '../utils/globalMonitorCoverage';
 import { equipmentNeedsToNotesBlock } from '../utils/globalMonitorEquipmentNeedsText';
+import { navigate } from '../router';
+import { useTendersStore } from '../tenders/store/tendersStore';
+import { monitorProjectToTender } from '../tenders/lib/fromMonitor';
 import {
   classifyRole,
   prospectAngle,
@@ -215,6 +218,26 @@ export default function GlobalMonitor() {
       return;
     }
     toast.error(`Insertion Kanban refusée: ${error?.message || "raison inconnue"}`);
+  }, [selectedDetail]);
+
+  /**
+   * Transforme l'AO sélectionné en dossier de réponse (module Appels
+   * d'offres) et ouvre l'analyse DCE. Déduplication par sourceProjectId :
+   * si un dossier existe déjà pour cet AO, on l'ouvre au lieu d'en créer un.
+   */
+  const handleCreateTenderFromProject = useCallback(() => {
+    if (!selectedDetail) return;
+    const store = useTendersStore.getState();
+    const existing = store.tenders.find((t) => t.sourceProjectId === selectedDetail.id);
+    if (existing) {
+      toast('Un dossier existe déjà pour cet appel d\'offres — ouverture.', 'info');
+      navigate(`appels-offres/ao/${existing.id}`);
+      return;
+    }
+    const tender = monitorProjectToTender(selectedDetail, store.settings.currentUserName);
+    store.addTender(tender);
+    toast.success('Dossier de réponse créé. Prochaine étape : analyser le DCE.');
+    navigate(`appels-offres/ao/${tender.id}/dce`);
   }, [selectedDetail]);
 
   const handleCreateLeadsFromProject = useCallback(async () => {
@@ -441,6 +464,7 @@ export default function GlobalMonitor() {
                     onCreateLeadFromContact={handleCreateLeadFromContact}
                     onCreateLeadsFromProject={handleCreateLeadsFromProject}
                     createLeadsFromProjectLoading={createLeadsLoading}
+                    onCreateTenderFromProject={handleCreateTenderFromProject}
                   />
                 )
                 : <AlertsPanel />}
