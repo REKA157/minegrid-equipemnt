@@ -532,6 +532,17 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ widgetSize = 'medium' }
   const lastRow = salesData[salesData.length - 1];
   const noSales = salesData.length > 0 && salesData.every((d) => (d.sales || 0) === 0);
 
+  // Récapitulatif RÉEL pour « Analyse complète » (données déjà chargées).
+  const money = (v: number) => formatMadMoney(v, currentCurrency, rates);
+  const totalSales = salesData.reduce((s, d) => s + d.sales, 0);
+  const totalTarget = salesData.reduce((s, d) => s + d.target, 0);
+  const overallPct = totalTarget > 0 ? Math.round((totalSales / totalTarget) * 100) : 0;
+  const totalOffers = salesData.reduce((s, d) => s + d.offers, 0);
+  const bestMonth = salesData.reduce<SalesData | null>(
+    (b, d) => (b == null || d.sales > b.sales ? d : b),
+    null,
+  );
+
   return (
     // Chrome allégé : la carte hôte (shell) fournit déjà bordure + fond + padding.
     <div className="bg-white rounded-lg p-4">
@@ -751,19 +762,82 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ widgetSize = 'medium' }
 
       {/* Modales (simplifiées) */}
       {showDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-2xl w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Analyse complète des ventes</h3>
-            <p className="text-gray-600 mb-4">
-              Analyse détaillée des performances de vente avec recommandations d'amélioration.
-            </p>
-            <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-xl">
+            <div className="sticky top-0 flex items-center justify-between border-b bg-white px-5 py-3">
+              <h3 className="text-lg font-bold text-gray-900">Analyse complète des ventes</h3>
               <button
                 onClick={() => setShowDetails(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100"
+                title="Fermer"
               >
-                Fermer
+                ✕
               </button>
+            </div>
+            <div className="p-5">
+              {/* Récapitulatif RÉEL (6 derniers mois) */}
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5 mb-4">
+                <div className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="text-xs font-medium text-gray-500">Ventes cumulées</div>
+                  <div className="mt-1 text-lg font-bold text-gray-900 truncate" title={money(totalSales)}>{money(totalSales)}</div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="text-xs font-medium text-gray-500">Objectif cumulé</div>
+                  <div className="mt-1 text-lg font-bold text-gray-900 truncate" title={money(totalTarget)}>{money(totalTarget)}</div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="text-xs font-medium text-gray-500">Atteinte globale</div>
+                  <div className={`mt-1 text-lg font-bold ${overallPct >= 85 ? 'text-green-600' : overallPct >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {totalTarget > 0 ? `${overallPct} %` : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="text-xs font-medium text-gray-500">Offres envoyées</div>
+                  <div className="mt-1 text-lg font-bold text-gray-900">{totalOffers}</div>
+                </div>
+              </div>
+
+              {/* Détail mois par mois */}
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-left text-xs text-gray-500">
+                      <th className="px-3 py-2 font-medium">Mois</th>
+                      <th className="px-3 py-2 text-right font-medium">Ventes</th>
+                      <th className="px-3 py-2 text-right font-medium">Objectif</th>
+                      <th className="px-3 py-2 text-right font-medium">Écart</th>
+                      <th className="px-3 py-2 text-right font-medium">% obj.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesData.map((d) => {
+                      const pct = d.target > 0 ? Math.round((d.sales / d.target) * 100) : null;
+                      const gap = d.sales - d.target;
+                      return (
+                        <tr key={d.month} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-medium text-gray-800">{d.month}</td>
+                          <td className="px-3 py-2 text-right text-gray-900">{money(d.sales)}</td>
+                          <td className="px-3 py-2 text-right text-gray-500">{money(d.target)}</td>
+                          <td className={`px-3 py-2 text-right ${gap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {gap >= 0 ? '+' : ''}{money(gap)}
+                          </td>
+                          <td className={`px-3 py-2 text-right font-medium ${pct == null ? 'text-gray-400' : pct >= 85 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {pct == null ? '—' : `${pct} %`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Lecture honnête (données réelles, pas de recommandation inventée) */}
+              <p className="mt-3 text-xs text-gray-500">
+                {bestMonth && bestMonth.sales > 0
+                  ? `Meilleur mois : ${bestMonth.month} (${money(bestMonth.sales)}). `
+                  : 'Aucune vente conclue sur la période. '}
+                Pour des prévisions et un comparatif secteur, utilisez « Prévision IA » et « Benchmark secteur ».
+              </p>
             </div>
           </div>
         </div>
