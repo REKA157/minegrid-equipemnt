@@ -45,6 +45,13 @@ import { computeCoverageStats } from '../lib/requirements';
 const RAW_AI_URL: string | undefined = import.meta.env.VITE_TENDERS_AI_URL;
 const RAW_AI_KEY: string | undefined = import.meta.env.VITE_TENDERS_AI_KEY;
 
+/**
+ * Nom (slug) de l'Edge Function déployée sur Supabase. Déployée à la main
+ * via le dashboard sous « renders-ai » — si vous la redéployez un jour sous
+ * « tenders-ai », changez juste cette constante.
+ */
+const FUNCTION_SLUG = 'renders-ai';
+
 /** Résout le sentinel « supabase » vers l'Edge Function du projet. */
 function resolveEndpoint(): { url: string; key?: string } | null {
   if (!RAW_AI_URL) return null;
@@ -52,7 +59,7 @@ function resolveEndpoint(): { url: string; key?: string } | null {
     const base: string | undefined = import.meta.env.VITE_SUPABASE_URL;
     const anon: string | undefined = import.meta.env.VITE_SUPABASE_ANON_KEY;
     if (!base) return null;
-    return { url: `${base.replace(/\/$/, '')}/functions/v1/tenders-ai`, key: anon };
+    return { url: `${base.replace(/\/$/, '')}/functions/v1/${FUNCTION_SLUG}`, key: anon };
   }
   return { url: RAW_AI_URL, key: RAW_AI_KEY };
 }
