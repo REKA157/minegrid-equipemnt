@@ -12,6 +12,8 @@ import { getOrderedAndCompleteLayout } from './layoutHelpers';
 import { useShellState } from './useShellState';
 import type { ShellLayoutItem, ShellWidget, ShellWidgetsSource } from './shellTypes';
 import { useAuth } from '../../hooks/useAuth';
+import InfoTooltip from '../../components/common/InfoTooltip';
+import { WIDGET_ROLE_HINTS } from '../../constants/widgetRoleHints';
 
 const DASHBOARD_WIDGET_TYPES: readonly DashboardWidget['type'][] = [
   'metric',
@@ -389,6 +391,11 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
                     >
                       {String(widget.title ?? widget.id)}
                     </h3>
+                    {(() => {
+                      // « i » d'aide : description persistée sinon phrase de rôle par type.
+                      const hint = widget.description || WIDGET_ROLE_HINTS[widget.type] || '';
+                      return hint ? <InfoTooltip text={hint} /> : null;
+                    })()}
                   </div>
                   <div className="flex space-x-1 shrink-0 ml-2" onMouseDown={(e) => e.stopPropagation()}>
                     <button

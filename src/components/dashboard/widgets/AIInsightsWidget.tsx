@@ -1,14 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Lightbulb } from 'lucide-react';
+import { Lightbulb, Sparkles } from 'lucide-react';
 import {
   buildRecommendations,
   type Recommendation,
 } from '../../../utils/recommendations/recommendationsService';
+import { aiWidgetService, type AIInsight } from '../../../services/aiWidgetService';
 
 interface AIInsightsWidgetProps {
   userId?: string;
   widgetSize?: 'small' | 'medium' | 'large';
 }
+
+// Priorité d'un insight serveur -> classe du badge (aligné sur PRIO_BADGE).
+const INSIGHT_PRIO_BADGE: Record<string, string> = {
+  critical: 'bg-red-100 text-red-800',
+  high: 'bg-amber-100 text-amber-800',
+  medium: 'bg-gray-100 text-gray-600',
+  low: 'bg-gray-100 text-gray-600',
+};
 
 const PRIO_CLS: Record<string, string> = {
   urgent: 'border-red-200 bg-red-50',
@@ -28,24 +37,42 @@ const PRIO_LABEL: Record<string, string> = { urgent: 'Urgent', high: 'Prioritair
  * proposer des actions explicables. Chaque carte mène à une ACTION concrète. Anti-façade :
  * aucune recommandation inventée ; état vide court si rien à signaler.
  */
-const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = () => {
+const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = ({ userId }) => {
   const [recos, setRecos] = useState<Recommendation[] | null>(null);
+  const [insights, setInsights] = useState<AIInsight[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Recommandations LOCALES (moteurs internes : opportunités + risques).
     buildRecommendations().then((r) => {
       if (!cancelled) {
         setRecos(r);
         setLoading(false);
       }
     });
+
+    // Insights du SERVEUR IA (endpoint /ai/widgets/insights). Renvoie [] si le
+    // monitor n'est pas joignable / rien à signaler -> aucune régression visuelle.
+    if (userId) {
+      aiWidgetService
+        .getAIInsights(userId)
+        .then((list) => {
+          if (!cancelled) setInsights(Array.isArray(list) ? list : []);
+        })
+        .catch(() => {
+          if (!cancelled) setInsights([]);
+        });
+    }
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
 
   const empty = !recos || recos.length === 0;
+  const hasInsights = insights.length > 0;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
@@ -54,12 +81,38 @@ const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = () => {
       </h3>
       <p className="text-xs text-gray-500 mb-3">Issues de vos annonces, devis, leads, dossiers et partenaires.</p>
 
+      {/* Insights du serveur IA (live). Affichés seulement s'il y en a. */}
+      {hasInsights && (
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-orange-500" />
+            <span className="text-xs font-semibold text-gray-700">Insights du serveur IA</span>
+          </div>
+          <ul className="space-y-2">
+            {insights.map((i) => (
+              <li key={i.id} className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-sm font-medium text-gray-900">{i.title}</div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${INSIGHT_PRIO_BADGE[i.priority] ?? INSIGHT_PRIO_BADGE.medium}`}>
+                    IA
+                  </span>
+                </div>
+                {i.description && <div className="text-xs text-gray-600 mt-0.5">{i.description}</div>}
+                {i.action && <div className="text-xs font-medium text-orange-700 mt-1">→ {i.action}</div>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm text-gray-500">Analyse…</p>
       ) : empty ? (
-        <p className="text-sm text-gray-500">
-          Aucune recommandation pour le moment — rien à signaler sur vos leads et dossiers.
-        </p>
+        !hasInsights && (
+          <p className="text-sm text-gray-500">
+            Aucune recommandation pour le moment — rien à signaler sur vos leads et dossiers.
+          </p>
+        )
       ) : (
         <ul className="space-y-2">
           {recos!.map((r) => (
