@@ -59,13 +59,16 @@ export default function TendersList() {
   const navigate = useNavigate();
   const tenders = useTendersStore((s) => s.tenders);
   const currentUserName = useTendersStore((s) => s.settings.currentUserName);
+  const currentUserId = useTendersStore((s) => s.settings.currentUserId);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenderStatus | 'tous' | 'actifs'>('actifs');
   const [mineOnly, setMineOnly] = useState(false);
 
   // Dossiers où l'utilisateur courant est affecté (rédacteur du dossier, ou
-  // responsable/assigné d'une exigence ou d'une tâche).
+  // responsable/assigné d'une exigence ou d'une tâche). En mode partagé, on
+  // matche d'abord par id de compte (fiable) ; sinon par nom (mode local).
   const isMine = (t: (typeof tenders)[number]): boolean => {
+    if (currentUserId && t.leadWriterId === currentUserId) return true;
     const me = currentUserName.trim().toLowerCase();
     if (!me) return false;
     if ((t.leadWriter ?? '').trim().toLowerCase() === me) return true;
@@ -93,7 +96,7 @@ export default function TendersList() {
     }
     return list.sort((a, b) => daysUntil(a.deadline) - daysUntil(b.deadline));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenders, query, statusFilter, mineOnly, currentUserName]);
+  }, [tenders, query, statusFilter, mineOnly, currentUserName, currentUserId]);
 
   return (
     <div>

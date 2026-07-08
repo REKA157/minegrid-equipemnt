@@ -20,6 +20,7 @@ export interface TeamOption {
   id: string;
   name: string;
   role?: string;
+  email?: string;
   /** true = membre réel de la société (compte), false = profil local. */
   fromOrg: boolean;
 }
@@ -43,6 +44,7 @@ export function useTeamMembers(): TeamOption[] {
             id: m.user_id,
             name: memberName(m.first_name, m.last_name, m.email),
             role: m.role,
+            email: m.email ?? undefined,
             fromOrg: true,
           })),
         );

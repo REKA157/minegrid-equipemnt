@@ -21,6 +21,11 @@ const ROLE_SHORT: Record<string, string> = {
   viewer: 'lecteur',
 };
 
+/** Clé stable et unique par membre (évite la collision d'homonymes). */
+function optionKey(m: TeamOption): string {
+  return `${m.fromOrg ? 'org' : 'loc'}-${m.id}`;
+}
+
 export function MemberSelect({
   value,
   onChange,
@@ -34,32 +39,47 @@ export function MemberSelect({
 }) {
   const members = useTeamMembers();
 
-  // Noms proposés : membres de l'équipe + valeur courante si absente de la liste.
-  const known = new Set(members.map((m) => m.name));
-  const extraCurrent = value && !known.has(value) ? [value] : [];
+  // La <option> a pour VALUE une clé unique (pas le nom) : deux homonymes
+  // restent distinguables et .find renvoie le bon compte. Valeur affichée
+  // = leadWriter/responsible stocké (un nom) → on retrouve l'option par nom
+  // pour la sélection courante, en gérant l'ambiguïté par la 1re occurrence
+  // (acceptable pour l'affichage ; le CHOIX, lui, passe par la clé unique).
+  const currentKey =
+    value && members.find((m) => m.name === value)
+      ? optionKey(members.find((m) => m.name === value)!)
+      : value
+        ? `manuel:${value}`
+        : '';
 
   return (
     <Select
-      value={value}
+      value={currentKey}
       disabled={disabled}
       onChange={(e) => {
-        const name = e.target.value;
-        onChange(name, members.find((m) => m.name === name) ?? null);
+        const key = e.target.value;
+        if (!key) {
+          onChange('', null);
+          return;
+        }
+        if (key.startsWith('manuel:')) {
+          onChange(key.slice('manuel:'.length), null);
+          return;
+        }
+        const member = members.find((m) => optionKey(m) === key) ?? null;
+        onChange(member?.name ?? '', member);
       }}
     >
       {allowUnassigned && <option value="">— Non affecté —</option>}
       {members.map((m) => (
-        <option key={`${m.fromOrg ? 'org' : 'loc'}-${m.id}`} value={m.name}>
+        <option key={optionKey(m)} value={optionKey(m)}>
           {m.name}
           {m.role ? ` (${ROLE_SHORT[m.role] ?? m.role})` : ''}
-          {m.fromOrg ? '' : ' — profil local'}
+          {m.fromOrg ? (m.email ? ` — ${m.email}` : '') : ' — profil local'}
         </option>
       ))}
-      {extraCurrent.map((n) => (
-        <option key={`cur-${n}`} value={n}>
-          {n} (saisi manuellement)
-        </option>
-      ))}
+      {value && !members.some((m) => m.name === value) && (
+        <option value={`manuel:${value}`}>{value} (saisi manuellement)</option>
+      )}
     </Select>
   );
 }

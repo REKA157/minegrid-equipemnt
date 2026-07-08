@@ -5,21 +5,27 @@
  * ou si l'utilisateur n'est pas connecté à une société, ce hook ne fait
  * strictement rien — le module reste 100 % local comme avant.
  *
- * Quand le partage est actif :
- *  1. Au montage : charge l'espace de travail de la société et hydrate le
- *     store (les données de la société remplacent le cache local).
+ * Quand une société valide est chargée (mode 'shared') :
+ *  1. Au montage : hydrate le store avec l'espace de la société (les données
+ *     de la société remplacent le cache local).
  *  2. À chaque modification : ré-enregistre l'espace (débounce 1,5 s).
  *
- * Le localStorage (middleware persist) sert de cache/offline ; la source de
- * vérité en mode partagé est Supabase, rechargée au montage.
+ * SÉCURITÉ ANTI-PERTE (findings revue) : la sauvegarde n'est ARMÉE
+ * (`ready`) QU'APRÈS une hydratation partagée réussie. En mode 'local' ou
+ * 'error' (auth pas prête, RPC en échec, pas de société), on n'écrit JAMAIS
+ * — impossible pour le cache local/démo d'écraser l'espace d'une société.
  *
- * LIMITE v1 : dernière écriture gagnante au niveau société (cf. migration).
+ * LIMITE v1 : dernière écriture gagnante au niveau société (cf. migration) ;
+ * et l'org est résolue owner-prioritaire côté serveur (un utilisateur qui
+ * possède sa propre org ET est invité dans une autre société est rattaché à
+ * la sienne — à faire évoluer vers un sélecteur de société explicite).
  */
 
 import { useEffect, useRef, useState } from 'react';
 import type { GeneratedDocument, LibraryItem, Tender, CompanyProfile } from '../types';
 import { useTendersStore } from './tendersStore';
 import {
+  getCurrentUserId,
   isTendersSharedConfigured,
   loadWorkspace,
   saveWorkspace,
@@ -32,6 +38,8 @@ export function useTendersSync(): SyncStatus {
     isTendersSharedConfigured() ? 'chargement' : 'local',
   );
   const hydrating = useRef(false);
+  // `ready` = la sauvegarde est armée. UNIQUEMENT après une hydratation
+  // partagée réussie : garantit qu'on n'écrit jamais par erreur.
   const ready = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,32 +48,37 @@ export function useTendersSync(): SyncStatus {
     if (!isTendersSharedConfigured()) return;
     let cancelled = false;
     (async () => {
-      const ws = await loadWorkspace();
+      const res = await loadWorkspace();
       if (cancelled) return;
-      if (ws) {
+
+      if (res.mode === 'shared') {
+        const ws = res.data;
+        // Renseigne l'identité de compte (pour « Mes affectations »).
+        const userId = await getCurrentUserId();
         hydrating.current = true;
         useTendersStore.setState((s) => ({
-          seeded: true, // ne pas injecter la démo en mode partagé
+          seeded: true, // pas de démo en mode partagé
           tenders: (ws.tenders as Tender[] | undefined) ?? [],
           documents: (ws.documents as GeneratedDocument[] | undefined) ?? [],
           library: (ws.library as LibraryItem[] | undefined) ?? s.library,
           company: (ws.company as CompanyProfile | undefined) ?? s.company,
+          settings: userId ? { ...s.settings, currentUserId: userId } : s.settings,
         }));
         hydrating.current = false;
+        ready.current = true; // ARME la sauvegarde seulement maintenant
         setStatus('partage');
       } else {
-        // Partage demandé mais indisponible (pas connecté / pas de société /
-        // société sans espace encore créé) : on reste en local, sans démo écrasée.
-        setStatus('local');
+        // 'local' (pas de société / pas connecté) OU 'error' (transitoire) :
+        // on NE touche PAS au store et on N'ARME PAS la sauvegarde.
+        setStatus(res.mode === 'error' ? 'erreur' : 'local');
       }
-      ready.current = true;
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // 2. Sauvegarde à chaque changement (débounce).
+  // 2. Sauvegarde à chaque changement (débounce) — seulement si armée.
   useEffect(() => {
     if (!isTendersSharedConfigured()) return;
     const unsub = useTendersStore.subscribe((state) => {
@@ -78,7 +91,7 @@ export function useTendersSync(): SyncStatus {
           library: state.library,
           company: state.company,
         });
-        setStatus(ok ? 'partage' : 'local');
+        setStatus(ok ? 'partage' : 'erreur');
       }, 1500);
     });
     return () => {

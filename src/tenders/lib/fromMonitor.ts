@@ -25,7 +25,7 @@ const SECTOR_BY_PROJECT_TYPE: Record<string, Sector> = {
   rail: 'btp',
   dam: 'btp',
   industrial_zone: 'btp',
-  energy: 'maintenance',
+  energy: 'btp',
   btp: 'btp',
   infrastructure: 'btp',
 };

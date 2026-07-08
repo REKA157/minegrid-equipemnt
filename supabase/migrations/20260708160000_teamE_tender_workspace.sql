@@ -89,14 +89,20 @@ as $$
 declare
   v_org uuid;
 begin
+  -- Écriture réservée aux membres qui PEUVENT modifier (owner/admin/manager) :
+  -- un rôle 'viewer' (lecture seule, et rôle par défaut) ne doit jamais
+  -- écraser l'espace partagé. Aligné sur user_in_org_admin / leads_update_team.
   select om.organization_id into v_org
   from public.organization_members om
   where om.user_id = auth.uid()
+    and om.role in ('owner', 'admin', 'manager')
   order by (om.role = 'owner') desc, om.created_at asc
   limit 1;
 
   if v_org is null then
-    return null; -- pas de société : le client retombe sur le mode local
+    -- Pas de société OU rôle lecteur seul : le client retombe en local
+    -- (aucune écriture possible ; les viewers gardent la lecture via RLS).
+    return null;
   end if;
 
   insert into public.tender_workspaces (organization_id, data, updated_at, updated_by)

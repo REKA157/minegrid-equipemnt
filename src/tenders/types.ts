@@ -547,6 +547,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export interface TenderSettings {
   currentUserName: string;
   currentUserRole: UserRole;
+  /** Id du compte Supabase connecté (mode partagé) — pour « Mes affectations ». */
+  currentUserId?: string;
   /** Point d'entrée d'une API IA réelle (sinon mode simulation). */
   aiApiConfigured: boolean;
 }
