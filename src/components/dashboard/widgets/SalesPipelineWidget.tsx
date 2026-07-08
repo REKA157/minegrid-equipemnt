@@ -827,16 +827,11 @@ const SalesPipelineWidget = ({
   };
 
   return (
-    <div className="space-y-4 bg-orange-50 p-4 rounded-lg border border-orange-200">
-      {/* En-tête avec bouton d'ajout */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-semibold text-orange-900">{variant === 'rental' ? 'Pipeline de location' : 'Pipeline Commercial'}</h3>
-          <p className="text-sm text-orange-600">
-            {loading ? 'Chargement des données réelles...' : error ? 'Erreur de connexion' : realData ? 'Données en temps réel' : 'Aucune donnée'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="bg-white rounded-lg p-4 space-y-3">
+      {/* Fine barre d'outils — le TITRE vit dans la barre de la carte hôte
+          (chrome allégé, comme Stock / Actions / Évolution). */}
+      <div className="flex items-center justify-end">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
           {loading && (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
           )}
@@ -980,23 +975,23 @@ const SalesPipelineWidget = ({
           </button>
         </div>
       ) : (
-        // auto-fit : s'adapte à la largeur RÉELLE de la carte (pas au viewport).
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2">
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{pipelineStats.total}</div>
-            <div className="text-xs text-orange-600">Total Leads</div>
+        // KPI en cartes sobres (auto-fit) — même langage visuel que « Évolution » et « Actions ».
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2.5">
+          <div className="rounded-lg border border-gray-200 bg-white p-3">
+            <div className="text-xs font-medium text-gray-500">Total leads</div>
+            <div className="mt-1 text-lg font-bold text-gray-900">{pipelineStats.total}</div>
           </div>
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200 min-w-0">
-            <div className="text-base font-medium text-orange-700 truncate" title={formatCurrency(pipelineStats.totalValue)}>{formatCurrency(pipelineStats.totalValue)}</div>
-            <div className="text-xs text-orange-600">Valeur Totale</div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3 min-w-0">
+            <div className="text-xs font-medium text-gray-500">Valeur totale</div>
+            <div className="mt-1 text-lg font-bold text-gray-900 truncate" title={formatCurrency(pipelineStats.totalValue)}>{formatCurrency(pipelineStats.totalValue)}</div>
           </div>
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{formatCurrency(pipelineStats.weightedValue)}</div>
-            <div className="text-xs text-orange-600">Valeur Pondérée</div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3 min-w-0">
+            <div className="text-xs font-medium text-gray-500">Valeur pondérée</div>
+            <div className="mt-1 text-lg font-bold text-gray-900 truncate" title={formatCurrency(pipelineStats.weightedValue)}>{formatCurrency(pipelineStats.weightedValue)}</div>
           </div>
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{Math.round(calculateConversionRates.global)}%</div>
-            <div className="text-xs text-orange-600">Taux Conversion</div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3">
+            <div className="text-xs font-medium text-gray-500">Taux conversion</div>
+            <div className="mt-1 text-lg font-bold text-gray-900">{Math.round(calculateConversionRates.global)} %</div>
           </div>
         </div>
       )}
@@ -1135,103 +1130,95 @@ const SalesPipelineWidget = ({
             {sortedLeads.map((lead) => {
               const { full: titleFull, compact: titleCompact } = leadTitleForCard(lead.title);
               return (
-              <div key={lead.id} className="bg-white border border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0 pr-2">
-                    <h5
-                      className="font-semibold text-gray-900 line-clamp-2 break-words leading-snug"
-                      title={titleFull}
+              <div key={lead.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                {/* Ligne 1 — DÉCISION : étape · titre · priorité ; valeur + proba à droite.
+                    Mêmes badges de priorité (Haute/Moyenne/Basse) que « Actions ». */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${getStageColor(lead.stage)}`}>
+                    {formatStageLabel(lead.stage)}
+                  </span>
+                  <h5 className="font-semibold text-gray-900 truncate min-w-0" title={titleFull}>
+                    {titleCompact}
+                  </h5>
+                  <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${getPriorityColor(lead.priority)}`}>
+                    {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}
+                  </span>
+                  {prospectKindLabel(lead.prospectKind) && (
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                        lead.prospectKind === 'winner' ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'
+                      }`}
+                      title={lead.prospectKind === 'winner' ? 'Lauréat du marché — angle négociation' : "Maître d'ouvrage — angle soumission"}
                     >
-                      {titleCompact}
-                    </h5>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-xs px-2 py-1 rounded-full ${getStageColor(lead.stage)}`}>
-                        {formatStageLabel(lead.stage)}
-                      </span>
-                      <span className={`text-xs px-2 py-1 rounded-full ${getPriorityColor(lead.priority)}`}>
-                        {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}
-                      </span>
-                      {prospectKindLabel(lead.prospectKind) && (
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full ${
-                            lead.prospectKind === 'winner'
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-sky-100 text-sky-800'
-                          }`}
-                          title={
-                            lead.prospectKind === 'winner'
-                              ? 'Lauréat du marché — angle négociation'
-                              : "Maître d'ouvrage — angle soumission"
-                          }
-                        >
-                          {prospectKindLabel(lead.prospectKind)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-orange-700">{formatCurrency(lead.value)}</div>
-                    <div className="text-sm text-orange-600">{lead.probability}% de probabilité</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-orange-700">Prochaine action:</span>
-                    <div className="font-medium text-gray-900">{lead.nextAction}</div>
-                  </div>
-                  <div>
-                    <span className="text-orange-700">Assigné à:</span>
-                    <div className="font-medium text-gray-900">{lead.assignedTo}</div>
-                  </div>
-                </div>
-                <div className="mt-2 text-xs text-gray-600">
-                  <span className="font-medium">{lead.contact?.name || 'Prospect'}</span>
-                  {lead.contact?.company ? ` · ${lead.contact.company}` : ''}
-                  {lead.contact?.email ? ` · ${lead.contact.email}` : ''}
-                  {lead.contact?.phone ? ` · ${lead.contact.phone}` : ''}
-                  {lead.source ? ` · source: ${lead.source}` : ''}
-                </div>
-                {lead.notes && (
-                  <div className="mt-1 text-xs text-gray-500 line-clamp-2">
-                    {lead.notes}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-orange-100">
-                  <div className="text-xs text-orange-600">
-                    Dernier contact: {formatDate(lead.lastContact)}
-                    <span className="ml-2 text-orange-600">
-                      ({getDaysSinceLastContact(lead.lastContact)} jours)
+                      {prospectKindLabel(lead.prospectKind)}
                     </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => handleViewDetails(lead)}
-                      className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-2 py-1 rounded hover:bg-orange-200 transition-colors"
-                    >
-                      Voir détails
-                    </button>
-                    <TransactionDossierLink
-                      caseId={lead.transaction_case_id}
-                      className="text-xs bg-white text-orange-800 border border-orange-300 px-2 py-1 rounded hover:bg-orange-50"
-                    />
+                  )}
+                  <span className="ml-auto flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{formatCurrency(lead.value)}</span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">{lead.probability} %</span>
+                  </span>
+                </div>
+
+                {/* Ligne 2 — MÉTA : contact · société · téléphone. */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500">
+                  <span
+                    className="font-medium text-gray-700 truncate max-w-[180px]"
+                    title={[lead.contact?.name, lead.contact?.company, lead.contact?.phone, lead.contact?.email].filter(Boolean).join(' · ')}
+                  >
+                    {lead.contact?.name || 'Prospect'}
+                  </span>
+                  {lead.contact?.company ? (<><span aria-hidden>·</span><span className="truncate max-w-[140px]">{lead.contact.company}</span></>) : null}
+                  {lead.contact?.phone ? (<><span aria-hidden>·</span><span className="whitespace-nowrap">{lead.contact.phone}</span></>) : null}
+                </div>
+
+                {/* Ligne 3 — PROCHAINE ACTION (le lien avec « Actions Commerciales ») + fraîcheur. */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                  <span className="text-gray-700 truncate min-w-0" title={lead.nextAction}>
+                    <span className="text-gray-400">Prochaine :</span> {lead.nextAction}
+                  </span>
+                  <span className="text-gray-400 whitespace-nowrap">· contacté il y a {getDaysSinceLastContact(lead.lastContact)} j</span>
+                </div>
+
+                {/* Boutons : primaire (étape suivante) + Détails + menu ⋯ — comme « Actions ». */}
+                <div className="mt-2 flex flex-wrap items-center gap-2 justify-end">
+                  {!(lead.stage === 'Conclu' || lead.stage === 'Perdu') ? (
                     <button
                       onClick={() => handleNextStage(lead)}
-                      disabled={lead.stage === 'Conclu' || lead.stage === 'Perdu'}
-                      className={`text-xs px-2 py-1 rounded ${lead.stage === 'Conclu' || lead.stage === 'Perdu' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200'}`}
-                      title={lead.stage === 'Conclu' ? 'Lead gagné' : lead.stage === 'Perdu' ? 'Lead non retenu' : 'Passer à l\'étape suivante'}
+                      className="text-xs bg-orange-600 text-white border border-orange-600 px-3 py-1 rounded-lg hover:bg-orange-700 transition-colors font-semibold"
+                      title="Passer à l'étape suivante"
                     >
-                      {lead.stage === 'Conclu' || lead.stage === 'Perdu' ? 'Finalisé' : getPrimaryActionLabel(lead.stage)}
+                      {getPrimaryActionLabel(lead.stage)}
                     </button>
-                    <button
-                      onClick={() => handleSetStage(lead, lead.stage === 'Perdu' ? 'Prospection' : 'Perdu', lead.stage === 'Perdu' ? 'Relance commerciale planifiée' : 'Lead classé non retenu - analyse en cours')}
-                      className={`text-xs px-2 py-1 rounded ${lead.stage === 'Perdu' ? 'bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200' : 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200'}`}
-                      title={lead.stage === 'Perdu' ? 'Réactiver ce lead' : 'Marquer ce lead non retenu'}
+                  ) : (
+                    <span className="text-xs text-gray-400 px-1">Finalisé</span>
+                  )}
+                  <button
+                    onClick={() => handleViewDetails(lead)}
+                    className="text-xs bg-white text-gray-700 border border-gray-300 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    Détails
+                  </button>
+                  <details className="relative">
+                    <summary
+                      className="list-none cursor-pointer text-xs px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 select-none"
+                      title="Plus d'actions"
                     >
-                      {lead.stage === 'Perdu' ? 'Réactiver' : 'Non retenu'}
-                    </button>
-                  </div>
+                      ⋯
+                    </summary>
+                    <div className="absolute right-0 mt-1 z-10 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[190px]">
+                      {lead.transaction_case_id ? (
+                        <div className="px-3 py-1.5 text-xs">
+                          <TransactionDossierLink caseId={lead.transaction_case_id} className="text-orange-800 hover:underline" />
+                        </div>
+                      ) : null}
+                      <button
+                        onClick={() => handleSetStage(lead, lead.stage === 'Perdu' ? 'Prospection' : 'Perdu', lead.stage === 'Perdu' ? 'Relance commerciale planifiée' : 'Lead classé non retenu - analyse en cours')}
+                        className="block w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                      >
+                        {lead.stage === 'Perdu' ? 'Réactiver le lead' : 'Marquer non retenu'}
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </div>
               );
