@@ -14,6 +14,7 @@ import type { ShellLayoutItem, ShellWidget, ShellWidgetsSource } from './shellTy
 import { useAuth } from '../../hooks/useAuth';
 import InfoTooltip from '../../components/common/InfoTooltip';
 import { WIDGET_ROLE_HINTS } from '../../constants/widgetRoleHints';
+import { WIDGET_EXPLANATIONS } from '../../constants/widgetExplanations';
 
 const DASHBOARD_WIDGET_TYPES: readonly DashboardWidget['type'][] = [
   'metric',
@@ -392,9 +393,19 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
                       {String(widget.title ?? widget.id)}
                     </h3>
                     {(() => {
-                      // « i » d'aide : description persistée sinon phrase de rôle par type.
+                      // « i » d'aide : phrase courte au survol (description persistée
+                      // sinon rôle par type) + explication détaillée au clic (par id
+                      // sinon par type). Un widget sans explication montre la phrase courte.
                       const hint = widget.description || WIDGET_ROLE_HINTS[widget.type] || '';
-                      return hint ? <InfoTooltip text={hint} /> : null;
+                      const details =
+                        WIDGET_EXPLANATIONS[widget.id] || WIDGET_EXPLANATIONS[widget.type];
+                      return hint || details ? (
+                        <InfoTooltip
+                          text={hint || String(widget.title ?? widget.id)}
+                          title={String(widget.title ?? widget.id)}
+                          details={details}
+                        />
+                      ) : null;
                     })()}
                   </div>
                   <div className="flex space-x-1 shrink-0 ml-2" onMouseDown={(e) => e.stopPropagation()}>
