@@ -1,0 +1,60 @@
+-- =====================================================================
+-- MODÈLE ÉQUIPE — Phase 0 (rattachement) : attacher l'existant à une société.
+--
+-- Pour chaque `pro_clients` (= une société abonnée), créer UNE organisation
+-- possédée par son `user_id`, puis rattacher les leads de ce vendeur à cette
+-- organisation et poser l'assignation par défaut = le vendeur.
+--
+-- S'exécute côté serveur (auth.uid() NULL -> le trigger leads_guard_fn ne
+-- réécrit pas organization_id, on peut donc le poser directement).
+-- Idempotent (ne recrée pas d'org si l'utilisateur est déjà membre ;
+-- ne rattache que les leads encore sans société).
+-- No-op si la table pro_clients n'existe pas (ex. base de test).
+-- =====================================================================
+
+do $$
+declare
+  r record;
+  v_org uuid;
+begin
+  if not exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'pro_clients'
+  ) then
+    raise notice 'pro_clients absente : rattachement ignoré (no-op).';
+    return;
+  end if;
+
+  for r in
+    select user_id, coalesce(nullif(trim(company_name), ''), 'Ma société') as company_name
+    from public.pro_clients
+    where user_id is not null
+  loop
+    -- Déjà rattaché à une organisation ? On ne recrée pas.
+    select organization_id into v_org
+    from public.organization_members
+    where user_id = r.user_id
+    order by (role = 'owner') desc
+    limit 1;
+
+    if v_org is null then
+      insert into public.organizations (name) values (r.company_name) returning id into v_org;
+      insert into public.organization_members (organization_id, user_id, role)
+      values (v_org, r.user_id, 'owner');
+    end if;
+  end loop;
+end $$;
+
+-- Rattacher les leads à la société de leur vendeur (owner de l'org).
+update public.leads l
+set organization_id = m.organization_id
+from public.organization_members m
+where l.organization_id is null
+  and m.user_id = l.seller_id
+  and m.role = 'owner';
+
+-- Assignation par défaut = le vendeur (compte réel).
+update public.leads
+set assigned_to_user_id = seller_id
+where assigned_to_user_id is null
+  and seller_id is not null;

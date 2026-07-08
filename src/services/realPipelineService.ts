@@ -42,6 +42,10 @@ export interface RealLead {
   quote_request_id?: string | null;
   buyer_user_id?: string | null;
   transaction_case_id?: string | null;
+  /** Modèle équipe : société propriétaire + commercial assigné (colonnes
+   *  OPTIONNELLES ; présentes après la migration teamA_org_pipeline). */
+  organization_id?: string | null;
+  assigned_to_user_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -171,15 +175,21 @@ export class RealPipelineService {
       const userId = await this.getCurrentUserId();
       if (!userId) return [];
 
+      // MODÈLE ÉQUIPE : plus de filtre `.eq('seller_id', userId)` — c'est la RLS
+      // qui scope (société via can_access_lead ; ou seller_id tant que non migré).
+      // Un membre voit donc TOUT le pipeline de sa société. Le filtre « mes leads »
+      // est appliqué côté widget sur assigned_to_user_id.
       const runSelect = (columns: string) =>
         supabaseClient
           .from('leads')
           .select(columns)
-          .eq('seller_id', userId)
           .order('created_at', { ascending: false });
 
-      // contact_role est OPTIONNELLE : on la lit si déployée, sinon on relit sans elle.
-      let { data, error } = await runSelect(`${PIPELINE_LEADS_COLUMNS},contact_role`);
+      // Colonnes OPTIONNELLES (déployées par migration) : on les lit si présentes,
+      // sinon on relit sans elles (tolérant à la migration non encore appliquée).
+      let { data, error } = await runSelect(
+        `${PIPELINE_LEADS_COLUMNS},contact_role,organization_id,assigned_to_user_id`,
+      );
       if (error && this.isUndefinedColumnError(error)) {
         ({ data, error } = await runSelect(PIPELINE_LEADS_COLUMNS));
       }
@@ -214,14 +224,16 @@ export class RealPipelineService {
       const userId = await this.getCurrentUserId();
       if (!userId) return null;
 
+      // MODÈLE ÉQUIPE : plus de filtre `.eq('seller_id', userId)` — la RLS UPDATE
+      // autorise le vendeur, l'assigné, ou un admin de la société. Un manager peut
+      // donc modifier un lead qu'il ne possède pas.
       const { data, error } = await supabaseClient
         .from('leads')
         .update(updates)
         .eq('id', leadId)
-        .eq('seller_id', userId)
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     } catch (error) {
@@ -238,12 +250,12 @@ export class RealPipelineService {
       const userId = await this.getCurrentUserId();
       if (!userId) return false;
 
+      // RLS DELETE : autorisée au créateur ou à un admin de la société.
       const { error } = await supabaseClient
         .from('leads')
         .delete()
-        .eq('id', leadId)
-        .eq('seller_id', userId);
-      
+        .eq('id', leadId);
+
       if (error) throw error;
       return true;
     } catch (error) {

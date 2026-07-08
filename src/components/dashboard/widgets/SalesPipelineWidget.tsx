@@ -12,6 +12,7 @@ import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 import { getRentalPipelineLeads } from '../../../utils/enterpriseApi/rentals';
 import { leadTitleWithoutAoPrefix } from '../../../utils/stockLeadSuggestions';
 import { readPersistedActionStates } from '../../../utils/dailyActionStatus';
+import { useAuth } from '../../../hooks/useAuth';
 
 /** Titre fiche : texte complet pour `title` / modale ; version courte pour cartes étroites (Kanban). */
 function leadTitleForCard(title: unknown): { full: string; compact: string } {
@@ -58,6 +59,9 @@ const SalesPipelineWidget = ({
   const [leadsData, setLeadsData] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'timeline'>('list');
   const [prospectFilter, setProspectFilter] = useState<'all' | 'winner' | 'buyer'>('all');
+  // Modèle équipe : « Toute l'équipe » (défaut, tous les leads de la société) vs
+  // « Mes leads » (assignés au commercial connecté).
+  const [scopeFilter, setScopeFilter] = useState<'team' | 'mine'>('team');
   const [showPipelineAlertsOpen, setShowPipelineAlertsOpen] = useState(false);
   const [showConversionRates, setShowConversionRates] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -65,6 +69,8 @@ const SalesPipelineWidget = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { formatCurrency } = useWidgetMadCurrency();
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
 
   const loadRentalPipelineData = async () => {
     try {
@@ -113,6 +119,7 @@ const SalesPipelineWidget = ({
         probability: lead.probability,
         nextAction: lead.next_action || 'Action à définir',
         assignedTo: lead.assigned_to,
+        assignedToUserId: lead.assigned_to_user_id ?? null, // modèle équipe : commercial assigné
         lastContact: lead.last_contact,
         notes: lead.notes || '',
         source: lead.source || 'manual',
@@ -289,6 +296,10 @@ const SalesPipelineWidget = ({
 
   const sortedLeads = React.useMemo(() => {
     let sorted = [...leadsData];
+    // Modèle équipe : « Mes leads » = assignés au commercial connecté.
+    if (scopeFilter === 'mine' && currentUserId) {
+      sorted = sorted.filter((lead) => lead.assignedToUserId === currentUserId);
+    }
     if (selectedStage) {
       sorted = sorted.filter(lead => lead.stage === selectedStage);
     }
@@ -313,7 +324,7 @@ const SalesPipelineWidget = ({
       default:
         return sorted.sort((a, b) => closedRank(a) - closedRank(b));
     }
-  }, [leadsData, selectedStage, sortBy, prospectFilter]);
+  }, [leadsData, selectedStage, sortBy, prospectFilter, scopeFilter, currentUserId]);
 
   const getStageColor = (stage: string) => {
     const colors = {
@@ -845,6 +856,26 @@ const SalesPipelineWidget = ({
               ⚠️ Erreur
             </div>
           )}
+          {/* Portée équipe : Mes leads (assignés à moi) vs toute l'équipe (société). */}
+          <div className="flex bg-gray-100 rounded-md p-0.5 gap-0.5" title="Filtrer le pipeline">
+            <button
+              onClick={() => setScopeFilter('mine')}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                scopeFilter === 'mine' ? 'bg-gray-700 text-white' : 'text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Mes leads
+            </button>
+            <button
+              onClick={() => setScopeFilter('team')}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                scopeFilter === 'team' ? 'bg-gray-700 text-white' : 'text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Équipe
+            </button>
+          </div>
+
           {/* Boutons de vue — taille compacte (alignée widget stock) */}
           <div className="flex bg-orange-100 rounded-md p-0.5 gap-0.5 flex-wrap">
             <button
@@ -1156,6 +1187,14 @@ const SalesPipelineWidget = ({
                       title={lead.prospectKind === 'winner' ? 'Lauréat du marché — angle négociation' : "Maître d'ouvrage — angle soumission"}
                     >
                       {prospectKindLabel(lead.prospectKind)}
+                    </span>
+                  )}
+                  {/* Modèle équipe : repère les leads qui te sont assignés (utile en
+                      vue « Équipe »). Le nom des autres commerciaux viendra avec la
+                      gestion des membres (phase suivante). */}
+                  {lead.assignedToUserId && lead.assignedToUserId === currentUserId && (
+                    <span className="text-xs px-2 py-0.5 rounded-full shrink-0 bg-blue-100 text-blue-800" title="Lead qui t'est assigné">
+                      À moi
                     </span>
                   )}
                   {/* LIEN avec « Actions » : statut de l'action du jour de ce lead
