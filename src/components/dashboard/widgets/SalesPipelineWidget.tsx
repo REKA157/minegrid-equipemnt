@@ -11,6 +11,7 @@ import { toast } from '../../../utils/toast';
 import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
 import { getRentalPipelineLeads } from '../../../utils/enterpriseApi/rentals';
 import { leadTitleWithoutAoPrefix } from '../../../utils/stockLeadSuggestions';
+import { readPersistedActionStates } from '../../../utils/dailyActionStatus';
 
 /** Titre fiche : texte complet pour `title` / modale ; version courte pour cartes étroites (Kanban). */
 function leadTitleForCard(title: unknown): { full: string; compact: string } {
@@ -826,6 +827,10 @@ const SalesPipelineWidget = ({
     }
   };
 
+  // Statuts des actions du jour (source partagée avec « Actions Commerciales ») :
+  // lu à chaque rendu -> se rafraîchit sur l'événement pipeline:refresh.
+  const actionStates = readPersistedActionStates();
+
   return (
     <div className="bg-white rounded-lg p-4 space-y-3">
       {/* Fine barre d'outils — le TITRE vit dans la barre de la carte hôte
@@ -1153,6 +1158,24 @@ const SalesPipelineWidget = ({
                       {prospectKindLabel(lead.prospectKind)}
                     </span>
                   )}
+                  {/* LIEN avec « Actions » : statut de l'action du jour de ce lead
+                      (source partagée). Seuls les états positifs sont montrés. */}
+                  {(() => {
+                    const st = actionStates[`lead:${lead.id}`]?.status;
+                    if (st === 'completed')
+                      return (
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0 bg-green-100 text-green-800" title="Action du jour traitée dans « Actions Commerciales »">
+                          ✓ Traité
+                        </span>
+                      );
+                    if (st === 'in-progress')
+                      return (
+                        <span className="text-xs px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-800" title="Action du jour en cours">
+                          ● En cours
+                        </span>
+                      );
+                    return null;
+                  })()}
                   <span className="ml-auto flex items-center gap-2 shrink-0">
                     <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{formatCurrency(lead.value)}</span>
                     <span className="text-xs text-gray-500 whitespace-nowrap">{lead.probability} %</span>
