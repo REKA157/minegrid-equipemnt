@@ -33,16 +33,54 @@ import {
   type UserInvitation 
 } from '../utils/userManagement';
 import { setupUserInvitationsTable } from '../utils/setupUserInvitations';
+import { getOrgMembers, type OrgMember, type OrgRole } from '../utils/api/organization';
 import { toast } from '../utils/toast';
 interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'user' | 'viewer';
+  role: OrgRole;
   status: 'active' | 'inactive' | 'pending';
   lastLogin: string;
   permissions: string[];
   avatar?: string;
+}
+
+// Rôle -> permissions (indicatif, pour l'affichage). Les permissions réelles
+// sont posées par la RLS côté base ; ici on résume ce que chaque rôle peut faire.
+const PERMISSIONS_BY_ROLE: Record<OrgRole, string[]> = {
+  owner: ['all'],
+  admin: ['all'],
+  manager: ['dashboard', 'machines', 'orders', 'analytics'],
+  viewer: ['dashboard'],
+};
+
+// Convertit un membre d'organisation (get_org_members) vers la forme UI.
+function orgMemberToTeamMember(m: OrgMember): TeamMember {
+  const fullName = [m.first_name, m.last_name].filter(Boolean).join(' ').trim();
+  const name = fullName || m.email || 'Membre';
+  const initials =
+    (fullName
+      ? fullName.split(/\s+/).map((p) => p[0]).slice(0, 2).join('')
+      : (m.email ?? 'M').slice(0, 2)
+    ).toUpperCase();
+  const lastLogin = m.last_sign_in_at
+    ? new Date(m.last_sign_in_at).toLocaleString('fr-FR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    : 'Jamais connecté';
+  return {
+    id: m.user_id,
+    name,
+    email: m.email ?? '',
+    role: m.role,
+    // Un membre présent dans organization_members a accepté : il est actif.
+    // (Les invitations « en attente » vivent dans user_invitations — Phase 4.)
+    status: 'active',
+    lastLogin,
+    permissions: PERMISSIONS_BY_ROLE[m.role] ?? ['dashboard'],
+    avatar: initials,
+  };
 }
 
 const MultiUserManagement: React.FC = () => {
@@ -61,62 +99,25 @@ const MultiUserManagement: React.FC = () => {
   const [inviteFormData, setInviteFormData] = useState({
     name: '',
     email: '',
-    role: 'viewer' as 'admin' | 'manager' | 'technician' | 'viewer'
+    role: 'viewer' as 'admin' | 'manager' | 'viewer'
   });
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState(false);
 
-  // Données d'exemple
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    {
-      id: '1',
-      name: 'Ahmed Benali',
-      email: 'ahmed.benali@entreprise.com',
-      role: 'admin',
-      status: 'active',
-      lastLogin: '2024-01-15 14:30',
-      permissions: ['all'],
-      avatar: 'AB'
-    },
-    {
-      id: '2',
-      name: 'Fatima Zahra',
-      email: 'fatima.zahra@entreprise.com',
-      role: 'manager',
-      status: 'active',
-      lastLogin: '2024-01-15 13:45',
-      permissions: ['dashboard', 'machines', 'orders', 'analytics'],
-      avatar: 'FZ'
-    },
-    {
-      id: '3',
-      name: 'Karim El Amrani',
-      email: 'karim.elamrani@entreprise.com',
-      role: 'user',
-      status: 'active',
-      lastLogin: '2024-01-15 12:20',
-      permissions: ['dashboard', 'machines'],
-      avatar: 'KE'
-    },
-    {
-      id: '4',
-      name: 'Sara Mansouri',
-      email: 'sara.mansouri@entreprise.com',
-      role: 'viewer',
-      status: 'pending',
-      lastLogin: 'Jamais connecté',
-      permissions: ['dashboard'],
-      avatar: 'SM'
-    }
-  ]);
+  // Membres réels de la société (chargés depuis get_org_members).
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
 
   const roles = [
-    { id: 'admin', name: 'Administrateur', color: 'bg-orange-100 text-orange-800', icon: <Crown className="h-4 w-4" /> },
-    { id: 'manager', name: 'Gestionnaire', color: 'bg-orange-50 text-orange-700', icon: <Settings className="h-4 w-4" /> },
-    { id: 'user', name: 'Utilisateur', color: 'bg-orange-50 text-orange-600', icon: <Users className="h-4 w-4" /> },
+    { id: 'owner', name: 'Propriétaire', color: 'bg-orange-100 text-orange-800', icon: <Crown className="h-4 w-4" /> },
+    { id: 'admin', name: 'Administrateur', color: 'bg-orange-50 text-orange-700', icon: <Shield className="h-4 w-4" /> },
+    { id: 'manager', name: 'Gestionnaire', color: 'bg-orange-50 text-orange-600', icon: <Settings className="h-4 w-4" /> },
     { id: 'viewer', name: 'Lecteur', color: 'bg-gray-100 text-gray-800', icon: <Eye className="h-4 w-4" /> }
   ];
+
+  // On n'invite jamais un « propriétaire » : c'est le titulaire de l'abonnement.
+  const invitableRoles = roles.filter((r) => r.id !== 'owner');
 
   const permissions = [
     { id: 'dashboard', name: 'Tableau de bord', description: 'Accès au tableau de bord principal' },
@@ -157,6 +158,23 @@ const MultiUserManagement: React.FC = () => {
     };
 
     checkEnterpriseService();
+  }, []);
+
+  // Charger les VRAIS membres de la société (RPC scopée get_org_members).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setMembersLoading(true);
+      try {
+        const members = await getOrgMembers();
+        if (!cancelled) setTeamMembers(members.map(orgMemberToTeamMember));
+      } finally {
+        if (!cancelled) setMembersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const getRoleInfo = (roleId: string) => {
@@ -460,6 +478,21 @@ const MultiUserManagement: React.FC = () => {
 
               {/* Liste des membres */}
               <div className="divide-y divide-gray-200">
+                {membersLoading && (
+                  <div className="p-6 text-center text-sm text-gray-500">
+                    Chargement des membres de votre société…
+                  </div>
+                )}
+                {!membersLoading && filteredMembers.length === 0 && (
+                  <div className="p-8 text-center">
+                    <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {teamMembers.length === 0
+                        ? 'Vous êtes seul(e) dans votre société pour le moment. Invitez un collaborateur pour partager le pipeline.'
+                        : 'Aucun membre ne correspond à ces filtres.'}
+                    </p>
+                  </div>
+                )}
                 {filteredMembers.map((member) => (
                   <div key={member.id} className="p-6 hover:bg-gray-50 transition-colors">
                     <div className="flex items-center justify-between">
@@ -580,9 +613,9 @@ const MultiUserManagement: React.FC = () => {
                        </span>
                      </div>
                      <p className="text-xs text-gray-600">
+                       {role.id === 'owner' && 'Titulaire de l’abonnement — accès complet et facturation'}
                        {role.id === 'admin' && 'Accès complet à toutes les fonctionnalités'}
                        {role.id === 'manager' && 'Gestion des équipes et projets'}
-                       {role.id === 'user' && 'Utilisation standard des outils'}
                        {role.id === 'viewer' && 'Consultation uniquement'}
                      </p>
                    </div>
@@ -670,7 +703,7 @@ const MultiUserManagement: React.FC = () => {
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
-                    {roles.map(role => (
+                    {invitableRoles.map(role => (
                       <option key={role.id} value={role.id}>{role.name}</option>
                     ))}
                   </select>
