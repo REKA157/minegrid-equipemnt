@@ -16,54 +16,24 @@ export async function getClientUsers(): Promise<ClientUser[]> {
   );
 }
 
-// Inviter un nouvel utilisateur à l'espace Pro
+// Inviter un nouvel utilisateur à l'espace Pro.
+// Passe par la fonction SQL create_invitation (SECURITY DEFINER) : plus aucun
+// INSERT direct dans user_invitations (l'écriture directe est révoquée), et
+// c'est la fonction qui vérifie que l'appelant est admin de sa société, force
+// le scope société et génère le jeton.
 export async function inviteClientUser(email: string, role: string): Promise<boolean> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    logger.error('[inviteClientUser] utilisateur non connecte');
-    return false;
-  }
-
-  // Vérifier que l'utilisateur actuel est un admin de l'espace Pro
-  const currentUserRole = await supabaseCall<{ role: string } | null>(
-    () =>
-      supabase
-        .from('client_users')
-        .select('role')
-        .eq('user_id', user.id)
-        .single(),
-    { label: 'inviteClientUser.getCurrentRole', fallback: null },
-  );
-
-  if (!currentUserRole || currentUserRole.role !== 'admin') {
-    logger.error('[inviteClientUser] permissions insuffisantes');
-    return false;
-  }
-
-  try {
-    await supabaseCall(
-      () =>
-        supabase
-          .from('user_invitations')
-          .insert({
-            email,
-            role,
-            invited_by: user.id,
-            status: 'pending',
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          })
-          .select()
-          .single(),
-      { label: 'inviteClientUser.insert' },
-    );
-    logger.info('[inviteClientUser] invitation creee', { email, role });
-    return true;
-  } catch (error) {
+  const { data, error } = await supabase.rpc('create_invitation', {
+    p_email: email,
+    p_name: null,
+    p_role: role,
+  });
+  if (error) {
     logger.error('[inviteClientUser] echec', error);
     return false;
   }
+  const row = Array.isArray(data) ? data[0] : data;
+  logger.info('[inviteClientUser] invitation creee', { email, role });
+  return Boolean(row?.token);
 }
 
 // Récupérer les invitations d'utilisateurs de l'espace Pro
@@ -96,13 +66,10 @@ export async function cancelUserInvitation(invitationId: string): Promise<boolea
     return false;
   }
 
-  try {
-    await supabaseCall(
-      () => supabase.from('user_invitations').update({ status: 'cancelled' }).eq('id', invitationId),
-      { label: 'cancelUserInvitation' },
-    );
-    return true;
-  } catch {
+  const { error } = await supabase.rpc('cancel_invitation', { p_invitation_id: invitationId });
+  if (error) {
+    logger.error('[cancelUserInvitation] echec', error);
     return false;
   }
+  return true;
 }

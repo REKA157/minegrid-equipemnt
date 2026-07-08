@@ -85,6 +85,7 @@ const PremiumDashboard = lazy(() => import('./pages/PremiumDashboard'));
 const ApiDocs = lazy(() => import('./pages/ApiDocs'));
 const PrioritySupport = lazy(() => import('./pages/PrioritySupport'));
 const MultiUserManagement = lazy(() => import('./pages/MultiUserManagement'));
+const AcceptInvitation = lazy(() => import('./pages/AcceptInvitation'));
 const GlobalMonitor = lazy(() => import('./pages/GlobalMonitor'));
 const SalesOpportunities = lazy(() => import('./pages/SalesOpportunities'));
 const SourcesAdmin = lazy(() => import('./pages/SourcesAdmin'));
@@ -144,6 +145,7 @@ const APP_ONLY_ROUTES = new Set<string>([
   'update-password',
   'demo-entreprise',
   'appels-offres',
+  'accepter-invitation',
 ]);
 
 function AppContent() {
@@ -309,6 +311,11 @@ function AppContent() {
 
       case 'multi-user-management':
         return paidRoute('enterprise', <MultiUserManagement />);
+
+      // Page publique d'acceptation d'invitation : l'invité n'est pas encore
+      // connecté et n'a pas d'abonnement -> aucun garde. La page gère l'auth.
+      case 'accepter-invitation':
+        return <AcceptInvitation />;
 
       case 'global-monitor':
         return (

@@ -23,7 +23,10 @@ import {
   AlertTriangle,
   X,
   Send,
-  Clock
+  Clock,
+  Copy,
+  Check,
+  Link2
 } from 'lucide-react';
 import { 
   createUserAccount, 
@@ -104,6 +107,8 @@ const MultiUserManagement: React.FC = () => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Membres réels de la société (chargés depuis get_org_members).
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -252,6 +257,8 @@ const MultiUserManagement: React.FC = () => {
     setInviteLoading(true);
     setInviteError('');
     setInviteSuccess(false);
+    setInviteLink('');
+    setLinkCopied(false);
 
     try {
       const result = await inviteUser(
@@ -262,14 +269,11 @@ const MultiUserManagement: React.FC = () => {
 
       if (result.success) {
         setInviteSuccess(true);
+        // On affiche le LIEN à partager et on garde le modal ouvert
+        // (l'admin doit copier le lien pour l'envoyer au collègue).
+        setInviteLink(result.link || '');
         setInviteFormData({ name: '', email: '', role: 'viewer' });
         await loadInvitations(); // Recharger les invitations
-        
-        // Fermer le modal après 2 secondes
-        setTimeout(() => {
-          setShowInviteModal(false);
-          setInviteSuccess(false);
-        }, 2000);
       } else {
         setInviteError(result.error || 'Erreur lors de l\'invitation');
       }
@@ -278,6 +282,26 @@ const MultiUserManagement: React.FC = () => {
     } finally {
       setInviteLoading(false);
     }
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Presse-papiers indisponible : l'utilisateur peut copier manuellement.
+      setLinkCopied(false);
+    }
+  };
+
+  const closeInviteModal = () => {
+    setShowInviteModal(false);
+    setInviteSuccess(false);
+    setInviteError('');
+    setInviteLink('');
+    setLinkCopied(false);
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
@@ -652,7 +676,7 @@ const MultiUserManagement: React.FC = () => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Inviter un nouveau membre</h3>
               <button
-                onClick={() => setShowInviteModal(false)}
+                onClick={closeInviteModal}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="h-5 w-5" />
@@ -666,8 +690,39 @@ const MultiUserManagement: React.FC = () => {
             )}
 
             {inviteSuccess && (
-              <div className="mb-4 p-3 bg-green-100 border border-green-300 rounded-lg">
-                <p className="text-green-700 text-sm">✅ Utilisateur invité avec succès !</p>
+              <div className="mb-4 p-3 bg-green-50 border border-green-300 rounded-lg">
+                <p className="text-green-700 text-sm font-medium flex items-center gap-1">
+                  <Check className="h-4 w-4" /> Invitation créée !
+                </p>
+                {inviteLink ? (
+                  <div className="mt-2">
+                    <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                      <Link2 className="h-3.5 w-3.5" />
+                      Copiez ce lien et envoyez-le à votre collègue (WhatsApp, email…) :
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={inviteLink}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-300 rounded bg-white text-gray-700"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyInviteLink}
+                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded bg-orange-600 text-white hover:bg-orange-700 transition-colors"
+                      >
+                        {linkCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {linkCopied ? 'Copié' : 'Copier'}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                      Votre collègue devra se connecter (ou créer un compte) avec cet email, puis ouvrir le lien pour rejoindre l'équipe. Lien valable 14 jours.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1">Aucun lien généré.</p>
+                )}
               </div>
             )}
 
@@ -712,11 +767,11 @@ const MultiUserManagement: React.FC = () => {
               <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => setShowInviteModal(false)}
+                  onClick={closeInviteModal}
                   className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                   disabled={inviteLoading}
                 >
-                  Annuler
+                  {inviteSuccess ? 'Fermer' : 'Annuler'}
                 </button>
                 <button
                   type="submit"
