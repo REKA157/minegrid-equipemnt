@@ -24,6 +24,7 @@ import {
   Sun,
   Moon,
   FolderOpen,
+  ScrollText,
 } from 'lucide-react';
 
 import supabaseClient from '../utils/supabaseClient';
@@ -452,6 +453,13 @@ const Header = () => {
                       <FolderOpen className="h-4 w-4 mr-2" />
                       Mes dossiers
                     </a>
+                    <a
+                      href="#appels-offres"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                    >
+                      <ScrollText className="h-4 w-4 mr-2" />
+                      Appels d'offres
+                    </a>
                     <button
                       onClick={async () => {
                         await supabaseClient.auth.signOut();
@@ -601,6 +609,10 @@ const Header = () => {
                 <a href="#dossiers" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
                   <FolderOpen className="h-4 w-4" />
                   Mes dossiers
+                </a>
+                <a href="#appels-offres" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                  <ScrollText className="h-4 w-4" />
+                  Appels d'offres
                 </a>
                 <a href="#leads" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
                   Leads

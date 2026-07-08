@@ -98,6 +98,9 @@ const MyTransactionCasesPage = lazy(() => import('./pages/MyTransactionCasesPage
 // directement dans les parcours réels (fiche machine, recherche, etc.).
 const NextGenRouter = lazy(() => import('./pages/nextgen/NextGenRouter'));
 const NextGenInternalGate = lazy(() => import('./nextgen/integration/InternalGate'));
+// Module Appels d'offres : cahiers des charges, analyse DCE, go/no-go,
+// mémoire technique, exports (fonctionne en local, IA mockée par défaut).
+const TendersApp = lazy(() => import('./tenders'));
 
 /**
  * Routes considérées comme "application" : elles ont leur propre shell/navigation
@@ -140,6 +143,7 @@ const APP_ONLY_ROUTES = new Set<string>([
   'test-widget',
   'update-password',
   'demo-entreprise',
+  'appels-offres',
 ]);
 
 function AppContent() {
@@ -354,6 +358,9 @@ function AppContent() {
             Indiquez un identifiant de dossier dans l’URL (<span className="font-mono">#dossier/&lt;uuid&gt;</span>).
           </div>
         );
+
+      case 'appels-offres':
+        return <TendersApp />;
 
       case 'demo-entreprise':
         return <DemoEntrepriseAccess />;

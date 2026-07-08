@@ -10,7 +10,8 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   server: {
-    port: 5173,
+    // PORT env (utilisé par les outils de preview) prime, sinon 5173.
+    port: Number(process.env.PORT) || 5173,
   },
   optimizeDeps: {
     // lucide-react expose des centaines d'icones : l'exclure du pre-bundling
