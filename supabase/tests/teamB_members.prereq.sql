@@ -1,8 +1,8 @@
 -- =====================================================================
 -- PREREQ pour prouver le scope de get_org_members() sur une base jetable.
--- Auto-suffisant : recrée l'environnement minimal (auth.users, user_profiles,
--- organizations, organization_members) SANS dépendre de la migration Phase 0
--- ni de la table leads. On concatène ensuite la migration Phase 3 puis les
+-- Reproduit la VRAIE base : auth.users porte email + last_sign_in_at +
+-- raw_user_meta_data (les noms y vivent — aucune table user_profiles/profiles
+-- n'existe dans ce projet). On concatène ensuite la migration Phase 3 puis les
 -- contre-cas.
 --
 -- EXÉCUTION (Docker Postgres) :
@@ -22,26 +22,18 @@ do $$ begin
 end $$;
 
 create schema if not exists auth;
--- auth.users réel a bien email + last_sign_in_at : on les reproduit.
+-- auth.users réel : id + email + last_sign_in_at + raw_user_meta_data (jsonb).
 create table if not exists auth.users (
-  id              uuid primary key,
-  email           text,
-  last_sign_in_at timestamptz
+  id                 uuid primary key,
+  email              text,
+  last_sign_in_at    timestamptz,
+  raw_user_meta_data jsonb not null default '{}'::jsonb
 );
 
 -- Stub auth.uid() : lit l'uid injecté par le test via SET test.uid.
 create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('test.uid', true), '')::uuid
 $$;
-
--- Profils utilisateurs (sous-ensemble suffisant de user_profiles).
-create table if not exists public.user_profiles (
-  id         uuid primary key,
-  first_name text,
-  last_name  text,
-  email      text,
-  phone      text
-);
 
 -- Tables société (schéma canonique, cf. migration Phase 0).
 create table if not exists public.organizations (
@@ -61,7 +53,7 @@ create table if not exists public.organization_members (
 
 grant usage on schema public, auth to authenticated, anon, service_role;
 grant execute on function auth.uid() to authenticated, anon, service_role;
--- NB : on ne donne PAS à `authenticated` de SELECT sur user_profiles/auth.users.
--- C'est justement le SECURITY DEFINER de get_org_members() qui autorise la lecture,
+-- NB : on ne donne PAS à `authenticated` de SELECT sur auth.users.
+-- C'est le SECURITY DEFINER de get_org_members() qui autorise la lecture,
 -- de façon scopée. On accorde seulement la lecture des tables société.
 grant select on public.organizations, public.organization_members to authenticated;
