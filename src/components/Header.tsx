@@ -9,6 +9,7 @@ import {
   Menu,
   Home,
   User,
+  Users,
   ChevronDown,
   LogIn,
   Wallet,
@@ -436,6 +437,15 @@ const Header = () => {
                         Mon dashboard
                       </a>
                     )}
+                    {hasEnterprise(subscription) && (
+                      <a
+                        href="#multi-user-management"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                      >
+                        <Users className="h-4 w-4 mr-2" />
+                        Gestion d'équipe
+                      </a>
+                    )}
                     <a
                       href="#global-monitor"
                       className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
@@ -597,6 +607,11 @@ const Header = () => {
               <a href="#dashboard-entreprise-display" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
                 Compte Entreprise
               </a>
+              {hasEnterprise(subscription) && (
+                <a href="#multi-user-management" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
+                  Gestion d'équipe
+                </a>
+              )}
             </div>
             <a
               href="#global-monitor"
