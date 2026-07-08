@@ -1,4 +1,5 @@
 import { supabaseClient } from '../utils/supabaseClient';
+import { notificationService } from './notificationService';
 import {
   API_SERVICE_ACTION_COLUMNS,
   API_SERVICE_EQUIPMENT_COLUMNS,
@@ -107,15 +108,14 @@ export const apiCall = async (
   };
 };
 
-// Fonction pour afficher les notifications
+// Fonction pour afficher les notifications.
+// BRANCHÉE sur notificationService (affiché par <NotificationContainer/> du shell) :
+// l'ancien CustomEvent 'showNotification' n'était écouté par PERSONNE — tous les
+// toasts des widgets étaient invisibles (console uniquement).
 export const showNotification = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
   console.log(`📢 Notification [${type}]: ${message}`);
-  
-  // Créer un événement personnalisé pour les notifications
-  const event = new CustomEvent('showNotification', {
-    detail: { type, message }
-  });
-  window.dispatchEvent(event);
+  const titles = { success: 'Succès', error: 'Erreur', warning: 'Attention', info: 'Info' } as const;
+  notificationService[type](titles[type], message);
 };
 
 // Envoi de messages (SMS, Email, Team). Aucun fournisseur n'est câblé côté client :

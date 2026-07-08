@@ -101,7 +101,7 @@ export default function EquipmentAvailabilityWidget({ data, widgetSize }: Equipm
           const count = f === 'all' ? total : data.filter((e) => e.status === f).length;
           return (
             <button key={f} onClick={() => setFilter(f)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${
+              className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
                 filter === f ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -128,11 +128,11 @@ export default function EquipmentAvailabilityWidget({ data, widgetSize }: Equipm
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-gray-900 truncate">{eq.name}</span>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
                       {cfg.label}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
                     <span className="flex items-center gap-0.5"><MapPin className="h-3 w-3" /> {eq.location}</span>
                     <span>· {timeAgo(eq.lastUpdate)}</span>
                   </div>

@@ -66,9 +66,11 @@ interface BenchmarkData {
 interface Props {
   /** Réservé compat ; les données viennent de l’API (getSalesEvolutionSeriesData). */
   data?: unknown;
+  /** Taille de la carte hôte -> adapte hauteur du graphe et densité (ergonomie). */
+  widgetSize?: 'small' | 'medium' | 'large';
 }
 
-const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
+const SalesEvolutionWidgetEnriched: React.FC<Props> = ({ widgetSize = 'medium' }) => {
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMetric, setSelectedMetric] = useState<'sales' | 'target' | 'previousYear'>('sales');
@@ -102,7 +104,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
 
     // Cause : objectif non atteint -> expliquer (CA conclu vs cible + activité offres).
     if (cur.target > 0 && cur.sales < cur.target * 0.85) {
-      const gapPct = Math.round(((cur.target - cur.sales) / cur.target) * 100);
+      const achievedPct = Math.round((cur.sales / cur.target) * 100);
       const cause =
         cur.offers > 0
           ? `${cur.offers} offre(s) envoyée(s) mais peu de ventes conclues.`
@@ -110,7 +112,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
       out.push({
         id: 'below-target',
         type: 'warning',
-        message: `Objectif à -${gapPct}% : ${money(cur.sales)} conclus sur ${money(cur.target)} visés. ${cause}`,
+        message: `Objectif atteint à ${achievedPct} % : ${money(cur.sales)} conclus sur ${money(cur.target)} visés. ${cause}`,
         action: 'Relancer mes leads',
         href: '#leads',
       });
@@ -224,67 +226,125 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
 
   const chartData = useMemo(() => {
     const toD = (mad: number) => madToDisplayAmount(mad, currentCurrency, rates);
-    let salesBorder = '#3B82F6';
-    if (selectedMetric === 'sales') {
-      const last = salesData[salesData.length - 1];
-      if (!last || last.target <= 0) salesBorder = '#6B7280';
-      else {
-        const ratio = last.sales / last.target;
-        if (ratio >= 0.85) salesBorder = '#10B981';
-        else if (ratio >= 0.5) salesBorder = '#F59E0B';
-        else salesBorder = '#EF4444';
-      }
-    }
+    // PALETTE SOBRE : un seul accent (l'orange de la marque) + des gris. La
+    // performance vs objectif est portée par la carte KPI, pas par 3 couleurs.
+    const ACCENT = '#EA580C'; // orange-600 (marque)
     return {
       labels: salesData.map((d) => d.month),
       datasets: [
         {
-          label: 'Ventes actuelles',
+          label: 'Ventes',
           data: salesData.map((d) => toD(d.sales)),
-          borderColor: salesBorder,
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          tension: 0.4,
+          borderColor: ACCENT,
+          backgroundColor: 'rgba(234, 88, 12, 0.08)',
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: ACCENT,
+          pointBorderWidth: 2,
+          pointHoverRadius: 5,
+          order: 1,
         },
         {
           label: 'Objectif',
           data: salesData.map((d) => toD(d.target)),
-          borderColor: '#10B981',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          borderDash: [5, 5],
-          tension: 0.4,
+          borderColor: '#9CA3AF', // gris moyen : ligne de repère discrète
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [3, 3],
+          fill: false,
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          order: 2,
         },
         {
           label: 'Année précédente',
           data: salesData.map((d) => toD(d.previousYear)),
-          borderColor: '#F59E0B',
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          tension: 0.4,
+          borderColor: '#D1D5DB', // gris clair : contexte secondaire
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          fill: false,
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          order: 3,
         },
       ],
     };
-  }, [salesData, currentCurrency, rates, selectedMetric]);
+  }, [salesData, currentCurrency, rates]);
 
   const chartOptions = useMemo(
     () => ({
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index' as const, intersect: false },
       plugins: {
         legend: {
           position: 'top' as const,
+          align: 'end' as const,
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'circle' as const,
+            boxWidth: 8,
+            boxHeight: 8,
+            padding: 16,
+            font: { size: 11 },
+            color: '#6B7280',
+            // Pastilles PLEINES à la couleur de la courbe (au lieu d'anneaux creux
+            // hérités du remplissage blanc des points sur la courbe).
+            generateLabels: (chart: {
+              data: { datasets: Array<{ label?: string; borderColor?: unknown }> };
+              isDatasetVisible: (i: number) => boolean;
+            }) =>
+              chart.data.datasets.map((ds, i) => ({
+                text: ds.label ?? '',
+                fillStyle: ds.borderColor as string,
+                strokeStyle: ds.borderColor as string,
+                lineWidth: 0,
+                pointStyle: 'circle' as const,
+                hidden: !chart.isDatasetVisible(i),
+                datasetIndex: i,
+              })),
+          },
         },
-        title: {
-          display: false,
+        title: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(17, 24, 39, 0.92)',
+          padding: 10,
+          cornerRadius: 8,
+          displayColors: true,
+          usePointStyle: true,
+          titleFont: { size: 12 },
+          bodyFont: { size: 12 },
+          callbacks: {
+            label: (ctx: { dataset: { label?: string }; parsed: { y: number } }) =>
+              ` ${ctx.dataset.label}: ${formatDisplayMoney(ctx.parsed.y, currentCurrency)}`,
+          },
         },
       },
       scales: {
         y: {
           beginAtZero: true,
+          border: { display: false },
+          grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
           ticks: {
+            font: { size: 11 },
+            color: '#9CA3AF',
+            padding: 8,
+            maxTicksLimit: 5,
             callback: (value: string | number) => {
               const n = typeof value === 'number' ? value : Number(value);
               return formatDisplayMoney(Number.isFinite(n) ? n : 0, currentCurrency);
             },
           },
+        },
+        x: {
+          border: { display: false },
+          grid: { display: false },
+          ticks: { font: { size: 11 }, color: '#9CA3AF' },
         },
       },
     }),
@@ -469,16 +529,20 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
     );
   }
 
+  const lastRow = salesData[salesData.length - 1];
+  const noSales = salesData.length > 0 && salesData.every((d) => (d.sales || 0) === 0);
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex justify-between items-start mb-6 gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Évolution des ventes enrichie</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            6 derniers mois — agrégat pipeline + offres (réf. {formatMadMoney(50000, currentCurrency, rates)}{' '}
-            par offre en MAD). Affichage : {currentCurrency} (détection auto · taux du site).
-          </p>
-        </div>
+    // Chrome allégé : la carte hôte (shell) fournit déjà bordure + fond + padding.
+    <div className="bg-white rounded-lg p-4">
+      {/* Fine rangée : période + sélecteur (le TITRE vit dans la barre de la carte). */}
+      <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
+        <p
+          className="text-xs text-gray-500 min-w-0"
+          title={`6 derniers mois — agrégat pipeline + offres (réf. ${formatMadMoney(50000, currentCurrency, rates)} par offre en MAD). Affichage : ${currentCurrency} (détection auto · taux du site).`}
+        >
+          6 derniers mois · Affichage : {currentCurrency}
+        </p>
         <div className="flex gap-2 flex-shrink-0">
           <select
             value={selectedMetric}
@@ -492,37 +556,56 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
         </div>
       </div>
 
-      {/* Graphique principal */}
-      <div className="mb-6 h-64">
+      {/* Graphique principal — hauteur ADAPTÉE à la taille de la carte + état vide
+          élégant quand aucune vente (au lieu d'une courbe plate « vide » à 0). */}
+      <div className={`relative mb-5 ${widgetSize === 'small' ? 'h-44' : widgetSize === 'large' ? 'h-72' : 'h-60'}`}>
         <Line data={chartData} options={chartOptions} />
+        {noSales && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+            <div className="rounded-xl border border-gray-200 bg-white/90 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
+              <p className="text-sm font-semibold text-gray-800">Aucune vente conclue sur la période</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                La ligne grise indique votre objectif ({formatMadMoney(lastRow?.target || 0, currentCurrency, rates)}).
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Métriques rapides */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-blue-600">
-            {formatMadMoney(salesData[salesData.length - 1]?.sales || 0, currentCurrency, rates)}
+      {/* KPI en CARTES SOBRES : mêmes cartes neutres, une SEULE couleur sémantique
+          sur « Objectif atteint » (vert/ambre/rouge selon la progression). */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5 mb-5">
+        <div className="rounded-lg border border-gray-200 bg-white p-3 min-w-0">
+          <div className="text-xs font-medium text-gray-500">Ventes du mois</div>
+          <div
+            className="mt-1 text-lg font-bold text-gray-900 truncate"
+            title={formatMadMoney(lastRow?.sales || 0, currentCurrency, rates)}
+          >
+            {formatMadMoney(lastRow?.sales || 0, currentCurrency, rates)}
           </div>
-          <div className="text-sm text-gray-600">Ventes du mois</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-600">
-            {salesData[salesData.length - 1]?.target > 0
-              ? `${Math.round(
-                  (salesData[salesData.length - 1].sales / salesData[salesData.length - 1].target) * 100
-                )}%`
-              : '0%'}
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs font-medium text-gray-500">Objectif atteint</div>
+          <div
+            className={`mt-1 text-lg font-bold ${
+              lastRow?.target > 0
+                ? (() => {
+                    const r = lastRow.sales / lastRow.target;
+                    return r >= 0.85 ? 'text-green-600' : r >= 0.5 ? 'text-amber-600' : 'text-red-600';
+                  })()
+                : 'text-gray-400'
+            }`}
+          >
+            {lastRow?.target > 0 ? `${Math.round((lastRow.sales / lastRow.target) * 100)} %` : '—'}
           </div>
-          <div className="text-sm text-gray-600">Objectif atteint</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-orange-600">
-            {salesData[salesData.length - 1]?.sales > 0 && salesData[salesData.length - 1]?.previousYear > 0
-              ? `${Math.round(((salesData[salesData.length - 1]?.sales - salesData[salesData.length - 1]?.previousYear) / salesData[salesData.length - 1]?.previousYear) * 100)}%`
-              : '0%'
-            }
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs font-medium text-gray-500">vs année précédente</div>
+          <div className="mt-1 text-lg font-bold text-gray-900">
+            {lastRow?.sales > 0 && lastRow?.previousYear > 0
+              ? `${Math.round(((lastRow.sales - lastRow.previousYear) / lastRow.previousYear) * 100)} %`
+              : '—'}
           </div>
-          <div className="text-sm text-gray-600">vs année précédente</div>
         </div>
       </div>
 
@@ -537,12 +620,12 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
                 notif.type === 'success' ? 'bg-green-50 border-green-400' :
                 'bg-blue-50 border-blue-400'
               }`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">{notif.message}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-sm min-w-0 break-words">{notif.message}</span>
                   {notif.action && notif.href && (
                     <a
                       href={notif.href}
-                      className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50"
+                      className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 shrink-0 whitespace-nowrap"
                     >
                       {notif.action}
                     </a>
@@ -601,7 +684,7 @@ const SalesEvolutionWidgetEnriched: React.FC<Props> = (_props) => {
             )}
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3 text-center">
               <div>
                 <div className="text-lg font-semibold text-gray-700">
                   {formatBenchmarkMoney(benchmarkData.average)}

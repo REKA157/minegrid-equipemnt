@@ -34,6 +34,8 @@ export const MESSAGE_LEAD_SEED_COLUMNS = [
   'content',
   'sender_email',
   'processed_for_lead',
+  // Chaîne stock -> pipeline : la machine concernée suit le lead créé.
+  'machine_id',
 ].join(',');
 
 /** Offres pour génération de leads */
@@ -44,6 +46,8 @@ export const OFFER_LEAD_SEED_COLUMNS = [
   'amount',
   'created_at',
   'processed_for_lead',
+  // Chaîne stock -> pipeline : la machine concernée suit le lead créé.
+  'machine_id',
 ].join(',');
 
 /** pipeline_actions — RealPipelineAction */

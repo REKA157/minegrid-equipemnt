@@ -239,7 +239,24 @@ export function buildLeadStockSuggestions(
       }
     }
 
+    // LIEN DIRECT (déterministe) : si le lead porte machine_id (offre/message/devis
+    // sur une annonce précise), CETTE machine passe en tête — le rapprochement
+    // lexical ne sert que de complément.
+    const directMachine = lead.machine_id
+      ? machines.find((m) => m.id === lead.machine_id)
+      : undefined;
+    const direct: LeadStockSuggestion[] = directMachine
+      ? [
+          {
+            machine: directMachine,
+            score: 1000,
+            reason: 'Machine explicitement demandée par ce prospect',
+          },
+        ]
+      : [];
+
     const scored = machines
+      .filter((m) => m.id !== directMachine?.id)
       .map((m) => {
         const { score, hits } = scoreMatch(leadNorm, leadTokens, m);
         return {
@@ -253,11 +270,11 @@ export function buildLeadStockSuggestions(
       })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, maxPerLead);
+      .slice(0, Math.max(0, maxPerLead - direct.length));
 
     const suggested: LeadStockSuggestion[] =
-      scored.length > 0
-        ? scored
+      direct.length > 0 || scored.length > 0
+        ? [...direct, ...scored]
         : machines.slice(0, maxPerLead).map((m) => ({
             machine: m,
             score: 0,

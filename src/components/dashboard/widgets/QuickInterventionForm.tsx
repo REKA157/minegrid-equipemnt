@@ -238,7 +238,7 @@ const QuickInterventionForm: React.FC<QuickInterventionFormProps> = ({
                   rows={2}
                   className="w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 />
-                <div className="mt-1 text-[11px] text-gray-500">
+                <div className="mt-1 text-xs text-gray-500">
                   Minimum 5 caractères
                 </div>
               </div>

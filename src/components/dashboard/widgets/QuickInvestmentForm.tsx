@@ -286,13 +286,13 @@ const QuickInvestmentForm: React.FC<QuickInvestmentFormProps> = ({ open, onClose
                   <div className="grid grid-cols-2 gap-2 text-center">
                     <div>
                       <div className="text-base font-bold text-blue-900">{annualNetCash.toLocaleString('fr-FR')} MAD</div>
-                      <div className="text-[10px] text-blue-700">Cash flow annuel net</div>
+                      <div className="text-xs text-blue-700">Cash flow annuel net</div>
                     </div>
                     <div>
                       <div className={`text-base font-bold ${yieldPercent >= 8 ? 'text-green-700' : yieldPercent >= 4 ? 'text-orange-700' : 'text-red-700'}`}>
                         {yieldPercent}%
                       </div>
-                      <div className="text-[10px] text-blue-700">Rendement annuel brut</div>
+                      <div className="text-xs text-blue-700">Rendement annuel brut</div>
                     </div>
                   </div>
                 </div>

@@ -76,13 +76,12 @@ export default function TransactionCasesWidget({ widgetSize }: TransactionCasesW
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
         <span className="text-xs text-gray-600">
-          <span className="font-semibold text-gray-900">{rows.length}</span> dossier{rows.length > 1 ? 's' : ''}{' '}
-          (RLS)
+          <span className="font-semibold text-gray-900">{rows.length}</span> dossier{rows.length > 1 ? 's' : ''}
         </span>
         <button
           type="button"
           onClick={() => void load()}
-          className="inline-flex items-center gap-1 rounded border border-gray-200 px-2 py-0.5 text-[10px] text-gray-600 transition hover:bg-gray-50"
+          className="inline-flex items-center gap-1 rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-600 transition hover:bg-gray-50"
         >
           <RefreshCw className="h-3 w-3" />
           Actualiser
@@ -99,7 +98,7 @@ export default function TransactionCasesWidget({ widgetSize }: TransactionCasesW
               <div className="truncate text-xs font-semibold text-gray-900">
                 {r.title?.trim() || 'Dossier sans titre'}
               </div>
-              <div className="truncate text-[10px] text-gray-500">
+              <div className="truncate text-xs text-gray-500">
                 {r.kind} · {r.status}
                 {r.stage ? ` · ${r.stage}` : ''}
                 {r.priority ? ` · prio ${r.priority}` : ''}
@@ -111,7 +110,7 @@ export default function TransactionCasesWidget({ widgetSize }: TransactionCasesW
       </div>
       {rows.length > max ? (
         <div className="mt-2 text-center">
-          <a href="#dossiers" className="text-[10px] font-medium text-orange-700 hover:underline">
+          <a href="#dossiers" className="text-xs font-medium text-orange-700 hover:underline">
             +{rows.length - max} autre(s)
           </a>
         </div>

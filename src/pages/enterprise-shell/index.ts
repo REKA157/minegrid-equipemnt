@@ -10,6 +10,10 @@ export type {
 } from './shellTypes';
 export {
   getWidthFromSize,
+  getSizeFromWidth,
+  getHeightFromWidget,
+  getDefaultSizeForWidget,
+  resolveWidgetSize,
   generatePreviewLayout,
   getOrderedAndCompleteLayout,
 } from './layoutHelpers';

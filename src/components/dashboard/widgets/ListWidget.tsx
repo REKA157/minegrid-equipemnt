@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, AlertTriangle, CheckCircle, XCircle, MoreHorizontal, X } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, XCircle, X } from 'lucide-react';
 import { Widget, ListItem } from '../../../constants/dashboardTypes';
 import { getStatusColor, formatDate, truncateText } from '../../../utils/dashboardUtils';
 
@@ -14,8 +14,6 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
   const [showDetails, setShowDetails] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   // Fonction pour obtenir la taille adaptative
   const getAdaptiveSize = (type: 'text' | 'spacing' | 'grid') => {
@@ -30,8 +28,8 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
   };
 
   // Fonction pour obtenir l'icône de statut
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusIcon = (status?: string) => {
+    switch ((status ?? '').toLowerCase()) {
       case 'terminé':
       case 'complété':
       case 'livré':
@@ -91,90 +89,14 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
     return { total, high, medium, low };
   };
 
-  // Fonction pour gérer les actions avec réactivité maximale
+  // Ouvre le détail d'un item. Les actions edit/delete/more génériques ont été
+  // retirées (aucun backend générique -> c'étaient de fausses affordances) ;
+  // on notifie le parent au cas où il gère l'action, puis on ouvre le détail.
   const handleAction = (action: string, item: any) => {
-    // Feedback visuel immédiat
-    const button = event?.target as HTMLButtonElement;
-    if (button) {
-      button.disabled = true;
-      button.style.opacity = '0.6';
-      button.style.cursor = 'not-allowed';
-    }
-
-    console.log(`🔄 Action: ${action}`, item);
-    
-    // Action immédiate
-    if (onAction) {
-      onAction(action, item);
-    }
-    
-    // Actions synchrones immédiates
-    switch (action) {
-      case 'view':
-        setSelectedItem(item);
-        setShowDetails(true);
-        break;
-      case 'edit':
-        handleEditAction(item);
-        break;
-      case 'delete':
-        handleDeleteAction(item);
-        break;
-      case 'more':
-        setSelectedItem(item);
-        setShowMoreOptions(true);
-        break;
-      default:
-        break;
-    }
-
-    // Restaurer le bouton immédiatement après l'action
-    setTimeout(() => {
-      if (button) {
-        button.disabled = false;
-        button.style.opacity = '1';
-        button.style.cursor = 'pointer';
-      }
-    }, 100);
-  };
-
-  const handleEditAction = (item: any) => {
-    try {
-      // Action immédiate
-      console.log('Édition de:', item.title);
+    if (onAction) onAction(action, item);
+    if (action === 'view') {
       setSelectedItem(item);
-      setShowEditForm(true);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        // TODO: Implémenter la vraie logique d'édition
-        // apiCall('GET', `/api/items/${item.id}`).catch(error => {
-        //   console.error('Erreur API édition:', error);
-        // });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'édition:', error);
-    }
-  };
-
-  const handleDeleteAction = (item: any) => {
-    try {
-      // Action immédiate
-      console.log('Suppression de:', item.title);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        // TODO: Implémenter la vraie logique de suppression
-        // apiCall('DELETE', `/api/items/${item.id}`).then(() => {
-        //   console.log('Élément supprimé avec succès');
-        // }).catch(error => {
-        //   console.error('Erreur API suppression:', error);
-        // });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
+      setShowDetails(true);
     }
   };
 
@@ -212,15 +134,6 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
                 </div>
                 <div className="flex items-center space-x-2">
                   {getPriorityIcon(item.priority)}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAction('more', item);
-                    }}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
                 </div>
               </div>
               
@@ -238,8 +151,8 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
             </div>
 
             {/* Statut */}
-            <div className="ml-3 text-right">
-              <div className={`text-xs font-medium px-2 py-1 rounded-full border ${getStatusColor(item.status)}`}>
+            <div className="ml-3 text-right shrink-0">
+              <div className={`text-xs font-medium px-2 py-1 rounded-full border whitespace-nowrap ${getStatusColor(item.status)}`}>
                 {item.status}
               </div>
             </div>
@@ -263,7 +176,7 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
     const stats = getStats();
 
     return (
-      <div className="flex space-x-1 mb-3">
+      <div className="flex flex-wrap gap-1 mb-3">
         <button
           onClick={() => setFilter('all')}
           className={`px-2 py-1 text-xs rounded ${
@@ -377,24 +290,6 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
                 </div>
               </div>
 
-              {/* Actions */}
-              <div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Actions</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => handleAction('edit', selectedItem)}
-                    className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
-                  >
-                    Modifier
-                  </button>
-                  <button 
-                    onClick={() => handleAction('delete', selectedItem)}
-                    className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors"
-                  >
-                    Supprimer
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         </div>

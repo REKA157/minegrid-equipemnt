@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  AlertTriangle, Clock, DollarSign, Phone, Mail, Calendar, 
-  ChevronRight, ChevronDown, Zap, Target, Users, TrendingUp,
+import {
+  AlertTriangle, Clock, Phone, Mail,
+  ChevronRight, ChevronDown, Zap, Target, Users,
   FileText, CheckCircle
 } from 'lucide-react';
 import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
@@ -70,6 +70,43 @@ function legacyPropsToActions(raw: unknown[]): DailyAction[] {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// PERSISTANCE DES STATUTS D'ACTION. Les actions sont RECONSTRUITES depuis les
+// données (leads/messages/offres) toutes les 60 s : sans mémoire, une action
+// « terminée » RESSUSCITAIT une minute plus tard. Les ids étant stables
+// (lead:<id>, msg:<id>, offer:<id>), on mémorise ici le statut/report de chaque
+// action (7 jours) et on le réapplique à chaque reconstruction.
+// ---------------------------------------------------------------------------
+const ACTION_STATUS_KEY = 'dailyActionsStatusV1';
+type PersistedActionState = { status?: 'in-progress' | 'completed'; dueTime?: string; at: string };
+
+function readPersistedActionStates(): Record<string, PersistedActionState> {
+  try {
+    const raw = localStorage.getItem(ACTION_STATUS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, PersistedActionState>;
+    // Purge des entrées de plus de 7 jours (les actions du jour tournent).
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const fresh: Record<string, PersistedActionState> = {};
+    for (const [id, st] of Object.entries(parsed)) {
+      if (new Date(st.at).getTime() >= cutoff) fresh[id] = st;
+    }
+    return fresh;
+  } catch {
+    return {};
+  }
+}
+
+function persistActionState(id: string, patch: Omit<PersistedActionState, 'at'>): void {
+  try {
+    const all = readPersistedActionStates();
+    all[id] = { ...all[id], ...patch, at: new Date().toISOString() };
+    localStorage.setItem(ACTION_STATUS_KEY, JSON.stringify(all));
+  } catch {
+    /* stockage plein/indisponible : l'UI reste fonctionnelle */
+  }
+}
+
 type DialerMode = 'direct' | 'api';
 type DialerProvider = 'twilio' | 'aircall' | 'ringover' | 'whatsapp' | 'custom';
 type DialerConfig = {
@@ -97,7 +134,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
     mode: 'direct',
     provider: 'twilio',
     apiBaseUrl: '',
-    defaultCountryCode: '+33',
+    defaultCountryCode: '+212', // Maroc — marché principal de la plateforme.
   });
   const { formatCurrency } = useWidgetMadCurrency();
 
@@ -138,6 +175,19 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       if (actions.length === 0 && data.length > 0) {
         actions = legacyPropsToActions(data as unknown[]);
       }
+
+      // Réapplique les statuts mémorisés (terminée / en cours / reprogrammée) :
+      // sans ça, chaque reconstruction (60 s, focus, refresh) les effaçait.
+      const saved = readPersistedActionStates();
+      actions = actions.map((a) => {
+        const st = saved[a.id];
+        if (!st) return a;
+        return {
+          ...a,
+          ...(st.status ? { status: st.status } : {}),
+          ...(st.dueTime ? { dueTime: st.dueTime } : {}),
+        };
+      });
 
       setRealActions(actions);
     } catch {
@@ -193,10 +243,18 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       return priorityMatch && categoryMatch && statusMatch;
     })
     .sort((a, b) => {
+      // Les actions TERMINÉES descendent toujours en bas (si affichées).
+      const doneRank = (x: DailyAction) => (x.status === 'completed' ? 1 : 0);
+      const done = doneRank(a) - doneRank(b);
+      if (done !== 0) return done;
       switch (sortBy) {
         case 'priority': {
           const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
-          return priorityOrder[b.priority] - priorityOrder[a.priority];
+          // À priorité égale : l'échéance la plus proche d'abord.
+          return (
+            priorityOrder[b.priority] - priorityOrder[a.priority] ||
+            a.dueTime.localeCompare(b.dueTime)
+          );
         }
         case 'time':
           return a.dueTime.localeCompare(b.dueTime);
@@ -287,10 +345,8 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       onAction(actionType, action);
     }
     
-    // Notification immédiate
-    showNotification('info', `Exécution de ${actionType}...`);
-    
-    // Actions synchrones immédiates
+    // (Pas de notification « Exécution de… » : chaque handler notifie son
+    // résultat réel — une seule notification honnête au lieu de deux.)
     switch (actionType) {
       case 'start':
         handleStartAction(action);
@@ -320,22 +376,14 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
 
   const handleStartAction = (action: DailyAction) => {
     try {
-      // Action immédiate - mise à jour du statut
-      setRealActions(prev => prev.map(a => 
-        a.id === action.id 
+      setRealActions(prev => prev.map(a =>
+        a.id === action.id
           ? { ...a, status: 'in-progress' as const }
           : a
       ));
-      
+      // MÉMORISÉ : le statut survit aux reconstructions (60 s / focus / refresh).
+      persistActionState(action.id, { status: 'in-progress' });
       showNotification('success', `Action "${action.title}" démarrée`);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/start', { actionId: action.id }).catch(error => {
-          console.error('Erreur API démarrage:', error);
-        });
-      }, 50);
-      
     } catch (error) {
       console.error('Erreur lors du démarrage:', error);
       showNotification('error', 'Impossible de démarrer l\'action');
@@ -465,6 +513,8 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       setRealActions((prev) =>
         prev.map((a) => (a.id === action.id ? { ...a, status: 'completed' as const } : a)),
       );
+      // MÉMORISÉ : une action terminée ne ressuscite plus à la reconstruction.
+      persistActionState(action.id, { status: 'completed' });
 
       showNotification('success', `Action "${action.title}" terminée`);
 
@@ -478,12 +528,6 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
           }
         })();
       }
-
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/complete', { actionId: action.id }).catch((err) => {
-          console.error('Erreur API complétion:', err);
-        });
-      }, 50);
     } catch (err) {
       console.error('Erreur lors de la complétion:', err);
       showNotification('error', 'Impossible de terminer l\'action');
@@ -493,18 +537,14 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const handleRescheduleAction = (action: DailyAction) => {
     try {
       const newTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const newDueTime = newTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       setRealActions((prev) =>
-        prev.map((a) =>
-          a.id === action.id
-            ? {
-                ...a,
-                dueTime: newTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-              }
-            : a,
-        ),
+        prev.map((a) => (a.id === action.id ? { ...a, dueTime: newDueTime } : a)),
       );
+      // MÉMORISÉ : le report survit aux reconstructions.
+      persistActionState(action.id, { dueTime: newDueTime });
 
-      showNotification('success', `Action "${action.title}" reprogrammée`);
+      showNotification('success', `Action "${action.title}" reprogrammée à demain ${newDueTime}`);
 
       if (action.relatedLeadId) {
         void (async () => {
@@ -518,14 +558,6 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
         })();
       }
 
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/reschedule', {
-          actionId: action.id,
-          newTime: newTime.toISOString(),
-        }).catch((err) => {
-          console.error('Erreur API reprogrammation:', err);
-        });
-      }, 50);
     } catch (err) {
       console.error('Erreur lors de la reprogrammation:', err);
       showNotification('error', 'Impossible de reprogrammer l\'action');
@@ -616,7 +648,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const handleNewTask = () => {
     try {
       // Action immédiate
-      showNotification('success', 'Nouvelle tâche créée');
+      showNotification('info', 'Création de tâche en démonstration — pas encore active.');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -638,7 +670,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const handleAutoFollowup = () => {
     try {
       // Action immédiate
-      showNotification('success', 'Relances automatiques programmées');
+      showNotification('info', 'Relances automatiques en démonstration — pas encore actives.');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -658,7 +690,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const handleSchedule = () => {
     try {
       // Action immédiate
-      showNotification('success', 'Actions planifiées');
+      showNotification('info', 'Planification en démonstration — pas encore active.');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -677,8 +709,8 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
 
   const handleAIReport = () => {
     try {
-      // Action immédiate
-      showNotification('success', 'Rapport IA généré et exporté');
+      // HONNÊTETÉ : ne pas annoncer un succès avant le résultat réel (démo).
+      showNotification('info', 'Génération du rapport IA en cours (fonction en démonstration)…');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -702,8 +734,11 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const handleExportActions = () => {
     try {
       // Action immédiate
-      exportData(filteredActions, 'actions-prioritaires', 'excel');
-      showNotification('success', 'Actions exportées');
+      // Export RÉEL : seul le format csv déclenche un vrai téléchargement.
+      void exportData(filteredActions, 'actions-prioritaires', 'csv').then((r) => {
+        if (r?.success) showNotification('success', 'Actions exportées (fichier CSV téléchargé)');
+        else showNotification('error', "L'export a échoué. Réessayez.");
+      });
       
     } catch (error) {
       console.error('Erreur lors de l\'export:', error);
@@ -713,8 +748,8 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
 
   const handleNotifyTeam = () => {
     try {
-      // Action immédiate
-      showNotification('success', 'Équipe notifiée');
+      // HONNÊTETÉ : la notification d'équipe n'est pas encore branchée (démo).
+      showNotification('info', 'Notification d\'équipe en démonstration — pas encore active.');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -731,8 +766,8 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
 
   const handleSyncCRM = () => {
     try {
-      // Action immédiate
-      showNotification('success', 'CRM synchronisé');
+      // HONNÊTETÉ : la synchronisation CRM n'est pas encore branchée (démo).
+      showNotification('info', 'Synchronisation CRM en démonstration — pas encore active.');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -752,7 +787,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const handleOptimizeSchedule = () => {
     try {
       // Action immédiate
-      showNotification('success', 'Planning optimisé par IA');
+      showNotification('info', 'Optimisation du planning en démonstration — pas encore active.');
       
       // Appel API en arrière-plan (sans await)
       setTimeout(() => {
@@ -770,48 +805,35 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <AlertTriangle className="w-6 h-6 text-orange-600" />
+    // Chrome allégé : la carte hôte (shell) fournit déjà bordure + fond + padding,
+    // et affiche le TITRE dans sa barre — pas d'en-tête interne dupliqué ici.
+    <div className="bg-white rounded-lg p-4">
+      {/* Fine rangée d'état/outils (le titre vit dans la barre de la carte). */}
+      <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+        {loading && (
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+        )}
+        {error && (
+          <div className="text-red-600 text-xs bg-red-100 px-2 py-1 rounded">
+            ⚠️ Erreur de connexion
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Actions Commerciales Prioritaires</h3>
-            <p className="text-sm text-gray-600">
-              {loading
-                ? 'Chargement des données réelles...'
-                : error
-                  ? 'Erreur de connexion'
-                  : 'Leads du Kanban, messages et offres — même source que le pipeline commercial'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {loading && (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-          )}
-          {error && (
-            <div className="text-red-600 text-xs bg-red-100 px-2 py-1 rounded">
-              ⚠️ Erreur
-            </div>
-          )}
-          <span className="text-sm text-gray-500">
-            {filteredActions.filter(a => a.status === 'pending').length} en attente
-          </span>
-          <button
-            onClick={() => setShowDialerSettings((v) => !v)}
-            className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded hover:bg-orange-200 transition-colors"
-          >
-            Dialer
-          </button>
-        </div>
+        )}
+        <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap">
+          {filteredActions.filter(a => a.status === 'pending').length} en attente
+        </span>
+        <button
+          onClick={() => setShowDialerSettings((v) => !v)}
+          className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded hover:bg-orange-200 transition-colors"
+          title="Réglages d'appel (téléphonie)"
+        >
+          Appels
+        </button>
       </div>
 
       {showDialerSettings && (
         <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {/* auto-fit : s'adapte à la largeur RÉELLE de la carte (pas au viewport). */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
             <label className="text-xs text-orange-800">
               Mode
               <select
@@ -926,161 +948,135 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filteredActions.map((action) => {
           const timeStatus = getTimeStatus(action.dueTime);
           
           return (
-            <div key={action.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="mt-0.5">
-                    {getStatusIcon(action.status)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h4 className="font-semibold text-gray-900">{action.title}</h4>
-                      {action.sourceKind === 'pipeline' && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
-                          Kanban
-                        </span>
-                      )}
-                      <span className={`px-2 py-1 rounded-full text-xs border ${getPriorityColor(action.priority)}`}>
-                        {action.priority === 'high' ? 'Haute' : action.priority === 'medium' ? 'Moyenne' : 'Basse'}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-2">{action.description}</p>
-                    
-                    {/* Contact : masquer les lignes redondantes avec la description */}
-                    {action.contact &&
-                      (action.contact.name ||
-                        action.contact.company ||
-                        action.contact.phone ||
-                        action.contact.email) && (
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600 mb-2">
-                        {(action.contact.name || '').trim() ? (
-                          <span className="font-medium">{action.contact.name.trim()}</span>
-                        ) : null}
-                        {(action.contact.name || '').trim() &&
-                        (action.contact.company || '').trim() ? (
-                          <span aria-hidden>•</span>
-                        ) : null}
-                        {(action.contact.company || '').trim() ? (
-                          <span>{action.contact.company.trim()}</span>
-                        ) : null}
-                        {action.contact.phone ? (
-                          <>
-                            {((action.contact.name || '').trim() ||
-                              (action.contact.company || '').trim()) && (
-                              <span aria-hidden>•</span>
-                            )}
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3 h-3" />
-                              {action.contact.phone}
-                            </span>
-                          </>
-                        ) : null}
-                        {action.contact.email ? (
-                          <>
-                            {((action.contact.name || '').trim() ||
-                              (action.contact.company || '').trim() ||
-                              action.contact.phone) && (
-                              <span aria-hidden>•</span>
-                            )}
-                            <span className="truncate max-w-[200px]" title={action.contact.email}>
-                              {action.contact.email}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-                    )}
-                    
-                    {/* AI Recommendation */}
-                    {action.aiRecommendation && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2">
-                        <div className="flex items-start gap-2">
-                          <Zap className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-blue-800">{action.aiRecommendation}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-end gap-2">
-                  {/* Time and value */}
-                  <div className="text-right">
-                    <div className={`text-sm font-medium px-2 py-1 rounded ${getTimeStatusColor(timeStatus)}`}>
-                      {action.dueTime || 'Non définie'}
-                    </div>
-                    {action.value && (
-                      <div className="text-sm font-semibold text-green-600 mt-1">
-                        {formatCurrency(action.value)}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Category icon */}
-                  <div className={`p-2 rounded-lg ${getCategoryColor(action.category)} bg-gray-100`}>
-                    {getCategoryIcon(action.category)}
-                  </div>
-                </div>
+            <div key={action.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+              {/* Ligne 1 — DÉCISION : statut, titre, priorité ; échéance + valeur à droite. */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="shrink-0">{getStatusIcon(action.status)}</span>
+                <h4 className="font-semibold text-gray-900 truncate min-w-0" title={action.title}>
+                  {action.title}
+                </h4>
+                <span className={`px-2 py-0.5 rounded-full text-xs border shrink-0 ${getPriorityColor(action.priority)}`}>
+                  {action.priority === 'high' ? 'Haute' : action.priority === 'medium' ? 'Moyenne' : 'Basse'}
+                </span>
+                {action.sourceKind === 'pipeline' && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200 shrink-0">
+                    Kanban
+                  </span>
+                )}
+                <span className="ml-auto flex items-center gap-2 shrink-0">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${getTimeStatusColor(timeStatus)}`}>
+                    {action.dueTime || 'Non définie'}
+                  </span>
+                  {action.value ? (
+                    <span className="text-xs font-semibold text-green-600 whitespace-nowrap">
+                      {formatCurrency(action.value)}
+                    </span>
+                  ) : null}
+                </span>
               </div>
-              
-              {/* Action buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Clock className="w-3 h-3" />
-                  <span>{action.estimatedDuration} min</span>
-                  {action.value && (
-                    <>
-                      <span>•</span>
-                      <DollarSign className="w-3 h-3" />
-                      <span>Valeur élevée</span>
-                    </>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  {action.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={(e) => handleActionClick(action, 'start', e)}
-                        className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors"
-                      >
-                        Démarrer
-                      </button>
-                      <button
-                        onClick={(e) => handleActionClick(action, 'contact', e)}
-                        className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors"
-                      >
-                        Contacter
-                      </button>
-                      <button
-                        onClick={() => handleWhatsAppAction(action)}
-                        className="text-xs bg-green-100 text-green-800 border border-green-300 px-3 py-1 rounded-lg hover:bg-green-200 transition-colors"
-                      >
-                        WhatsApp
-                      </button>
-                    </>
-                  )}
-                  
-                  {action.status === 'in-progress' && (
+
+              {/* Ligne 2 — MÉTA unique : durée · contact · société · téléphone. */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500">
+                <span className="whitespace-nowrap">{action.estimatedDuration} min</span>
+                {(action.contact?.name || '').trim() ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span
+                      className="font-medium text-gray-700 truncate max-w-[180px]"
+                      title={[action.contact?.name, action.contact?.phone, action.contact?.email]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    >
+                      {(action.contact?.name || '').trim()}
+                    </span>
+                  </>
+                ) : null}
+                {(action.contact?.company || '').trim() ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span className="truncate max-w-[160px]">{(action.contact?.company || '').trim()}</span>
+                  </>
+                ) : null}
+                {action.contact?.phone ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                      <Phone className="w-3 h-3" />
+                      {action.contact.phone}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+
+              {/* Ligne 3 — contexte : 1 ligne, détail au survol. */}
+              {action.description ? (
+                <p className="mt-1 text-sm text-gray-600 line-clamp-1" title={action.description}>
+                  {action.description}
+                </p>
+              ) : null}
+
+              {/* Ligne 4 — conseil : 1 ligne discrète (fini le pavé encadré). */}
+              {action.aiRecommendation ? (
+                <p className="mt-1 text-xs text-blue-700 line-clamp-1" title={action.aiRecommendation}>
+                  <Zap className="w-3 h-3 inline -mt-0.5 mr-1" />
+                  {action.aiRecommendation}
+                </p>
+              ) : null}
+
+              {/* Boutons : 2 visibles max (la PROCHAINE étape + le canal n°1) ;
+                  le reste dans un menu « ⋯ » sans nouvel état React. */}
+              <div className="mt-2 flex flex-wrap items-center gap-2 justify-end">
+                {action.status === 'pending' && (
+                  <>
                     <button
-                      onClick={(e) => handleActionClick(action, 'complete', e)}
+                      onClick={(e) => handleActionClick(action, 'start', e)}
                       className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors"
                     >
-                      Terminer
+                      Démarrer
                     </button>
-                  )}
-                  
+                    <button
+                      onClick={() => handleWhatsAppAction(action)}
+                      className="text-xs bg-green-100 text-green-800 border border-green-300 px-3 py-1 rounded-lg hover:bg-green-200 transition-colors"
+                    >
+                      WhatsApp
+                    </button>
+                  </>
+                )}
+                {action.status === 'in-progress' && (
                   <button
-                    onClick={(e) => handleActionClick(action, 'reschedule', e)}
-                    className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors"
+                    onClick={(e) => handleActionClick(action, 'complete', e)}
+                    className="text-xs bg-orange-600 text-white border border-orange-600 px-3 py-1 rounded-lg hover:bg-orange-700 transition-colors font-semibold"
                   >
-                    Reprogrammer
+                    Terminer
                   </button>
-                </div>
+                )}
+                <details className="relative">
+                  <summary
+                    className="list-none cursor-pointer text-xs px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 select-none"
+                    title="Plus d'actions"
+                  >
+                    ⋯
+                  </summary>
+                  <div className="absolute right-0 mt-1 z-10 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[170px]">
+                    <button
+                      onClick={(e) => handleActionClick(action, 'contact', e)}
+                      className="block w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      Appeler (téléphone)
+                    </button>
+                    <button
+                      onClick={(e) => handleActionClick(action, 'reschedule', e)}
+                      className="block w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      Reprogrammer à demain
+                    </button>
+                  </div>
+                </details>
               </div>
             </div>
           );
@@ -1093,7 +1089,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
         <div className="flex items-center justify-between mb-3">
           <div>
             <h4 className="text-sm font-semibold text-gray-900">Automatisations</h4>
-            <p className="text-[11px] text-gray-500 mt-1 max-w-2xl">
+            <p className="text-xs text-gray-500 mt-1 max-w-2xl">
               <span className="font-medium text-gray-700">Exporter</span> génère un fichier depuis les actions affichées.
               Les autres boutons passent par une <span className="font-medium">simulation d&apos;API</span> (aucun serveur métier pour l&apos;instant).
             </p>
@@ -1107,7 +1103,7 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
           </button>
         </div>
         {showQuickActions && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
             <button 
               className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
               onClick={(e) => handleQuickAction('new-task', e)}

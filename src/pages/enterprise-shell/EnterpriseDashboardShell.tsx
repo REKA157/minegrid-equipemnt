@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CheckCircle, Maximize2, Minimize2, X, Layout, Save } from 'lucide-react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { CheckCircle, Expand, GripHorizontal, LayoutGrid, Shrink, X, Layout, Save } from 'lucide-react';
 import { WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -107,9 +107,10 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
     layout,
     addStatus,
     saveStatus,
+    lastAddedId,
     onLayoutChange,
-    cycleWidgetHeight,
     resetWidgetSize,
+    reorganizeLayout,
     addWidget,
     removeWidget,
     restoreAllWidgets,
@@ -117,6 +118,138 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
   } = useShellState({ role, widgetsSource, validIds, defaultActiveIds, storageUserId: user?.id });
 
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // MODE COCKPIT (plein écran) : option de CONFORT — réunion, écran mural.
+  // Le dashboard doit rester exploitable SANS lui (cartes compactes, détail à
+  // la demande) ; ici on masque juste la navigation pour maximiser les widgets.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [isCockpit, setIsCockpit] = useState(false);
+  useEffect(() => {
+    const onFsChange = () => setIsCockpit(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+  const toggleCockpit = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void rootRef.current?.requestFullscreen();
+    }
+  };
+
+  // Guide de première visite (refermable, mémorisé par navigateur).
+  const HELP_KEY = 'enterpriseShellHelpDismissed';
+  const [showHelp, setShowHelp] = useState(() => localStorage.getItem(HELP_KEY) !== '1');
+  const dismissHelp = () => {
+    localStorage.setItem(HELP_KEY, '1');
+    setShowHelp(false);
+  };
+
+  // Widget fraîchement ajouté : on défile jusqu'à lui (le surlignage est appliqué
+  // sur sa carte via lastAddedId dans le rendu).
+  useEffect(() => {
+    if (!lastAddedId) return;
+    const t = window.setTimeout(() => {
+      gridRef.current
+        ?.querySelector(`[data-widget-id="${lastAddedId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [lastAddedId]);
+
+  // ---------------------------------------------------------------------------
+  // AUTO-HAUTEUR AJUSTÉE : chaque carte ÉPOUSE la hauteur de son contenu.
+  // On MESURE la hauteur naturelle (entête + contenu) et on cale la case dessus,
+  // dans les DEUX sens : plus de contenu coupé, plus de grands vides en bas.
+  // Bornes : min 3 lignes (carte cliquable), max ~1 écran (au-delà, la longue
+  // liste défile à l'intérieur). Les LARGEURS restent pilotées par les ratios.
+  // ---------------------------------------------------------------------------
+  // On NE peut pas poser de ref sur les enfants de la grille : react-grid-layout les
+  // clone (cloneElement) et écrase le ref. On scanne donc le DOM via un conteneur,
+  // chaque case portant un data-widget-id.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [fittedHeights, setFittedHeights] = useState<Record<string, number>>({});
+
+  // Doit rester synchronisé avec <ResponsiveGridLayout rowHeight/margin/> ci-dessous.
+  // Ligne FINE (30px) => le « pas » de hauteur est de 46px : la carte colle au
+  // contenu à ±46px près (avec 90px, on gaspillait jusqu'à ~106px par carte).
+  const ROW_PX = 30;
+  const MARGIN_Y = 16;
+  // PRINCIPE COCKPIT : une carte est un RÉSUMÉ compact (~350px max), jamais un
+  // mur vertical. Le contenu long est coupé proprement et le bouton « Voir le
+  // détail complet » (bas de carte) ouvre le widget ENTIER dans une grande
+  // fenêtre. À zoom 100 %, l'ensemble du tableau de bord reste embrassable.
+  const MAX_ROWS = 8; // 8*30 + 7*16 = 352px max par carte
+  // Nombre de lignes de grille pour afficher `px` sans coupe (formule react-grid-layout :
+  // hauteur_px = ROW_PX*h + MARGIN_Y*(h-1)  =>  h = ceil((px + MARGIN_Y)/(ROW_PX + MARGIN_Y))).
+  const pxToRows = (px: number) =>
+    Math.min(MAX_ROWS, Math.max(3, Math.ceil((px + MARGIN_Y) / (ROW_PX + MARGIN_Y))));
+  // Widgets dont le contenu dépasse la carte compacte -> bouton « Voir le détail ».
+  const [overflowingIds, setOverflowingIds] = useState<Record<string, boolean>>({});
+  // Widget ouvert en GRANDE fenêtre (détail à la demande).
+  const [detailWidget, setDetailWidget] = useState<ShellWidget | null>(null);
+
+  // Layout affiché = disposition enregistrée ; la hauteur MESURÉE fait foi dès
+  // qu'elle est connue (ajustée au contenu, bornée min/max).
+  const baseLayouts = config
+    ? getOrderedAndCompleteLayout(config.widgets, layout.lg, config.widgetSizes)
+    : [];
+  const orderedLayouts: ShellLayoutItem[] = baseLayouts.map((l) => {
+    const fitted = fittedHeights[l.i];
+    return fitted != null && fitted !== l.h ? { ...l, h: fitted } : l;
+  });
+  // Clé de la grille : NE dépend QUE de l'ensemble (id + largeur). Un changement de
+  // hauteur (auto-hauteur) passe par la prop `layouts` SANS remonter la grille — sinon
+  // chaque widget se démonterait, relancerait ses fetch et la mesure ne convergerait jamais.
+  const structureSignature = orderedLayouts.map((l) => `${l.i}:${l.w}`).join('|');
+
+  useLayoutEffect(() => {
+    const root = gridRef.current;
+    if (!root) return;
+
+    const measureAll = () => {
+      const over: Record<string, boolean> = {};
+      setFittedHeights((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        root.querySelectorAll<HTMLElement>('.react-grid-item[data-widget-id]').forEach((el) => {
+          const id = el.getAttribute('data-widget-id');
+          if (!id) return;
+          const header = el.querySelector('[data-shell-header]') as HTMLElement | null;
+          const content = el.querySelector('[data-shell-content]') as HTMLElement | null;
+          if (!content) return;
+          // +12px de marge : évite une coupe au pixel près (bordures/arrondis).
+          const neededPx = (header?.offsetHeight ?? 0) + content.offsetHeight + 12;
+          const rows = pxToRows(neededPx);
+          if (rows !== next[id]) {
+            next[id] = rows;
+            changed = true;
+          }
+          // Contenu plus long que la carte compacte -> bouton « Voir le détail ».
+          const rawRows = Math.ceil((neededPx + MARGIN_Y) / (ROW_PX + MARGIN_Y));
+          over[id] = rawRows > MAX_ROWS;
+        });
+        return changed ? next : prev;
+      });
+      setOverflowingIds((prev) => {
+        const keys = Object.keys(over);
+        const same =
+          keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === over[k]);
+        return same ? prev : over;
+      });
+    };
+
+    measureAll();
+
+    // Contenus async (graphes, données) et entête qui s'affine : on re-mesure à
+    // chaque variation. La grille ne remonte pas sur un changement de hauteur,
+    // donc les nœuds restent montés et l'ajustement converge sans clignoter.
+    const ro = new ResizeObserver(measureAll);
+    root
+      .querySelectorAll('[data-shell-content], [data-shell-header]')
+      .forEach((c) => ro.observe(c));
+    return () => ro.disconnect();
+  }, [structureSignature]);
 
   const handleWidgetAction = (_action: string, _data: unknown) => {
     // Place reservee pour des hooks d'action widgets (telemetrie, analytics).
@@ -200,20 +333,25 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
       {},
     );
 
-    const orderedLayouts = getOrderedAndCompleteLayout(
-      config.widgets,
-      layout.lg,
-      config.widgetSizes,
-    );
-
     return (
+      <div ref={gridRef}>
       <ResponsiveGridLayout
-        key={JSON.stringify(orderedLayouts.map((l) => [l.i, l.w, l.h]))}
+        key={structureSignature}
         className="layout"
-        layouts={{ lg: orderedLayouts }}
+        // MÊME layout à TOUS les breakpoints (12 colonnes partout) : le conteneur
+        // (max-w-6xl ≈ 1104px) est SOUS le seuil lg=1200, donc la grille vit en
+        // 'md' — sans entrée md explicite elle synthétiserait son propre layout
+        // et nos largeurs/positions ne seraient pas appliquées.
+        layouts={{
+          lg: orderedLayouts,
+          md: orderedLayouts,
+          sm: orderedLayouts,
+          xs: orderedLayouts,
+          xxs: orderedLayouts,
+        }}
         breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
         cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }}
-        rowHeight={90}
+        rowHeight={30}
         isDraggable
         isResizable
         draggableHandle=".widget-drag-handle"
@@ -229,25 +367,30 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
             <div
               key={widget.id}
               data-grid={l}
-              className="bg-orange-50 border border-orange-200 rounded-lg flex flex-col h-full group relative"
+              data-widget-id={widget.id}
+              className={`bg-orange-50 border border-orange-200 rounded-lg flex flex-col h-full group relative overflow-hidden ${
+                widget.id === lastAddedId ? 'ring-2 ring-orange-500 animate-pulse' : ''
+              }`}
             >
               <div className="h-full flex flex-col">
-                <div className="widget-drag-handle flex justify-between items-center p-4 pb-2 border-b cursor-grab active:cursor-grabbing">
-                  <h3 className="text-lg font-bold text-gray-900 select-none">
-                    {String(widget.title ?? widget.id)}
-                  </h3>
-                  <div className="flex space-x-1" onMouseDown={(e) => e.stopPropagation()}>
-                    <button
-                      className="p-1 bg-white rounded-full shadow hover:bg-orange-100 transition-colors"
-                      title="Agrandir/Réduire la hauteur"
-                      onClick={() => cycleWidgetHeight(widget.id)}
+                {/* RÈGLE DÉTERMINISTE : la barre de carte porte TOUJOURS le titre —
+                    et lui seul (les en-têtes internes des widgets ont été retirés).
+                    Fini les cartes sans titre ou avec titre en double. */}
+                <div
+                  data-shell-header
+                  className="widget-drag-handle flex justify-between items-center border-b cursor-grab active:cursor-grabbing px-3 py-2"
+                >
+                  {/* Poignée TOUJOURS visible (affordance de déplacement). */}
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <GripHorizontal className="w-4 h-4 text-orange-400 shrink-0" />
+                    <h3
+                      className="text-base font-bold text-gray-900 select-none min-w-0 truncate"
+                      title={String(widget.title ?? widget.id)}
                     >
-                      {l.h < 6 ? (
-                        <Maximize2 className="w-4 h-4 text-orange-600" />
-                      ) : (
-                        <Minimize2 className="w-4 h-4 text-orange-600" />
-                      )}
-                    </button>
+                      {String(widget.title ?? widget.id)}
+                    </h3>
+                  </div>
+                  <div className="flex space-x-1 shrink-0 ml-2" onMouseDown={(e) => e.stopPropagation()}>
                     <button
                       className="p-1 bg-white rounded-full shadow hover:bg-orange-100 transition-colors"
                       title="Réinitialiser la taille"
@@ -257,48 +400,130 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
                     </button>
                     <button
                       className="p-1 bg-white rounded-full shadow hover:bg-red-100 transition-colors"
-                      title="Supprimer"
-                      onClick={() => removeWidget(widget.id)}
+                      title="Retirer ce widget"
+                      onClick={() => {
+                        // Garde-fou anti-mauvais-clic + rappel que c'est réversible.
+                        if (
+                          window.confirm(
+                            'Retirer ce widget du tableau de bord ?\nVous pourrez le réajouter à tout moment via « + Ajouter des widgets ».',
+                          )
+                        ) {
+                          removeWidget(widget.id);
+                        }
+                      }}
                     >
                       <X className="w-4 h-4 text-red-600" />
                     </button>
                   </div>
                 </div>
                 <div
-                  className="flex-1 min-h-0 overflow-y-auto p-4 pb-6"
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
                   style={{ maxHeight: '100%' }}
                 >
-                  <WidgetRenderer
-                    widget={shellWidgetToDashboardWidget(widget)}
-                    widgetSize="medium"
-                    onAction={handleWidgetAction}
-                    dashboardRole={role}
-                  />
+                  {/* Wrapper MESURÉ : non étiré -> son offsetHeight = hauteur naturelle
+                      du contenu (padding compris). Sert de base à l'auto-hauteur.
+                      break-words : aucun texte ne déborde de la carte. */}
+                  <div data-shell-content className="p-3 min-w-0 max-w-full break-words">
+                    <WidgetRenderer
+                      widget={shellWidgetToDashboardWidget(widget)}
+                      // Densité ADAPTÉE à la largeur RÉELLE de la carte : les widgets
+                      // ajustent items affichés, hauteur de graphe et troncatures.
+                      widgetSize={l.w >= 7 ? 'large' : l.w >= 5 ? 'medium' : 'small'}
+                      onAction={handleWidgetAction}
+                      dashboardRole={role}
+                    />
+                  </div>
                 </div>
+                {/* Contenu plus long que la carte compacte : le DÉTAIL s'ouvre à la
+                    demande, dans une grande fenêtre — principe cockpit. */}
+                {overflowingIds[widget.id] && (
+                  <button
+                    className="shrink-0 w-full text-center text-xs font-semibold text-orange-700 py-1.5 border-t border-orange-200 bg-orange-100/70 hover:bg-orange-200/70 transition-colors"
+                    onClick={() => setDetailWidget(widget)}
+                  >
+                    Voir le détail complet
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </ResponsiveGridLayout>
+      </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div
+      ref={rootRef}
+      className={`min-h-screen bg-gray-50 p-6 ${isCockpit ? 'h-screen overflow-y-auto' : ''}`}
+    >
       <NotificationContainer />
-      <div className="max-w-6xl mx-auto">
-        {showCockpit && <CockpitSummary role={role} />}
-        {renderServices()}
+      {/* Largeur ÉLARGIE (1536px au lieu de 1152px) : une carte 1/3 passe de ~360px
+          à ~490px de large -> les contenus (listes, cartes machines) respirent. */}
+      <div className="max-w-screen-2xl mx-auto">
+        {/* En mode cockpit, on masque la navigation secondaire : place aux widgets. */}
+        {showCockpit && !isCockpit && <CockpitSummary role={role} />}
+        {!isCockpit && renderServices()}
 
-        <div className="flex justify-between items-center mb-4">
-          {renderSaveButton()}
-          <button
-            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
-            onClick={() => setShowAddModal(true)}
-          >
-            + Ajouter des widgets
-          </button>
+        {/* Barre d'outils UNIFIÉE : le dashboard se présente (titre métier) et
+            regroupe ses 3 actions au même endroit — plus de boutons éparpillés. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900">
+              Tableau de bord — {role.charAt(0).toUpperCase() + role.slice(1)}
+            </h1>
+            <p className="text-xs text-gray-500">
+              Déplacez les cartes par leur barre du haut · redimensionnez par le coin bas-droit
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              className="px-4 py-2 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 transition-colors flex items-center gap-2"
+              title={isCockpit ? 'Quitter le plein écran' : 'Plein écran : masque la navigation, maximise les widgets (réunion, écran mural)'}
+              onClick={toggleCockpit}
+            >
+              {isCockpit ? <Shrink className="w-4 h-4" /> : <Expand className="w-4 h-4" />}
+              {isCockpit ? 'Quitter' : 'Mode cockpit'}
+            </button>
+            <button
+              className="px-4 py-2 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 transition-colors flex items-center gap-2"
+              title="Range automatiquement toutes les cartes en lignes pleines, sans trous"
+              onClick={reorganizeLayout}
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Réorganiser
+            </button>
+            <button
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+              onClick={() => setShowAddModal(true)}
+            >
+              + Ajouter des widgets
+            </button>
+            {renderSaveButton()}
+          </div>
         </div>
+
+        {/* Guide de PREMIÈRE VISITE : 4 gestes expliqués en clair, refermable. */}
+        {showHelp && !isCockpit && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 text-sm text-blue-900">
+              <div className="font-semibold mb-1">💡 Comment utiliser votre tableau de bord</div>
+              <ul className="space-y-0.5 list-disc list-inside text-blue-800">
+                <li><b>Déplacer</b> une carte : saisissez-la par sa barre du haut et glissez-la.</li>
+                <li><b>Redimensionner</b> : tirez le coin en bas à droite d'une carte.</li>
+                <li><b>Réorganiser</b> : range toutes les cartes automatiquement, sans trous.</li>
+                <li>Vos changements sont <b>enregistrés automatiquement</b> — « Sauvegarder » force l'enregistrement immédiat.</li>
+              </ul>
+            </div>
+            <button
+              className="shrink-0 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={dismissHelp}
+            >
+              Compris
+            </button>
+          </div>
+        )}
 
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
@@ -315,9 +540,12 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
                     const isInstalled = config?.widgets.some((cw) => cw.id === w.id) ?? false;
                     const added = addStatus[w.id] === 'added';
                     return (
-                      <li key={w.id} className="mb-2 flex justify-between items-center">
-                        <span>
-                          {String(w.title ?? w.id)} ({w.id})
+                      <li key={w.id} className="mb-2 flex justify-between items-center gap-2">
+                        <span className="min-w-0">
+                          <span className="block font-medium text-gray-900">{String(w.title ?? w.id)}</span>
+                          {w.description ? (
+                            <span className="block text-xs text-gray-500 line-clamp-1">{String(w.description)}</span>
+                          ) : null}
                         </span>
                         {isInstalled ? (
                           <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
@@ -352,6 +580,41 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
 
         {renderWidgets()}
       </div>
+
+      {/* GRANDE FENÊTRE DE DÉTAIL : le widget entier, à la demande (principe
+          cockpit : la carte résume, le détail s'ouvre ici). */}
+      {detailWidget && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setDetailWidget(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
+              <h2 className="text-lg font-bold text-gray-900 truncate">
+                {String(detailWidget.title ?? detailWidget.id)}
+              </h2>
+              <button
+                className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+                title="Fermer"
+                onClick={() => setDetailWidget(null)}
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-5">
+              <WidgetRenderer
+                widget={shellWidgetToDashboardWidget(detailWidget)}
+                widgetSize="large"
+                onAction={handleWidgetAction}
+                dashboardRole={role}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

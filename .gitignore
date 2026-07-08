@@ -46,3 +46,8 @@ dist/
 .vscode/
 .idea/
 *.code-workspace
+# Artefact de build (site zippé pour Hostinger) — ne pas versionner
+minegrid-site.zip
+
+# Outillage local Claude Code (launch.json avec chemins machine)
+.claude/

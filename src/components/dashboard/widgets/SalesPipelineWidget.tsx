@@ -3,7 +3,7 @@ import {
   Plus, ChevronUp, ChevronDown, AlertTriangle, FileText, Star, TrendingUp, Info, X,
   Calendar, Download, Send, Target, Users, TrendingDown, ChevronRight, ListFilter,
 } from 'lucide-react';
-import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
+import { showNotification, exportData } from '../../../services/apiService';
 import { getDashboardStats } from '../../../utils/api';
 import { RealPipelineService } from '../../../services/realPipelineService';
 import { prospectKindOfLead, prospectKindLabel } from '../../../utils/monitorProspectMatch';
@@ -294,15 +294,23 @@ const SalesPipelineWidget = ({
     if (prospectFilter !== 'all') {
       sorted = sorted.filter((lead) => lead.prospectKind === prospectFilter);
     }
+    // PRIORITÉ AUX OPPORTUNITÉS OUVERTES : les leads Conclu/Perdu sont relégués
+    // en bas quel que soit le tri (un gros lead perdu ne masque plus le travail).
+    const closedRank = (l: { stage?: string }) =>
+      l.stage === 'Conclu' || l.stage === 'Perdu' ? 1 : 0;
     switch (sortBy) {
       case 'value':
-        return sorted.sort((a, b) => (b.value || 0) - (a.value || 0));
+        return sorted.sort((a, b) => closedRank(a) - closedRank(b) || (b.value || 0) - (a.value || 0));
       case 'probability':
-        return sorted.sort((a, b) => (b.probability || 0) - (a.probability || 0));
+        return sorted.sort((a, b) => closedRank(a) - closedRank(b) || (b.probability || 0) - (a.probability || 0));
       case 'lastContact':
-        return sorted.sort((a, b) => new Date(b.lastContact).getTime() - new Date(a.lastContact).getTime());
+        return sorted.sort(
+          (a, b) =>
+            closedRank(a) - closedRank(b) ||
+            new Date(b.lastContact).getTime() - new Date(a.lastContact).getTime(),
+        );
       default:
-        return sorted;
+        return sorted.sort((a, b) => closedRank(a) - closedRank(b));
     }
   }, [leadsData, selectedStage, sortBy, prospectFilter]);
 
@@ -638,8 +646,10 @@ const SalesPipelineWidget = ({
       }));
       
       // Export immédiat (sans await)
-      exportData(pipelineData, `pipeline-commercial-${new Date().toISOString().split('T')[0]}`, 'excel');
-      showNotification('success', 'Export du pipeline réussi');
+      void exportData(pipelineData, `pipeline-commercial-${new Date().toISOString().split('T')[0]}`, 'csv').then((r) => {
+        if (r?.success) showNotification('success', 'Pipeline exporté (fichier CSV téléchargé)');
+        else showNotification('error', "L'export a échoué. Réessayez.");
+      });
       
     } catch (error) {
       console.error('Erreur lors de l\'export:', error);
@@ -661,14 +671,14 @@ const SalesPipelineWidget = ({
           : l
       ));
       
-      showNotification('success', `Suivi envoyé pour ${lead.title}`);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pipeline/followup', { leadId: lead.id }).catch(error => {
-          console.error('Erreur API suivi:', error);
-        });
-      }, 50);
+      void RealPipelineService.updateLead(lead.id, { last_contact: new Date().toISOString() }).then((saved) => {
+        if (saved) {
+          showNotification('success', `${lead.title} marqué comme relancé (dernier contact mis à jour)`);
+          window.dispatchEvent(new Event('pipeline:refresh'));
+        } else {
+          showNotification('error', "Impossible d'enregistrer la relance. Réessayez.");
+        }
+      });
       
     } catch (error) {
       console.error('Erreur lors de l\'envoi du suivi:', error);
@@ -690,14 +700,14 @@ const SalesPipelineWidget = ({
           : l
       ));
       
-      showNotification('success', `Rendez-vous programmé pour ${lead.title}`);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pipeline/meeting', { leadId: lead.id }).catch(error => {
-          console.error('Erreur API rendez-vous:', error);
-        });
-      }, 50);
+      void RealPipelineService.updateLead(lead.id, { next_action: 'Rendez-vous à programmer' }).then((saved) => {
+        if (saved) {
+          showNotification('success', `Prochaine action de ${lead.title} : rendez-vous à programmer`);
+          window.dispatchEvent(new Event('pipeline:refresh'));
+        } else {
+          showNotification('error', "Impossible d'enregistrer. Réessayez.");
+        }
+      });
       
     } catch (error) {
       console.error('Erreur lors de la programmation du rendez-vous:', error);
@@ -718,14 +728,7 @@ const SalesPipelineWidget = ({
         averageProbability: Math.round(leadsData.reduce((sum, lead) => sum + lead.probability, 0) / Math.max(leadsData.length, 1))
       };
 
-      showNotification('success', 'Rapport généré avec succès');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pipeline/report', report).catch(error => {
-          console.error('Erreur API rapport:', error);
-        });
-      }, 50);
+      showNotification('info', 'Génération de rapport en démonstration — pas encore active.');
       
     } catch (error) {
       console.error('Erreur lors de la génération du rapport:', error);
@@ -743,14 +746,7 @@ const SalesPipelineWidget = ({
           : lead
       ));
       
-      showNotification('success', `Relance automatique activée pour ${leadsToRelance.length} leads`);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pipeline/relance', { leadIds: leadsToRelance.map(l => l.id) }).catch(error => {
-          console.error('Erreur API relance:', error);
-        });
-      }, 50);
+      showNotification('info', 'Relance automatique en démonstration — pas encore active.');
       
     } catch (error) {
       console.error('Erreur lors de l\'activation de la relance:', error);
@@ -771,14 +767,7 @@ const SalesPipelineWidget = ({
         }, {})
       };
 
-      showNotification('success', 'Analyse de performance terminée');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pipeline/analyse', analysis).catch(error => {
-          console.error('Erreur API analyse:', error);
-        });
-      }, 50);
+      showNotification('info', 'Analyse de performance en démonstration — pas encore active.');
       
     } catch (error) {
       console.error('Erreur lors de l\'analyse:', error);
@@ -797,14 +786,7 @@ const SalesPipelineWidget = ({
         priority: lead.value > 200000 ? 'high' : lead.value > 100000 ? 'medium' : 'low'
       }));
 
-      showNotification('success', 'Optimisation IA terminée');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pipeline/optimisation', { optimizations }).catch(error => {
-          console.error('Erreur API optimisation:', error);
-        });
-      }, 50);
+      showNotification('info', 'Optimisation IA en démonstration — pas encore active.');
       
     } catch (error) {
       console.error('Erreur lors de l\'optimisation:', error);
@@ -867,7 +849,7 @@ const SalesPipelineWidget = ({
           <div className="flex bg-orange-100 rounded-md p-0.5 gap-0.5 flex-wrap">
             <button
               onClick={handleViewList}
-              className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                 viewMode === 'list'
                   ? 'bg-orange-600 text-white'
                   : 'bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200'
@@ -877,7 +859,7 @@ const SalesPipelineWidget = ({
             </button>
             <button
               onClick={handleViewKanban}
-              className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                 viewMode === 'kanban'
                   ? 'bg-orange-600 text-white'
                   : 'bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200'
@@ -887,7 +869,7 @@ const SalesPipelineWidget = ({
             </button>
             <button
               onClick={handleViewTimeline}
-              className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                 viewMode === 'timeline'
                   ? 'bg-orange-600 text-white'
                   : 'bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200'
@@ -908,7 +890,7 @@ const SalesPipelineWidget = ({
                 <button
                   key={key}
                   onClick={() => setProspectFilter(key)}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                     prospectFilter === key ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -920,125 +902,20 @@ const SalesPipelineWidget = ({
 
           <button
             onClick={handleAddNewLead}
-            className="px-2 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-[11px] leading-tight font-medium flex items-center gap-1"
+            className="px-2 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs leading-tight font-medium flex items-center gap-1"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
             Nouveau lead
           </button>
           <button
             onClick={handleExportPipeline}
-            className="px-2 py-1.5 bg-white text-orange-700 border border-orange-300 rounded-md hover:bg-orange-50 text-[11px] leading-tight font-medium flex items-center gap-1"
+            className="px-2 py-1.5 bg-white text-orange-700 border border-orange-300 rounded-md hover:bg-orange-50 text-xs leading-tight font-medium flex items-center gap-1"
             title="Télécharger les données visibles"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
             Exporter
           </button>
         </div>
-      </div>
-
-      {/* Statistiques globales */}
-      {error ? (
-        <div className="text-center p-6 bg-red-50 border border-red-200 rounded-lg">
-          <div className="text-red-600 font-medium mb-2">Erreur de connexion</div>
-          <div className="text-sm text-red-500 mb-3">{error}</div>
-          <button 
-            onClick={loadRealData}
-            className="text-xs bg-red-100 text-red-800 border border-red-300 px-3 py-1 rounded hover:bg-red-200 transition-colors"
-          >
-            Réessayer
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-4 gap-3">
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{pipelineStats.total}</div>
-            <div className="text-xs text-orange-600">Total Leads</div>
-          </div>
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{formatCurrency(pipelineStats.totalValue)}</div>
-            <div className="text-xs text-orange-600">Valeur Totale</div>
-          </div>
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{formatCurrency(pipelineStats.weightedValue)}</div>
-            <div className="text-xs text-orange-600">Valeur Pondérée</div>
-          </div>
-          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
-            <div className="text-base font-medium text-orange-700">{Math.round(calculateConversionRates.global)}%</div>
-            <div className="text-xs text-orange-600">Taux Conversion</div>
-          </div>
-        </div>
-      )}
-
-      {/* Raccourcis : même densité que le widget stock (lignes, icônes, mentions démo). */}
-      <div className="bg-white rounded-lg border border-orange-200 p-2.5">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="min-w-0">
-            <h4 className="text-xs font-semibold text-orange-900 flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 shrink-0" />
-              Raccourcis pipeline
-            </h4>
-            <p className="text-[10px] text-orange-800/80 mt-0.5 leading-snug">
-              <strong>Boîte leads</strong> ouvre l’inbox (<span className="font-mono text-[9px]">/#leads</span>).{' '}
-              <strong>Exporter</strong> télécharge le pipeline affiché (Excel).{' '}
-              <strong>Relance</strong> et <strong>réunion</strong> s’appliquent au lead ouvert dans la fiche détail (cliquer une ligne puis l’aperçu).
-            </p>
-          </div>
-          <button
-            className="p-0.5 text-orange-500 hover:text-orange-700 transition-colors shrink-0"
-            onClick={() => setShowQuickActions((v) => !v)}
-            title={showQuickActions ? 'Fermer' : 'Ouvrir'}
-          >
-            {showQuickActions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-        {showQuickActions && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            <button
-              onClick={(e) => handleQuickAction('add-lead', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
-              title="Ouvre la page inbox leads"
-            >
-              <Plus className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span className="text-left">
-                Boîte leads
-                <span className="block text-[9px] font-normal text-orange-700/85">Page inbox</span>
-              </span>
-            </button>
-
-            <button
-              onClick={(e) => handleQuickAction('export-pipeline', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
-              title="Export Excel des leads affichés"
-            >
-              <Download className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              Exporter (Excel)
-            </button>
-
-            <button
-              onClick={(e) => handleQuickAction('send-followup', selectedLead ?? undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
-              title="Nécessite un lead ouvert dans la fiche détail"
-            >
-              <Send className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span className="text-left">
-                Enregistrer relance
-                <span className="block text-[9px] font-normal text-orange-700/85">Fiche lead ouverte</span>
-              </span>
-            </button>
-
-            <button
-              onClick={(e) => handleQuickAction('schedule-meeting', selectedLead ?? undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
-              title="Nécessite un lead ouvert dans la fiche détail"
-            >
-              <Calendar className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span className="text-left">
-                Planifier RDV
-                <span className="block text-[9px] font-normal text-orange-700/85">Fiche lead ouverte</span>
-              </span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Alertes pipeline : règles sur les données affichées (distinct du widget « Insights IA »). */}
@@ -1050,7 +927,7 @@ const SalesPipelineWidget = ({
                 <ListFilter className="w-4 h-4 shrink-0" />
                 Alertes sur le pipeline
               </h4>
-              <p className="text-[10px] text-gray-600 mt-1 leading-snug">
+              <p className="text-xs text-gray-600 mt-1 leading-snug">
                 Indicateurs calculés sur vos leads (pas de modèle génératif). Pour prédictions et recommandations IA, ajoutez le widget{' '}
                 <span className="font-medium text-gray-800">Insights IA</span> au tableau de bord.
               </p>
@@ -1090,13 +967,120 @@ const SalesPipelineWidget = ({
         </div>
       )}
 
+      {/* Statistiques globales */}
+      {error ? (
+        <div className="text-center p-6 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-600 font-medium mb-2">Erreur de connexion</div>
+          <div className="text-sm text-red-500 mb-3">{error}</div>
+          <button 
+            onClick={loadRealData}
+            className="text-xs bg-red-100 text-red-800 border border-red-300 px-3 py-1 rounded hover:bg-red-200 transition-colors"
+          >
+            Réessayer
+          </button>
+        </div>
+      ) : (
+        // auto-fit : s'adapte à la largeur RÉELLE de la carte (pas au viewport).
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2">
+          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
+            <div className="text-base font-medium text-orange-700">{pipelineStats.total}</div>
+            <div className="text-xs text-orange-600">Total Leads</div>
+          </div>
+          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200 min-w-0">
+            <div className="text-base font-medium text-orange-700 truncate" title={formatCurrency(pipelineStats.totalValue)}>{formatCurrency(pipelineStats.totalValue)}</div>
+            <div className="text-xs text-orange-600">Valeur Totale</div>
+          </div>
+          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
+            <div className="text-base font-medium text-orange-700">{formatCurrency(pipelineStats.weightedValue)}</div>
+            <div className="text-xs text-orange-600">Valeur Pondérée</div>
+          </div>
+          <div className="text-center p-3 bg-orange-100 rounded-lg border border-orange-200">
+            <div className="text-base font-medium text-orange-700">{Math.round(calculateConversionRates.global)}%</div>
+            <div className="text-xs text-orange-600">Taux Conversion</div>
+          </div>
+        </div>
+      )}
+
+      {/* Raccourcis : même densité que le widget stock (lignes, icônes, mentions démo). */}
+      <div className="bg-white rounded-lg border border-orange-200 p-2.5">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="min-w-0">
+            <h4 className="text-xs font-semibold text-orange-900 flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 shrink-0" />
+              Raccourcis pipeline
+            </h4>
+            <p className="text-xs text-orange-800/80 mt-0.5 leading-snug">
+              <strong>Boîte leads</strong> ouvre l’inbox (<span className="font-mono text-xs">/#leads</span>).{' '}
+              <strong>Exporter</strong> télécharge le pipeline affiché (Excel).{' '}
+              <strong>Relance</strong> et <strong>réunion</strong> s’appliquent au lead ouvert dans la fiche détail (cliquer une ligne puis l’aperçu).
+            </p>
+          </div>
+          <button
+            className="p-0.5 text-orange-500 hover:text-orange-700 transition-colors shrink-0"
+            onClick={() => setShowQuickActions((v) => !v)}
+            title={showQuickActions ? 'Fermer' : 'Ouvrir'}
+          >
+            {showQuickActions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+        {showQuickActions && (
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-1.5">
+            <button
+              onClick={(e) => handleQuickAction('add-lead', undefined, e)}
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
+              title="Ouvre la page inbox leads"
+            >
+              <Plus className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Boîte leads
+                <span className="block text-xs font-normal text-orange-700/85">Page inbox</span>
+              </span>
+            </button>
+
+            <button
+              onClick={(e) => handleQuickAction('export-pipeline', undefined, e)}
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
+              title="Export Excel des leads affichés"
+            >
+              <Download className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              Exporter (Excel)
+            </button>
+
+            <button
+              onClick={(e) => handleQuickAction('send-followup', selectedLead ?? undefined, e)}
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
+              title="Nécessite un lead ouvert dans la fiche détail"
+            >
+              <Send className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Enregistrer relance
+                <span className="block text-xs font-normal text-orange-700/85">Fiche lead ouverte</span>
+              </span>
+            </button>
+
+            <button
+              onClick={(e) => handleQuickAction('schedule-meeting', selectedLead ?? undefined, e)}
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
+              title="Nécessite un lead ouvert dans la fiche détail"
+            >
+              <Calendar className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="text-left">
+                Planifier RDV
+                <span className="block text-xs font-normal text-orange-700/85">Fiche lead ouverte</span>
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+
+
       {/* Filtres et tri — compacts */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-white rounded-md border border-orange-200 px-2 py-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <select
             value={selectedStage || ''}
             onChange={(e) => setSelectedStage(e.target.value || null)}
-            className="text-[11px] leading-tight border border-orange-200 rounded px-1.5 py-0.5 bg-white text-orange-900 max-w-[148px] focus:outline-none focus:ring-1 focus:ring-orange-300"
+            className="text-xs leading-tight border border-orange-200 rounded px-1.5 py-0.5 bg-white text-orange-900 max-w-[148px] focus:outline-none focus:ring-1 focus:ring-orange-300"
           >
             <option value="">Toutes les étapes</option>
             <option value="Prospection">Prospection</option>
@@ -1109,7 +1093,7 @@ const SalesPipelineWidget = ({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="text-[11px] leading-tight border border-orange-200 rounded px-1.5 py-0.5 bg-white text-orange-900 max-w-[168px] focus:outline-none focus:ring-1 focus:ring-orange-300"
+            className="text-xs leading-tight border border-orange-200 rounded px-1.5 py-0.5 bg-white text-orange-900 max-w-[168px] focus:outline-none focus:ring-1 focus:ring-orange-300"
           >
             <option value="value">Trier par valeur</option>
             <option value="probability">Trier par probabilité</option>
@@ -1120,7 +1104,7 @@ const SalesPipelineWidget = ({
         <button
           type="button"
           onClick={() => setShowConversionRates(!showConversionRates)}
-          className="text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded hover:bg-blue-100 shrink-0"
+          className="text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded hover:bg-blue-100 shrink-0"
         >
           Taux conversion
         </button>
@@ -1130,7 +1114,7 @@ const SalesPipelineWidget = ({
       {showConversionRates && (
         <div className="bg-white rounded-lg border border-orange-200 p-4">
           <h4 className="text-sm font-semibold text-orange-900 mb-3">Taux de conversion par étape</h4>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(90px,1fr))] gap-2">
             {['Prospection', 'Devis', 'Négociation', 'Conclu', 'Perdu'].map((stage) => (
               <div key={stage} className="text-center">
                 <div className="text-lg font-bold text-orange-700">
@@ -1262,13 +1246,16 @@ const SalesPipelineWidget = ({
         </>
       )}
 
-      {/* Vue Kanban */}
+      {/* Vue Kanban — colonnes à largeur MINIMALE lisible : en carte étroite le
+          kanban défile horizontalement au lieu d'écraser 5 colonnes illisibles. */}
       {viewMode === 'kanban' && (
-        <div className="grid grid-cols-5 gap-4 max-h-96 overflow-y-auto">
+        <div className="flex gap-3 max-h-96 overflow-y-auto overflow-x-auto">
           {['Prospection', 'Devis', 'Négociation', 'Conclu', 'Perdu'].map((stage) => {
-            const stageLeads = leadsData.filter(lead => lead.stage === stage);
+            // sortedLeads (et non leadsData) : le kanban respecte le filtre
+            // prospect ET le tri par valeur dans chaque colonne.
+            const stageLeads = sortedLeads.filter(lead => lead.stage === stage);
             return (
-              <div key={stage} className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+              <div key={stage} className="bg-orange-50 rounded-lg p-3 border border-orange-200 min-w-[180px] flex-1 shrink-0">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className={`text-sm font-semibold px-2 py-1 rounded-full ${getStageColor(stage)}`}>
                     {formatStageLabel(stage)}
@@ -1303,7 +1290,7 @@ const SalesPipelineWidget = ({
                       </h5>
                       <button
                         type="button"
-                        className="text-[10px] font-medium text-orange-600 hover:text-orange-800 hover:underline text-left w-full mb-1"
+                        className="text-xs font-medium text-orange-600 hover:text-orange-800 hover:underline text-left w-full mb-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleViewDetails(lead);
@@ -1314,9 +1301,9 @@ const SalesPipelineWidget = ({
                       <TransactionDossierLink
                         caseId={lead.transaction_case_id}
                         stopClickBubble
-                        className="text-[10px] font-medium text-orange-700 hover:underline block mb-1"
+                        className="text-xs font-medium text-orange-700 hover:underline block mb-1"
                       />
-                      <div className="text-[10px] font-normal text-orange-700 mb-1">{formatCurrency(lead.value)}</div>
+                      <div className="text-xs font-normal text-orange-700 mb-1">{formatCurrency(lead.value)}</div>
                       <div className="flex items-center justify-between text-xs">
                         <span className={`px-2 py-1 rounded-full ${getPriorityColor(lead.priority)}`}>
                           {lead.priority === 'high' ? 'Haute' : lead.priority === 'medium' ? 'Moyenne' : 'Basse'}

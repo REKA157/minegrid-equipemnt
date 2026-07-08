@@ -57,15 +57,6 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
   const [selectedPeriod, setSelectedPeriod] = useState<'current' | 'previous' | 'forecast'>('current');
   const [showDetails, setShowDetails] = useState(false);
 
-  // Fonction pour obtenir le nombre de colonnes selon la taille
-  const getGridCols = (defaultCols: number) => {
-    switch (widgetSize) {
-      case 'small': return Math.min(defaultCols, 2);
-      case 'large': return Math.min(defaultCols + 1, 4);
-      default: return defaultCols;
-    }
-  };
-
   // Fonction pour obtenir la taille du texte selon la taille du widget
   const getTextSize = (type: 'value' | 'subtitle') => {
     switch (widgetSize) {
@@ -189,7 +180,7 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
               </div>
 
               {/* Indicateurs de performance */}
-              <div className={`grid grid-cols-${getGridCols(2)} gap-${widgetSize === 'small' ? '1' : widgetSize === 'large' ? '3' : '2'} text-xs`}>
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="text-center p-2 bg-orange-50 rounded">
                   <div className="font-semibold text-orange-600">
                     {currentData.growth >= 0 ? '+' : ''}{currentData.growth.toFixed(1)}%
@@ -216,7 +207,7 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
               </div>
 
               {/* Métriques secondaires */}
-              <div className={`grid grid-cols-${getGridCols(2)} gap-${widgetSize === 'small' ? '1' : widgetSize === 'large' ? '3' : '2'} text-xs`}>
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="text-center p-2 bg-gray-50 rounded">
                   <div className="font-semibold text-gray-900">{currentData.count}</div>
                   <div className="text-gray-600">Ventes</div>

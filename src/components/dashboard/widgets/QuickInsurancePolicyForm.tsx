@@ -258,7 +258,7 @@ const QuickInsurancePolicyForm: React.FC<QuickInsurancePolicyFormProps> = ({
                       key={p}
                       type="button"
                       onClick={() => setPolicyType(p)}
-                      className={`rounded border px-2 py-1.5 text-[11px] font-medium transition ${
+                      className={`rounded border px-2 py-1.5 text-xs font-medium transition ${
                         policyType === p
                           ? 'border-orange-500 bg-orange-50 text-orange-700'
                           : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400'
@@ -325,7 +325,7 @@ const QuickInsurancePolicyForm: React.FC<QuickInsurancePolicyFormProps> = ({
                     placeholder="38500"
                     className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   />
-                  <div className="mt-0.5 text-[10px] text-gray-500">
+                  <div className="mt-0.5 text-xs text-gray-500">
                     Pré-rempli à titre indicatif (taux standards par type) — à confirmer avec le devis assureur.
                   </div>
                 </div>
@@ -364,15 +364,15 @@ const QuickInsurancePolicyForm: React.FC<QuickInsurancePolicyFormProps> = ({
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div>
                       <div className="text-base font-bold text-blue-900">{periodicPayment.toLocaleString('fr-FR')}</div>
-                      <div className="text-[10px] text-blue-700">MAD / {paymentFrequency.toLowerCase().replace('uel', '')}</div>
+                      <div className="text-xs text-blue-700">MAD / {paymentFrequency.toLowerCase().replace('uel', '')}</div>
                     </div>
                     <div>
                       <div className="text-base font-bold text-blue-900">{endDatePreview}</div>
-                      <div className="text-[10px] text-blue-700">Échéance</div>
+                      <div className="text-xs text-blue-700">Échéance</div>
                     </div>
                     <div>
                       <div className="text-base font-bold text-orange-700">{commissionPreview.toLocaleString('fr-FR')}</div>
-                      <div className="text-[10px] text-orange-700">Votre commission</div>
+                      <div className="text-xs text-orange-700">Votre commission</div>
                     </div>
                   </div>
                 </div>

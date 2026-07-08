@@ -302,7 +302,9 @@ export class RealPipelineService {
           notes: message.content,
           contact_email: message.sender_email,
           source: 'message' as const,
-          source_id: message.id
+          source_id: message.id,
+          // Chaîne stock -> pipeline : le lead garde la machine concernée.
+          machine_id: (message as { machine_id?: string | null }).machine_id ?? null,
         };
 
         const newLead = await this.createLead(leadData);
@@ -373,7 +375,9 @@ export class RealPipelineService {
           last_contact: offer.created_at,
           notes: `Offre de ${offer.amount} MAD`,
           source: 'offer' as const,
-          source_id: offer.id
+          source_id: offer.id,
+          // Chaîne stock -> pipeline : le lead garde la machine concernée.
+          machine_id: (offer as { machine_id?: string | null }).machine_id ?? null,
         };
 
         const newLead = await this.createLead(leadData);

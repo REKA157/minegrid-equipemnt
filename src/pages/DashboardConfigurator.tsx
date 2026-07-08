@@ -12,6 +12,8 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { useAuth } from '../hooks/useAuth';
 import { scopedStorageKey, setAccountItem } from '../utils/accountLocalStorage';
+import { getHeightFromWidget, resolveWidgetSize } from './enterprise-shell';
+import type { ShellWidget } from './enterprise-shell';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -355,9 +357,14 @@ const DashboardConfigurator: React.FC = () => {
     if (metier) {
       const defaultWidgets = metier.widgets.map(w => w.id);
       setSelectedWidgets(defaultWidgets);
+      // Tailles par défaut selon le TYPE (graphe 2/3, score 1/3, liste 1/2) —
+      // l'ancien « tout 1/3 » écrasait le contenu et rendait le dashboard illisible.
       const defaultSizes: {[key: string]: '1/3' | '1/2' | '2/3' | '1/1'} = {};
-      metier.widgets.forEach((widget, index) => {
-        defaultSizes[widget.id] = '1/3';
+      metier.widgets.forEach((widget) => {
+        defaultSizes[widget.id] = resolveWidgetSize(
+          widget as unknown as ShellWidget,
+          {},
+        ) as '1/3' | '1/2' | '2/3' | '1/1';
       });
       setWidgetSizes(defaultSizes);
     }
@@ -382,12 +389,16 @@ const DashboardConfigurator: React.FC = () => {
     const layout = [];
     let x = 0;
     let y = 0;
-    const rowHeight = 4;
     let currentRowMaxY = y;
 
-    enabledWidgets.forEach((widget, index) => {
-      const size = widgetSizes[widget.id] || (widget as any).size || '1/3';
-      const w = getWidthFromSize(size);
+    enabledWidgets.forEach((widget) => {
+      // Même règle que l'affichage : ratio choisi > ratio intrinsèque > défaut par TYPE
+      // (graphe 2/3, score 1/3, liste 1/2) — fini le « tout en 1/3 » écrasé.
+      const size = resolveWidgetSize(widget as unknown as ShellWidget, widgetSizes);
+      const w = getWidthFromSize(size as '1/3' | '1/2' | '2/3' | '1/1');
+      // Hauteur ADAPTÉE AU CONTENU (graphe plus haut, KPI plus court) — même règle
+      // que l'affichage, pour que la disposition enregistrée soit lisible dès la 1re fois.
+      const h = getHeightFromWidget(widget as unknown as ShellWidget);
       if (x + w > 12) {
         x = 0;
         y = currentRowMaxY;
@@ -397,10 +408,10 @@ const DashboardConfigurator: React.FC = () => {
         x,
         y,
         w,
-        h: rowHeight,
+        h,
       });
       x += w;
-      currentRowMaxY = Math.max(currentRowMaxY, y + rowHeight);
+      currentRowMaxY = Math.max(currentRowMaxY, y + h);
     });
     console.log('Layout généré pour sauvegarde:', layout);
     return layout;
@@ -415,7 +426,7 @@ const DashboardConfigurator: React.FC = () => {
       widgets: enabledWidgets.map(widget => ({
         ...widget,
         enabled: true,
-        size: widgetSizes[widget.id] || 'medium',
+        size: resolveWidgetSize(widget as unknown as ShellWidget, widgetSizes),
         position: layout.find(l => l.i === widget.id)?.position || 0
       })),
       layout: {
@@ -453,12 +464,13 @@ const DashboardConfigurator: React.FC = () => {
       widgets: enabledWidgets.map(widget => ({
         ...widget,
         enabled: true,
-        size: widgetSizes[widget.id] || '1/3',
+        size: resolveWidgetSize(widget as unknown as ShellWidget, widgetSizes),
         position: layout.find(l => l.i === widget.id)?.position || 0
       })),
       layout: {
         lg: layout
       },
+      widgetSizes, // ratios (source de vérité des largeurs à l'affichage)
       theme: 'light',
       refreshInterval: 30,
       notifications: true,

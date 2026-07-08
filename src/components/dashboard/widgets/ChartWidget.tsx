@@ -63,7 +63,8 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'm
     const height = widgetSize === 'small' ? 60 : widgetSize === 'large' ? 120 : 80;
 
     return (
-      <div className="flex items-end justify-between h-20 space-x-1">
+      // Hauteur alignée sur la taille calculée (h-20 figé coupait les barres en 'large').
+      <div className="flex items-end justify-between space-x-1" style={{ height: `${height}px` }}>
         {data.slice(0, 6).map((item, index) => {
           const value = item.value || item.CA || 0;
           const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;

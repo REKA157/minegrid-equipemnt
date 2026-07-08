@@ -1,0 +1,10 @@
+# SPA fallback (Apache/Hostinger) : sert index.html pour toute route inconnue,
+# évite les 404 en rafraîchissant une page. Sans effet sur le routing par #hash.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>

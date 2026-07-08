@@ -252,7 +252,7 @@ const QuickOpportunityForm: React.FC<QuickOpportunityFormProps> = ({ open, onClo
                     className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   />
                   {negotiationMargin != null && (
-                    <div className={`mt-0.5 text-[10px] ${negotiationMargin >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    <div className={`mt-0.5 text-xs ${negotiationMargin >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                       {negotiationMargin >= 0 ? 'Décote' : 'Surcote'} : {Math.abs(negotiationMargin)}% vs marché
                     </div>
                   )}
@@ -319,7 +319,7 @@ const QuickOpportunityForm: React.FC<QuickOpportunityFormProps> = ({ open, onClo
               {/* Simulation ROI */}
               {metrics.roiAnnualPercent !== 0 && (
                 <div className="rounded border border-blue-200 bg-blue-50 p-3">
-                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-blue-700">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
                     <TrendingUp className="h-3 w-3" />
                     Simulation rentabilité
                   </div>
@@ -328,21 +328,21 @@ const QuickOpportunityForm: React.FC<QuickOpportunityFormProps> = ({ open, onClo
                       <div className={`text-base font-bold ${metrics.roiAnnualPercent >= 10 ? 'text-green-700' : metrics.roiAnnualPercent >= 5 ? 'text-orange-700' : 'text-red-700'}`}>
                         {metrics.roiAnnualPercent}%
                       </div>
-                      <div className="text-[9px] text-blue-700">ROI annuel</div>
+                      <div className="text-xs text-blue-700">ROI annuel</div>
                     </div>
                     <div>
                       <div className="text-base font-bold text-blue-900">{metrics.paybackMonths || '∞'}</div>
-                      <div className="text-[9px] text-blue-700">{metrics.paybackMonths ? 'Mois retour' : 'Pas rentable'}</div>
+                      <div className="text-xs text-blue-700">{metrics.paybackMonths ? 'Mois retour' : 'Pas rentable'}</div>
                     </div>
                     <div>
                       <div className="text-base font-bold text-blue-900">{metrics.monthlyNet.toLocaleString('fr-FR')}</div>
-                      <div className="text-[9px] text-blue-700">Cash flow/mois</div>
+                      <div className="text-xs text-blue-700">Cash flow/mois</div>
                     </div>
                     <div>
                       <div className={`text-base font-bold ${metrics.totalGain >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                         {Math.round(metrics.totalGain / 1000)}k
                       </div>
-                      <div className="text-[9px] text-blue-700">Gain total ({expectedHoldingYears}a)</div>
+                      <div className="text-xs text-blue-700">Gain total ({expectedHoldingYears}a)</div>
                     </div>
                   </div>
                 </div>
@@ -374,7 +374,7 @@ const QuickOpportunityForm: React.FC<QuickOpportunityFormProps> = ({ open, onClo
               {/* Recommandation */}
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-700">
-                  Recommandation <span className="text-[10px] font-normal text-gray-500">(suggestion auto basée sur ROI + risque)</span>
+                  Recommandation <span className="text-xs font-normal text-gray-500">(suggestion auto basée sur ROI + risque)</span>
                 </label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {RECOMMENDATIONS.map((r) => (

@@ -309,6 +309,11 @@ const StockStatusWidget = () => {
   const [selectedCategory, setSelectedCategory] = useState('Toutes');
   const [selectedAnciennete, setSelectedAnciennete] = useState('Toutes');
   const [showQuickActions, setShowQuickActions] = useState(false);
+  // PRINCIPE COCKPIT : la liste n'affiche que les machines PRIORITAIRES (le tri
+  // met les alertes en tête) ; « Afficher plus » déplie par paquets. Sans cette
+  // limite, des centaines de cartes machines enterraient les panneaux du bas
+  // (Raccourcis, Stock × leads, Marché).
+  const [visibleCount, setVisibleCount] = useState(6);
   const [loading, setLoading] = useState(false);
   const [leadStockRows, setLeadStockRows] = useState<LeadStockSuggestionRow[]>([]);
   const [leadAlignHint, setLeadAlignHint] = useState<string | null>(null);
@@ -399,8 +404,31 @@ const StockStatusWidget = () => {
         }
       }
       return true;
-    });
+    })
+      // PRIORITÉS D'ABORD : machines en alerte en tête, puis les plus anciennes
+      // en stock, puis la pire visibilité — l'ordre de décision, pas l'ordre brut.
+      .sort(
+        (a, b) =>
+          Number(b.alert) - Number(a.alert) ||
+          b.daysInStock - a.daysInStock ||
+          a.visibilityScore - b.visibilityScore,
+      );
   }, [equipments, selectedCategory, selectedAnciennete]);
+
+  // Index inverse machine -> leads du pipeline qui la recherchent (matérialise
+  // le lien stock↔pipeline sur CHAQUE ligne d'équipement, zéro requête en plus).
+  const leadsByMachineId = useMemo(() => {
+    const map = new Map<string, { leadTitle: string; stage: string }[]>();
+    for (const row of leadStockRows) {
+      for (const s of row.suggested) {
+        if (s.score <= 0) continue; // pistes manuelles : pas un vrai rapprochement
+        const arr = map.get(s.machine.id) || [];
+        arr.push({ leadTitle: row.leadTitle, stage: row.stage });
+        map.set(s.machine.id, arr);
+      }
+    }
+    return map;
+  }, [leadStockRows]);
 
   const marketStatsByCategory = useMemo(() => {
     const acc = new Map<string, number[]>();
@@ -823,9 +851,11 @@ const StockStatusWidget = () => {
         'Prix': eq.price || 'Non défini'
       }));
       
-      // Export immédiat (sans await)
-      exportData(stockData, `stock-revente-${new Date().toISOString().split('T')[0]}`, 'excel');
-      showNotification('success', 'Export du stock réussi');
+      // Export RÉEL : seul le format csv déclenche un vrai téléchargement.
+      void exportData(stockData, `stock-revente-${new Date().toISOString().split('T')[0]}`, 'csv').then((r) => {
+        if (r?.success) showNotification('success', 'Stock exporté (fichier CSV téléchargé)');
+        else showNotification('error', "L'export a échoué. Réessayez.");
+      });
       
     } catch (error) {
       logger.error('Erreur lors de l\'export:', error);
@@ -833,145 +863,122 @@ const StockStatusWidget = () => {
     }
   };
 
-  const handleBoostVisibility = (equipment?: Equipment) => {
-    try {
-      if (!equipment) {
-        showNotification('warning', 'Sélectionnez un équipement pour le booster');
-        return;
-      }
-
-      // Mise à jour immédiate de l'interface
-      setEquipments(prev => prev.map(eq => 
-        eq.id === equipment.id 
-          ? { ...eq, visibilityScore: Math.min(100, eq.visibilityScore + 15) }
-          : eq
-      ));
-      
-      showNotification('success', `Visibilité boostée pour ${equipment.name}`);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/equipment/boost', {
-          equipmentId: equipment.id,
-          boostType: 'visibility'
-        }).catch(error => {
-          logger.error('Erreur API boost:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      logger.error('Erreur lors du boost:', error);
-      showNotification('error', 'Impossible de booster la visibilité');
-    }
+  // HONNÊTETÉ : le boost n'a AUCUN backend (l'ancien code gonflait le score à
+  // l'écran et affichait un faux succès). Tant que la mécanique n'existe pas,
+  // on le dit — et le bouton a été retiré des cartes machines.
+  const handleBoostVisibility = (_equipment?: Equipment) => {
+    showNotification('info', 'Le boost de visibilité n\'est pas encore disponible — fonctionnalité en cours d\'intégration.');
   };
 
+  /** Offre flash RÉELLE : écrite dans la table `promotions` (celle que ce widget lit). */
   const handleCreateFlashOffer = (equipment?: Equipment) => {
-    try {
-      if (!equipment) {
-        showNotification('warning', 'Sélectionnez un équipement pour créer une offre flash');
-        return;
-      }
-
-      // Créer la promotion immédiatement
-      const flashOffer: Promotion = {
-        id: Date.now(),
-        title: `Offre Flash - ${equipment.name}`,
-        description: `Offre limitée sur ${equipment.name}`,
-        discount: 15,
-        startDate: new Date().toISOString(),
-        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        equipmentIds: [equipment.id],
-        status: 'active'
-      };
-
-      // Mise à jour immédiate de l'interface
-      setPromotions(prev => [...prev, flashOffer]);
-      showNotification('success', `Offre flash créée pour ${equipment.name}`);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/promotions/create', flashOffer).catch(error => {
-          logger.error('Erreur API création offre:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      logger.error('Erreur lors de la création de l\'offre:', error);
-      showNotification('error', 'Impossible de créer l\'offre flash');
+    if (!equipment) {
+      showNotification('warning', 'Sélectionnez un équipement pour créer une offre flash');
+      return;
     }
+    void (async () => {
+      try {
+        const created = await RealStockService.createPromotion({
+          title: `Offre Flash - ${equipment.name}`,
+          description: `Offre limitée sur ${equipment.name} (-15 % pendant 7 jours)`,
+          discount_percentage: 15,
+          start_date: new Date().toISOString(),
+          end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          equipment_ids: [String(equipment.machineUuid ?? equipment.id)],
+          status: 'active',
+        });
+        if (created) {
+          // Succès annoncé APRÈS l'écriture réelle en base.
+          showNotification('success', `Offre flash enregistrée pour ${equipment.name} (-15 %, 7 jours)`);
+          void loadRealData();
+        } else {
+          showNotification('error', 'L\'offre flash n\'a pas pu être enregistrée. Réessayez.');
+        }
+      } catch (error) {
+        logger.error('Erreur création offre flash:', error);
+        showNotification('error', 'L\'offre flash n\'a pas pu être enregistrée. Réessayez.');
+      }
+    })();
   };
 
+  /** Ajout de photo RÉEL : upload Supabase Storage (bucket machine-image, comme
+      la publication d'annonce) + ajout à la colonne `images` de la machine. */
   const handleAddPhoto = (equipment?: Equipment) => {
-    try {
-      if (!equipment) {
-        showNotification('warning', 'Sélectionnez un équipement pour ajouter une photo');
-        return;
-      }
+    if (!equipment) {
+      showNotification('warning', 'Sélectionnez un équipement pour ajouter une photo');
+      return;
+    }
+    const machineId = String(equipment.machineUuid ?? equipment.id);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      void (async () => {
+        try {
+          showNotification('info', `Envoi de la photo pour ${equipment.name}…`);
+          const fileName = `${Date.now()}_${file.name}`;
+          const { error: uploadError } = await supabaseClient.storage
+            .from('machine-image')
+            .upload(fileName, file);
+          if (uploadError) throw uploadError;
 
-      // Ouvrir le sélecteur de fichier immédiatement
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = (e) => {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) {
-          // Mise à jour immédiate de l'interface
-          setEquipments(prev => prev.map(eq => 
-            eq.id === equipment.id 
-              ? { ...eq, photos: [...(eq.photos || []), file.name] }
+          const { data: row, error: readError } = await supabaseClient
+            .from('machines')
+            .select('images')
+            .eq('id', machineId)
+            .single();
+          if (readError) throw readError;
+          const images = Array.isArray(row?.images) ? [...row.images, fileName] : [fileName];
+
+          const { error: updateError } = await supabaseClient
+            .from('machines')
+            .update({ images })
+            .eq('id', machineId);
+          if (updateError) throw updateError;
+
+          // Succès annoncé APRÈS l'upload et la mise à jour réels.
+          showNotification('success', `Photo ajoutée à l'annonce ${equipment.name}`);
+          setEquipments(prev => prev.map(eq =>
+            eq.id === equipment.id
+              ? { ...eq, photos: [...(eq.photos || []), fileName] }
               : eq
           ));
-          
-          showNotification('success', `Photo ajoutée pour ${equipment.name}`);
-          
-          // Upload en arrière-plan (sans await)
-          setTimeout(() => {
-            apiCall('POST', '/api/equipment/upload-photo', {
-              equipmentId: equipment.id,
-              photo: file
-            }).catch(error => {
-              logger.error('Erreur API upload photo:', error);
-            });
-          }, 50);
+        } catch (error) {
+          logger.error('Erreur upload photo:', error);
+          showNotification('error', 'La photo n\'a pas pu être ajoutée. Réessayez.');
         }
-      };
-      input.click();
-      
-    } catch (error) {
-      logger.error('Erreur lors de l\'ajout de photo:', error);
-      showNotification('error', 'Impossible d\'ajouter la photo');
-    }
+      })();
+    };
+    input.click();
   };
 
+  /** Promotion RÉELLE sur tout le stock : écrite dans la table `promotions`. */
   const handleSendPromotion = () => {
-    try {
-      // Créer la promotion immédiatement
-      const promotion: Promotion = {
-        id: Date.now(),
-        title: 'Promotion Spéciale',
-        description: 'Offres spéciales sur notre stock',
-        discount: 10,
-        startDate: new Date().toISOString(),
-        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        equipmentIds: equipments.map(e => e.id),
-        status: 'active'
-      };
-
-      // Mise à jour immédiate de l'interface
-      setPromotions(prev => [...prev, promotion]);
-      showNotification('success', 'Promotion envoyée avec succès');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/promotions/send', promotion).catch(error => {
-          logger.error('Erreur API envoi promotion:', error);
+    void (async () => {
+      try {
+        const created = await RealStockService.createPromotion({
+          title: 'Promotion Spéciale',
+          description: 'Offres spéciales sur notre stock (-10 % pendant 30 jours)',
+          discount_percentage: 10,
+          start_date: new Date().toISOString(),
+          end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          equipment_ids: equipments.map((e) => String(e.machineUuid ?? e.id)),
+          status: 'active',
         });
-      }, 50);
-      
-    } catch (error) {
-      logger.error('Erreur lors de l\'envoi de promotion:', error);
-      showNotification('error', 'Impossible d\'envoyer la promotion');
-    }
+        if (created) {
+          // Succès annoncé APRÈS l'écriture réelle en base.
+          showNotification('success', 'Promotion enregistrée sur tout le stock (-10 %, 30 jours)');
+          void loadRealData();
+        } else {
+          showNotification('error', "La promotion n'a pas pu être enregistrée. Réessayez.");
+        }
+      } catch (error) {
+        logger.error('Erreur création promotion:', error);
+        showNotification('error', "La promotion n'a pas pu être enregistrée. Réessayez.");
+      }
+    })();
   };
 
   const handleAnalyzePerformance = () => {
@@ -987,15 +994,12 @@ const StockStatusWidget = () => {
         alertEquipments: equipments.filter(e => e.alert).length
       };
 
-      showNotification('success', 'Analyse de performance terminée');
-      logger.info('Résultats de l\'analyse:', analysis);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/analytics/performance', analysis).catch(error => {
-          logger.error('Erreur API analyse:', error);
-        });
-      }, 50);
+      // HONNÊTE ET UTILE : le résultat (réel, calculé sur vos annonces) est MONTRÉ
+      // au lieu d'un faux succès qui partait dans les logs.
+      showNotification(
+        'info',
+        `Analyse du stock : visibilité moyenne ${analysis.averageVisibility}/100 · ${analysis.totalViews} vues · ${analysis.totalContacts} contacts · ${analysis.alertEquipments} machine(s) en alerte.`,
+      );
       
     } catch (error) {
       logger.error('Erreur lors de l\'analyse:', error);
@@ -1014,15 +1018,9 @@ const StockStatusWidget = () => {
         reason: eq.visibilityScore > 70 ? 'Prix sous-évalué' : eq.visibilityScore < 30 ? 'Prix surévalué' : 'Prix correct'
       }));
 
-      showNotification('success', 'Optimisation des prix terminée');
-      logger.info('Suggestions d\'optimisation:', optimizations);
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/pricing/optimize', { optimizations }).catch(error => {
-          logger.error('Erreur API optimisation:', error);
-        });
-      }, 50);
+      // HONNÊTETÉ : l'heuristique de prix n'est pas un vrai modèle de marché.
+      void optimizations;
+      showNotification('info', 'Optimisation des prix en démonstration — utilisez la ligne « Marché : médiane » de chaque machine pour vous situer.');
       
     } catch (error) {
       logger.error('Erreur lors de l\'optimisation:', error);
@@ -1091,7 +1089,8 @@ const StockStatusWidget = () => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    // Chrome allégé : la carte hôte (shell) fournit déjà bordure + fond + padding.
+    <div className="bg-white rounded-lg p-4">
       {/* CSS personnalisé pour les barres de défilement */}
       <style>{`
         select::-webkit-scrollbar {
@@ -1117,27 +1116,14 @@ const StockStatusWidget = () => {
         }
       `}</style>
       
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <Package className="w-6 h-6 text-orange-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Plan d'action Stock & Revente</h3>
-            <p className="text-sm text-gray-600">
-              {loading ? 'Chargement des données réelles...' : 'Données en temps réel'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {loading && (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-          )}
-          <span className="text-sm text-gray-500">
-            {equipments.filter(e => e.alert).length} alertes
-          </span>
-        </div>
+      {/* Fine rangée d'état (le TITRE vit dans la barre de la carte hôte). */}
+      <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+        {loading && (
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+        )}
+        <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap">
+          {equipments.filter(e => e.alert).length} alertes
+        </span>
       </div>
 
       {/* Filtres */}
@@ -1196,6 +1182,25 @@ const StockStatusWidget = () => {
         </div>
       </div>
 
+
+      {/* Accès rapide : puces compactes AU-DESSUS de la liste — un clic déplie
+          le panneau voulu, rien ne pousse les machines hors de vue. */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button type="button" onClick={() => setShowQuickActions((v) => !v)}
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${showQuickActions ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-800 border-orange-300 hover:bg-orange-50'}`}>
+          ⚡ Raccourcis
+        </button>
+        <button type="button" onClick={() => setShowLeadAlign((v) => !v)}
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${showLeadAlign ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-50'}`}>
+          🔗 Stock × prospects
+        </button>
+        <button type="button" onClick={() => setShowMarketSitePanel((v) => !v)}
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${showMarketSitePanel ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}>
+          📊 Marché
+        </button>
+      </div>
+
+      {showQuickActions && (<>
       {/* Raccourcis : pas de doublon avec les boutons par annonce (photo, boost, offre sur chaque ligne). */}
       <div className="bg-white rounded-lg border border-orange-200 p-2.5 mb-3">
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -1204,8 +1209,8 @@ const StockStatusWidget = () => {
               <Package className="w-3.5 h-3.5 shrink-0" />
               Raccourcis stock
             </h4>
-            <p className="text-[10px] text-orange-800/80 mt-0.5 leading-snug">
-              Booster, offre flash et photo : boutons sur chaque annonce ci-dessous.
+            <p className="text-xs text-orange-800/80 mt-0.5 leading-snug">
+              Offre flash et photo : boutons sur chaque annonce ci-dessous.
             </p>
           </div>
           <button
@@ -1217,21 +1222,21 @@ const StockStatusWidget = () => {
           </button>
         </div>
         {showQuickActions && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-1.5">
             <button
               onClick={(e) => handleQuickAction('add-equipment', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
             >
               <Plus className="w-3.5 h-3.5 text-orange-600 shrink-0" />
               <span className="text-left">
                 Nouvelle annonce
-                <span className="block text-[9px] font-normal text-orange-700/85">Publication</span>
+                <span className="block text-xs font-normal text-orange-700/85">Publication</span>
               </span>
             </button>
 
             <button
               onClick={(e) => handleQuickAction('export-stock', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
             >
               <Download className="w-3.5 h-3.5 text-orange-600 shrink-0" />
               Exporter stock
@@ -1239,40 +1244,42 @@ const StockStatusWidget = () => {
 
             <button
               onClick={(e) => handleQuickAction('send-promotion', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
             >
               <Send className="w-3.5 h-3.5 text-orange-600 shrink-0" />
               <span className="text-left">
                 Campagne promo
-                <span className="block text-[9px] font-normal text-amber-800/90">démo</span>
+                <span className="block text-xs font-normal text-amber-800/90">démo</span>
               </span>
             </button>
 
             <button
               onClick={(e) => handleQuickAction('analyze-performance', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
             >
               <BarChart3 className="w-3.5 h-3.5 text-orange-600 shrink-0" />
               <span className="text-left">
                 Analyse agrégée
-                <span className="block text-[9px] font-normal text-amber-800/90">démo</span>
+                <span className="block text-xs font-normal text-amber-800/90">démo</span>
               </span>
             </button>
 
             <button
               onClick={(e) => handleQuickAction('optimize-pricing', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-[11px] leading-tight font-medium text-orange-900"
+              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
             >
               <DollarSign className="w-3.5 h-3.5 text-orange-600 shrink-0" />
               <span className="text-left">
                 Suggestions prix
-                <span className="block text-[9px] font-normal text-amber-800/90">démo</span>
+                <span className="block text-xs font-normal text-amber-800/90">démo</span>
               </span>
             </button>
           </div>
         )}
       </div>
+      </>)}
 
+      {showLeadAlign && (<>
       {/* Suggestions stock alignées sur les leads (pipeline) */}
       <div className="rounded-lg border border-amber-200/80 bg-gradient-to-b from-amber-50/80 to-white mb-4 overflow-hidden">
         <button
@@ -1382,7 +1389,9 @@ const StockStatusWidget = () => {
           </div>
         )}
       </div>
+      </>)}
 
+      {showMarketSitePanel && (<>
       {/* Référence marché public (provisoire) */}
       <div className="rounded-lg border border-slate-200 bg-slate-50/80 mb-4 overflow-hidden">
         <button
@@ -1457,104 +1466,100 @@ const StockStatusWidget = () => {
           </div>
         )}
       </div>
+      </>)}
 
-      {/* Liste des équipements */}
+      {/* Liste des équipements — les PRIORITAIRES d'abord, limitée (cockpit). */}
       <div className="space-y-3">
-        {filteredEquipments.map((equipment) => (
+        {filteredEquipments.slice(0, visibleCount).map((equipment) => (
           <div
             key={equipment.machineUuid ?? `eq-${equipment.id}`}
             className={`border rounded-lg p-4 ${equipment.alert ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex-1 min-w-0 basis-64">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <h4 className="font-medium text-gray-900">{equipment.name}</h4>
                   {equipment.alert && (
                     <AlertTriangle className="w-4 h-4 text-red-500" />
                   )}
+                  {/* LIEN STOCK↔PIPELINE : prospects du pipeline qui recherchent
+                      CETTE machine (rapprochement du panneau « Stock × leads »). */}
+                  {(() => {
+                    const seekers = leadsByMachineId.get(
+                      equipment.machineUuid ?? String(equipment.id),
+                    );
+                    if (!seekers || seekers.length === 0) return null;
+                    return (
+                      <span
+                        className="text-xs font-medium text-blue-800 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 whitespace-nowrap"
+                        title={seekers
+                          .map((s) => `${s.leadTitle} (${s.stage})`)
+                          .join('\n')}
+                      >
+                        Recherché par {seekers.length} prospect{seekers.length > 1 ? 's' : ''}
+                      </span>
+                    );
+                  })()}
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Catégorie:</span>
-                    <span className="ml-1 font-medium">{equipment.category}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Stock:</span>
-                    <span className={`ml-1 font-medium ${equipment.daysInStock > 60 ? 'text-red-600' : equipment.daysInStock > 30 ? 'text-orange-600' : 'text-green-600'}`}>
-                      {equipment.daysInStock} jours
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Vues:</span>
-                    <span className="ml-1 font-medium">{equipment.views}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Score:</span>
-                    <span className={`ml-1 font-medium ${equipment.visibilityScore > 70 ? 'text-green-600' : equipment.visibilityScore > 50 ? 'text-orange-600' : 'text-red-600'}`}>
-                      {equipment.visibilityScore}/100
-                    </span>
-                  </div>
+                {/* UNE seule ligne d'infos compacte (séparateurs ·) : catégorie,
+                    ancienneté, vues et score restent côte à côte. */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500">
+                  <span className="font-medium text-gray-700">{equipment.category}</span>
+                  <span aria-hidden>·</span>
+                  <span className={`font-medium whitespace-nowrap ${equipment.daysInStock > 60 ? 'text-red-600' : equipment.daysInStock > 30 ? 'text-orange-600' : 'text-green-600'}`}>
+                    {equipment.daysInStock} j en stock
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span className="whitespace-nowrap">{equipment.views} vue{equipment.views > 1 ? 's' : ''}</span>
+                  <span aria-hidden>·</span>
+                  <span className={`font-medium whitespace-nowrap ${equipment.visibilityScore > 70 ? 'text-green-600' : equipment.visibilityScore > 50 ? 'text-orange-600' : 'text-red-600'}`}>
+                    Score {equipment.visibilityScore}/100
+                  </span>
                 </div>
-                <div className="mt-2 text-xs text-gray-600 bg-white p-2 rounded border">
-                  <span className="font-medium">Conseil IA:</span> {equipment.aiTip}
-                </div>
+                {/* Conseil : UNE ligne discrète (le détail complet reste dans la
+                    grande fenêtre du widget). */}
+                <p className="mt-1.5 text-xs text-gray-600 line-clamp-2" title={equipment.aiTip}>
+                  💡 {equipment.aiTip}
+                </p>
+                {/* Position marché : UNE ligne compacte quand les données existent —
+                    rien quand l'échantillon est insuffisant (bruit inutile par carte,
+                    le panneau « 📊 Marché » ci-dessus couvre ce cas). */}
                 {(() => {
                   const st = marketStatsByCategory.get(equipment.category);
-                  if (!st || st.count < 2) {
-                    return marketReferenceMachines.length > 0 ? (
-                      <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded p-2">
-                        <span className="font-semibold text-slate-700">Marché visible sur le site (provisoire)</span>
-                        <p className="mt-0.5">
-                          Pas assez d&apos;autres annonces dans « {equipment.category} » pour calculer une médiane ({st?.count ?? 0} dans l&apos;échantillon). Élargissez le filtre catégorie ou consultez le panneau ci-dessous.
-                        </p>
-                      </div>
-                    ) : null;
-                  }
+                  if (!st || st.count < 2) return null;
                   const own = equipment.price || 0;
                   const pct =
                     own > 0 && st.median > 0 ? Math.round((own / st.median - 1) * 100) : null;
                   const hint = negotiationHint(own, st.median);
+                  const median = new Intl.NumberFormat('fr-FR').format(Math.round(st.median));
                   return (
-                    <div className="mt-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded p-2">
-                      <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                        <Scale className="w-3.5 h-3.5 shrink-0" />
-                        Marché site — même catégorie (provisoire, hors vos annonces)
-                      </div>
-                      <p className="mt-1">
-                        {st.count} annonces · min {new Intl.NumberFormat('fr-FR').format(st.min)} € · médiane{' '}
-                        {new Intl.NumberFormat('fr-FR').format(Math.round(st.median))} € · max{' '}
-                        {new Intl.NumberFormat('fr-FR').format(st.max)} €
-                      </p>
-                      <p className="mt-1">
-                        Votre prix affiché :{' '}
-                        <span className="font-medium">
-                          {own > 0 ? `${new Intl.NumberFormat('fr-FR').format(own)} €` : 'non renseigné'}
+                    <p
+                      className="mt-1 text-xs text-slate-600 line-clamp-1"
+                      title={`${st.count} annonces comparables · min ${new Intl.NumberFormat('fr-FR').format(st.min)} € · médiane ${median} € · max ${new Intl.NumberFormat('fr-FR').format(st.max)} €${hint ? `\n${hint}` : ''}`}
+                    >
+                      <Scale className="w-3 h-3 inline -mt-0.5 mr-1 text-slate-500" />
+                      Marché : médiane {median} € ({st.count} annonces)
+                      {pct != null && own > 0 ? (
+                        <span className={`ml-1.5 font-medium ${pct > 0 ? 'text-amber-700' : pct < 0 ? 'text-emerald-700' : ''}`}>
+                          — votre prix {pct > 0 ? '+' : ''}{pct} %
                         </span>
-                        {pct != null && own > 0 ? (
-                          <span className={`ml-2 ${pct > 0 ? 'text-amber-700' : pct < 0 ? 'text-emerald-700' : ''}`}>
-                            ({pct > 0 ? '+' : ''}{pct} % vs médiane)
-                          </span>
-                        ) : null}
-                      </p>
-                      {hint ? <p className="mt-1 text-slate-600">{hint}</p> : null}
-                    </div>
+                      ) : null}
+                    </p>
                   );
                 })()}
               </div>
               
-              <div className="flex flex-col gap-2 ml-4">
+              {/* Boutons en rangée repliable : sous le contenu en carte étroite,
+                  au lieu d'une colonne rigide qui volait un tiers de la largeur. */}
+              <div className="flex flex-wrap gap-2 shrink-0 content-start">
                 <button
                   className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors font-semibold"
                   onClick={(e) => handleQuickAction('add-photo', equipment, e)}
                 >
                   Ajouter photo
                 </button>
-                <button
-                  className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors font-semibold"
-                  onClick={(e) => handleQuickAction('boost-visibility', equipment, e)}
-                >
-                  Booster
-                </button>
+                {/* « Booster » retiré : aucun backend — un bouton qui simule un
+                    succès nuit plus qu'un bouton absent (vérité opérationnelle). */}
                 <button
                   className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors font-semibold"
                   onClick={(e) => handleQuickAction('create-flash-offer', equipment, e)}
@@ -1567,12 +1572,36 @@ const StockStatusWidget = () => {
         ))}
       </div>
 
+      {/* « Afficher plus » : déplie par paquets de 10 ; « Réduire » revient aux
+          prioritaires. Les panneaux ci-dessous restent toujours accessibles. */}
+      {filteredEquipments.length > 6 && (
+        <div className="flex items-center justify-center gap-2 mt-3 mb-3">
+          {visibleCount < filteredEquipments.length && (
+            <button
+              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors font-semibold"
+              onClick={() => setVisibleCount((c) => c + 10)}
+            >
+              Afficher plus ({filteredEquipments.length - visibleCount} restantes)
+            </button>
+          )}
+          {visibleCount > 6 && (
+            <button
+              className="text-xs bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+              onClick={() => setVisibleCount(6)}
+            >
+              Réduire
+            </button>
+          )}
+        </div>
+      )}
+
       {filteredEquipments.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
           <p>Aucun équipement trouvé avec les filtres actuels</p>
         </div>
       )}
+
     </div>
   );
 };

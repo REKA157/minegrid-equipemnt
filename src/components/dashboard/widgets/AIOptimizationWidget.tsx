@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, TrendingUp, Target, CheckCircle, AlertTriangle, Settings, BarChart3, DollarSign, Search, Image, Tag } from 'lucide-react';
+import { Zap, TrendingUp, Target, CheckCircle, AlertTriangle, Settings, BarChart3, DollarSign, Search, Image, RefreshCw } from 'lucide-react';
 import { aiWidgetService } from '../../../services/aiWidgetService';
 
 interface AIOptimizationWidgetProps {
@@ -125,24 +125,17 @@ const AIOptimizationWidget: React.FC<AIOptimizationWidgetProps> = ({ userId, wid
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <div className="flex items-center space-x-2">
-          <Zap className="w-5 h-5 text-orange-600" />
-          <h3 className="font-semibold text-gray-900">Recommandations d'optimisation</h3>
-        </div>
+    // Chrome allégé : la carte hôte (shell) fournit déjà bordure + fond + TITRE.
+    <div className="bg-white rounded-lg h-full">
+      {/* Filtres par catégorie + actualiser (le titre vit dans la barre de la carte). */}
+      <div className="flex flex-wrap items-center gap-1 p-3 border-b border-gray-200">
         <button
           onClick={loadOptimizationData}
-          className="p-1 hover:bg-gray-100 rounded transition-colors"
-          title="Actualiser les optimisations"
+          className="order-last ml-auto p-1 hover:bg-gray-100 rounded transition-colors"
+          title="Actualiser les suggestions"
         >
-          <Settings className="w-4 h-4 text-gray-600" />
+          <RefreshCw className="w-4 h-4 text-gray-600" />
         </button>
-      </div>
-
-      {/* Category Filters */}
-      <div className="flex flex-wrap gap-1 p-3 border-b border-gray-200">
         <button
           onClick={() => setActiveCategory('all')}
           className={`px-3 py-1 text-xs rounded-full transition-colors ${

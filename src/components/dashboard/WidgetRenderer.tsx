@@ -1254,7 +1254,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
 
     case 'chart':
       if (widget.id === 'sales-evolution' || widget.id === 'rental-evolution') {
-        return <SalesEvolutionWidgetEnriched />;
+        return <SalesEvolutionWidgetEnriched widgetSize={widgetSize as 'small' | 'medium' | 'large'} />;
       }
       if (widget.id === 'interventions-today') {
         const interventionsData = liveInterventionsToday ?? [];
@@ -1269,7 +1269,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <span className="font-medium text-gray-900">{totalToday}</span>
                 <span>OT planifiés</span>
                 {urgentCount > 0 && (
-                  <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                  <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
                     {urgentCount} urgent{urgentCount > 1 ? 's' : ''}
                   </span>
                 )}
@@ -1356,7 +1356,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                   <div className="text-xs font-semibold text-red-800">
                     {lowStockItems.length} référence{lowStockItems.length > 1 ? 's' : ''} sous seuil
                   </div>
-                  <span className="text-[10px] text-red-600">Réappro recommandé</span>
+                  <span className="text-xs text-red-600">Réappro recommandé</span>
                 </div>
                 <div className="max-h-24 space-y-1 overflow-y-auto pr-1">
                   {lowStockItems.slice(0, 4).map((item: any) => (
@@ -1374,7 +1374,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                         type="button"
                         onClick={() => handleQuickReorder(item)}
                         disabled={orderingPartId === String(item.id)}
-                        className="flex items-center gap-1 rounded bg-orange-600 px-2 py-0.5 text-[10px] font-medium text-white transition hover:bg-orange-700 disabled:bg-gray-300"
+                        className="flex items-center gap-1 rounded bg-orange-600 px-2 py-0.5 text-xs font-medium text-white transition hover:bg-orange-700 disabled:bg-gray-300"
                         title={`Commander ${Math.max((item.minStock ?? 0) - (item.stock ?? 0), 1) * 2} unités auprès de ${item.supplier || 'fournisseur'}`}
                       >
                         <ShoppingCart className="h-3 w-3" />
@@ -1383,7 +1383,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                     </div>
                   ))}
                   {lowStockItems.length > 4 && (
-                    <div className="text-center text-[10px] text-red-600">
+                    <div className="text-center text-xs text-red-600">
                       +{lowStockItems.length - 4} autre{lowStockItems.length - 4 > 1 ? 's' : ''}
                     </div>
                   )}
@@ -1473,17 +1473,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className="rounded bg-purple-50 p-2">
                 <div className="text-xs font-bold text-purple-700">{totalCredit.toLocaleString('fr-FR')}</div>
-                <div className="text-[10px] text-purple-700/80">Crédit (6m)</div>
+                <div className="text-xs text-purple-700/80">Crédit (6m)</div>
               </div>
               <div className="rounded bg-blue-50 p-2">
                 <div className="text-xs font-bold text-blue-700">{totalAssurance.toLocaleString('fr-FR')}</div>
-                <div className="text-[10px] text-blue-700/80">Assurance (6m)</div>
+                <div className="text-xs text-blue-700/80">Assurance (6m)</div>
               </div>
               <div className={`rounded p-2 ${growth >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
                 <div className={`text-xs font-bold ${growth >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                   {growth >= 0 ? '+' : ''}{growth}%
                 </div>
-                <div className={`text-[10px] ${growth >= 0 ? 'text-green-700/80' : 'text-red-700/80'}`}>vs mois -1</div>
+                <div className={`text-xs ${growth >= 0 ? 'text-green-700/80' : 'text-red-700/80'}`}>vs mois -1</div>
               </div>
             </div>
             <div className="flex-1 min-h-0">
@@ -1493,7 +1493,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 widgetSize={widgetSize as any}
               />
             </div>
-            <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">
+            <div className="px-1 pt-1 text-xs text-gray-400 text-right">
               Total commissions 6 mois : {totalPerf.toLocaleString('fr-FR')} MAD
             </div>
           </div>
@@ -1528,15 +1528,15 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-xs font-bold text-gray-900">{totalCost.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-500">Total 6 mois</div>
+                <div className="text-xs text-gray-500">Total 6 mois</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-xs font-bold text-gray-900">{totalTrips}</div>
-                <div className="text-[10px] text-gray-500">Livraisons</div>
+                <div className="text-xs text-gray-500">Livraisons</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-xs font-bold text-gray-900">{avgPerTrip.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-500">Coût moyen / livr.</div>
+                <div className="text-xs text-gray-500">Coût moyen / livr.</div>
               </div>
             </div>
             <div className="flex-1 min-h-0">
@@ -1546,7 +1546,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 widgetSize={widgetSize as any}
               />
             </div>
-            <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">
+            <div className="px-1 pt-1 text-xs text-gray-400 text-right">
               Distance totale : {totalKm.toLocaleString('fr-FR')} km
               {totalKm > 0 && (
                 <> · <span className="font-semibold text-gray-600">Coût moyen : {Math.round(totalCost / totalKm).toLocaleString('fr-FR')} MAD/km</span></>
@@ -1588,17 +1588,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div className={`text-xs font-bold ${avgRoi >= 8 ? 'text-green-700' : avgRoi >= 4 ? 'text-orange-700' : 'text-red-700'}`}>
                   {avgRoi}%
                 </div>
-                <div className="text-[10px] text-gray-600">ROI annualisé moyen</div>
+                <div className="text-xs text-gray-600">ROI annualisé moyen</div>
               </div>
               <div className="rounded bg-blue-50 p-2">
                 <div className="text-xs font-bold text-blue-700">{roi.investments.length}</div>
-                <div className="text-[10px] text-blue-700/80">Actifs analysés</div>
+                <div className="text-xs text-blue-700/80">Actifs analysés</div>
               </div>
               <div className={`rounded p-2 ${negativeCount === 0 ? 'bg-green-50' : 'bg-red-50'}`}>
                 <div className={`text-xs font-bold ${negativeCount === 0 ? 'text-green-700' : 'text-red-700'}`}>
                   {negativeCount}
                 </div>
-                <div className="text-[10px] text-gray-600">ROI négatif</div>
+                <div className="text-xs text-gray-600">ROI négatif</div>
               </div>
             </div>
             <div className="flex-1 min-h-0">
@@ -1608,7 +1608,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 widgetSize={widgetSize as any}
               />
             </div>
-            <div className="mt-1 space-y-0.5 px-1 text-[10px]">
+            <div className="mt-1 space-y-0.5 px-1 text-xs">
               <div className="font-semibold text-gray-700">Top 3 performances :</div>
               {top3.map((i) => (
                 <div key={i.id} className="flex items-center justify-between">
@@ -1670,7 +1670,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 widgetSize={widgetSize as any}
               />
             </div>
-            <div className="mt-1 space-y-0.5 px-1 text-[10px]">
+            <div className="mt-1 space-y-0.5 px-1 text-xs">
               {r.concentrations.length > 0 && r.concentrations[0].percent > 40 && (
                 <div className="text-amber-700">
                   ⚠ Concentration {r.concentrations[0].category} : {Math.round(r.concentrations[0].percent)}%
@@ -1729,11 +1729,11 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-2 gap-2 px-1 pb-2 text-center">
               <div className="rounded bg-cyan-50 p-2">
                 <div className="text-xs font-bold text-cyan-800">{ie.latestImportTeu}</div>
-                <div className="text-[10px] text-cyan-800/80">TEU import (mois)</div>
+                <div className="text-xs text-cyan-800/80">TEU import (mois)</div>
               </div>
               <div className="rounded bg-indigo-50 p-2">
                 <div className="text-xs font-bold text-indigo-800">{ie.latestExportTeu}</div>
-                <div className="text-[10px] text-indigo-800/80">TEU export (mois)</div>
+                <div className="text-xs text-indigo-800/80">TEU export (mois)</div>
               </div>
             </div>
             <div className="flex-1 min-h-0">
@@ -1775,20 +1775,20 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             </div>
             <div className="grid grid-cols-3 gap-1.5 px-1 pb-2 text-center">
               <div className="rounded bg-emerald-50 p-1.5">
-                <div className="text-[11px] font-bold text-emerald-800">{k.latestOnTime}%</div>
-                <div className="text-[9px] text-emerald-800/80">À temps</div>
+                <div className="text-xs font-bold text-emerald-800">{k.latestOnTime}%</div>
+                <div className="text-xs text-emerald-800/80">À temps</div>
               </div>
               <div className="rounded bg-teal-50 p-1.5">
-                <div className="text-[11px] font-bold text-teal-800">{k.latestFillRate}%</div>
-                <div className="text-[9px] text-teal-800/80">Remplissage</div>
+                <div className="text-xs font-bold text-teal-800">{k.latestFillRate}%</div>
+                <div className="text-xs text-teal-800/80">Remplissage</div>
               </div>
               <div className="rounded bg-orange-50 p-1.5">
-                <div className="text-[11px] font-bold text-orange-800">{k.latestLeadDays}j</div>
-                <div className="text-[9px] text-orange-800/80">Délai moy.</div>
+                <div className="text-xs font-bold text-orange-800">{k.latestLeadDays}j</div>
+                <div className="text-xs text-orange-800/80">Délai moy.</div>
               </div>
             </div>
             {k.latestIncidents > 0 && (
-              <div className="mx-1 mb-1 rounded bg-red-50 px-2 py-0.5 text-center text-[10px] font-medium text-red-700">
+              <div className="mx-1 mb-1 rounded bg-red-50 px-2 py-0.5 text-center text-xs font-medium text-red-700">
                 {k.latestIncidents} incident{k.latestIncidents > 1 ? 's' : ''} signalé{k.latestIncidents > 1 ? 's' : ''} (mois)
               </div>
             )}
@@ -1832,15 +1832,15 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className={`rounded p-2 ${dem.totalCost > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
                 <div className={`text-sm font-bold ${dem.totalCost > 0 ? 'text-red-700' : 'text-green-700'}`}>{dem.totalCost.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Exposition surestaries</div>
+                <div className="text-xs text-gray-600">Exposition surestaries</div>
               </div>
               <div className="rounded bg-amber-50 p-2">
                 <div className="text-sm font-bold text-amber-700">{dem.inDemurrageCount}</div>
-                <div className="text-[10px] text-amber-700/80">En dépassement</div>
+                <div className="text-xs text-amber-700/80">En dépassement</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{dem.maxDaysOver} j</div>
-                <div className="text-[10px] text-gray-600">Pire dépassement</div>
+                <div className="text-xs text-gray-600">Pire dépassement</div>
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
@@ -1848,23 +1848,23 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">{i.container_number}</div>
-                    <div className="text-[10px] text-gray-500">{i.status}{i.port ? ' · ' + i.port : ''} · franchise → {i.freeUntil}</div>
+                    <div className="text-xs text-gray-500">{i.status}{i.port ? ' · ' + i.port : ''} · franchise → {i.freeUntil}</div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     {i.daysOver > 0 ? (
                       <>
                         <div className="font-bold text-red-700">+{i.daysOver} j</div>
-                        <div className="text-[10px] text-red-600">{i.cost.toLocaleString('fr-FR')} MAD</div>
+                        <div className="text-xs text-red-600">{i.cost.toLocaleString('fr-FR')} MAD</div>
                       </>
                     ) : (
-                      <div className="text-[10px] text-green-700">Dans la franchise</div>
+                      <div className="text-xs text-green-700">Dans la franchise</div>
                     )}
                   </div>
                 </div>
               ))}
             </div>
             {dem.watchCount > 0 && (
-              <div className="px-1 pt-1 text-[10px] text-gray-400 text-right">{dem.watchCount} conteneur(s) dans la franchise à surveiller</div>
+              <div className="px-1 pt-1 text-xs text-gray-400 text-right">{dem.watchCount} conteneur(s) dans la franchise à surveiller</div>
             )}
           </div>
         );
@@ -1893,29 +1893,29 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className={`rounded p-2 ${ovd.totalOverdue > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
                 <div className={`text-sm font-bold ${ovd.totalOverdue > 0 ? 'text-red-700' : 'text-green-700'}`}>{ovd.totalOverdue.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Total impayé</div>
+                <div className="text-xs text-gray-600">Total impayé</div>
               </div>
               <div className="rounded bg-amber-50 p-2">
                 <div className="text-sm font-bold text-amber-700">{ovd.overdueCount}</div>
-                <div className="text-[10px] text-amber-700/80">Factures en retard</div>
+                <div className="text-xs text-amber-700/80">Factures en retard</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{ovd.maxDaysLate} j</div>
-                <div className="text-[10px] text-gray-600">Pire retard</div>
+                <div className="text-xs text-gray-600">Pire retard</div>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className="rounded bg-amber-50/60 p-1.5">
                 <div className="text-xs font-bold text-amber-700">{ovd.bucket0_30.toLocaleString('fr-FR')}</div>
-                <div className="text-[10px] text-gray-600">0-30 j</div>
+                <div className="text-xs text-gray-600">0-30 j</div>
               </div>
               <div className="rounded bg-orange-50 p-1.5">
                 <div className="text-xs font-bold text-orange-700">{ovd.bucket31_60.toLocaleString('fr-FR')}</div>
-                <div className="text-[10px] text-gray-600">31-60 j</div>
+                <div className="text-xs text-gray-600">31-60 j</div>
               </div>
               <div className="rounded bg-red-50 p-1.5">
                 <div className="text-xs font-bold text-red-700">{ovd.bucket60plus.toLocaleString('fr-FR')}</div>
-                <div className="text-[10px] text-gray-600">60 j+</div>
+                <div className="text-xs text-gray-600">60 j+</div>
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
@@ -1923,11 +1923,11 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">{i.clientName}</div>
-                    <div className="text-[10px] text-gray-500">{i.invoiceNumber}{i.dueDate ? ' · éch. ' + i.dueDate : ''}</div>
+                    <div className="text-xs text-gray-500">{i.invoiceNumber}{i.dueDate ? ' · éch. ' + i.dueDate : ''}</div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     <div className="font-bold text-red-700">{i.remaining.toLocaleString('fr-FR')} MAD</div>
-                    <div className={`text-[10px] ${i.bucket === '60+' ? 'text-red-600' : i.bucket === '31-60' ? 'text-orange-600' : 'text-amber-600'}`}>+{i.daysLate} j de retard</div>
+                    <div className={`text-xs ${i.bucket === '60+' ? 'text-red-600' : i.bucket === '31-60' ? 'text-orange-600' : 'text-amber-600'}`}>+{i.daysLate} j de retard</div>
                   </div>
                 </div>
               ))}
@@ -1959,15 +1959,15 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className={`rounded p-2 ${prof.totalMargin >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
                 <div className={`text-sm font-bold ${prof.totalMargin >= 0 ? 'text-green-700' : 'text-red-700'}`}>{prof.totalMargin.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Marge globale ({prof.marginPct}%)</div>
+                <div className="text-xs text-gray-600">Marge globale ({prof.marginPct}%)</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{prof.totalCost.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Coût total</div>
+                <div className="text-xs text-gray-600">Coût total</div>
               </div>
               <div className={`rounded p-2 ${prof.unprofitableCount > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
                 <div className={`text-sm font-bold ${prof.unprofitableCount > 0 ? 'text-red-700' : 'text-green-700'}`}>{prof.unprofitableCount}</div>
-                <div className="text-[10px] text-gray-600">Livraisons à perte</div>
+                <div className="text-xs text-gray-600">Livraisons à perte</div>
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
@@ -1975,17 +1975,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div key={i.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">{i.route_ref}{i.lane ? ' · ' + i.lane : ''}</div>
-                    <div className="text-[10px] text-gray-500">{i.status} · coût {i.totalCost.toLocaleString('fr-FR')} · facturé {i.revenue.toLocaleString('fr-FR')} MAD</div>
+                    <div className="text-xs text-gray-500">{i.status} · coût {i.totalCost.toLocaleString('fr-FR')} · facturé {i.revenue.toLocaleString('fr-FR')} MAD</div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     <div className={`font-bold ${i.margin < 0 ? 'text-red-700' : 'text-green-700'}`}>{i.margin >= 0 ? '+' : ''}{i.margin.toLocaleString('fr-FR')} MAD</div>
-                    <div className={`text-[10px] ${i.margin < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.marginPct}%</div>
+                    <div className={`text-xs ${i.margin < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.marginPct}%</div>
                   </div>
                 </div>
               ))}
             </div>
             {prof.unprofitableCount > 0 && (
-              <div className="px-1 pt-1 text-[10px] text-red-500 text-right">{prof.unprofitableCount} livraison(s) à perte · {prof.unprofitableLoss.toLocaleString('fr-FR')} MAD</div>
+              <div className="px-1 pt-1 text-xs text-red-500 text-right">{prof.unprofitableCount} livraison(s) à perte · {prof.unprofitableLoss.toLocaleString('fr-FR')} MAD</div>
             )}
           </div>
         );
@@ -2014,19 +2014,19 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className={`rounded p-2 ${dh.totalEmptyCost > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
                 <div className={`text-sm font-bold ${dh.totalEmptyCost > 0 ? 'text-red-700' : 'text-green-700'}`}>{dh.totalEmptyCost.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Coût du vide</div>
+                <div className="text-xs text-gray-600">Coût du vide</div>
               </div>
               <div className={`rounded p-2 ${dh.globalEmptyRate > dh.threshold ? 'bg-red-50' : dh.globalEmptyRate > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
                 <div className={`text-sm font-bold ${dh.globalEmptyRate > dh.threshold ? 'text-red-700' : dh.globalEmptyRate > 0 ? 'text-amber-700' : 'text-green-700'}`}>{dh.globalEmptyRate}%</div>
-                <div className="text-[10px] text-gray-600">Taux de vide global</div>
+                <div className="text-xs text-gray-600">Taux de vide global</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{dh.totalEmptyKm.toLocaleString('fr-FR')} km</div>
-                <div className="text-[10px] text-gray-600">Km à vide cumulés</div>
+                <div className="text-xs text-gray-600">Km à vide cumulés</div>
               </div>
             </div>
             {dh.aboveThresholdCount > 0 && (
-              <div className="px-1 pb-2 flex items-center gap-1 text-[10px] text-red-600">
+              <div className="px-1 pb-2 flex items-center gap-1 text-xs text-red-600">
                 <AlertTriangle className="h-3 w-3" />
                 {dh.aboveThresholdCount} trajet(s) au-dessus de {dh.threshold}% de retour à vide
               </div>
@@ -2036,11 +2036,11 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div key={i.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${i.overThreshold ? 'border-red-200 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">{i.label}{i.client ? ' · ' + i.client : ''}</div>
-                    <div className="text-[10px] text-gray-500">{i.status} · {i.loadedKm} km charge / {i.emptyKm} km vide{i.destination ? ' · ' + i.destination : ''}</div>
+                    <div className="text-xs text-gray-500">{i.status} · {i.loadedKm} km charge / {i.emptyKm} km vide{i.destination ? ' · ' + i.destination : ''}</div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     <div className={`font-bold ${i.overThreshold ? 'text-red-700' : 'text-amber-700'}`}>{i.emptyRate}%</div>
-                    <div className={`text-[10px] ${i.overThreshold ? 'text-red-600' : 'text-gray-500'}`}>{i.emptyCost.toLocaleString('fr-FR')} MAD</div>
+                    <div className={`text-xs ${i.overThreshold ? 'text-red-600' : 'text-gray-500'}`}>{i.emptyCost.toLocaleString('fr-FR')} MAD</div>
                   </div>
                 </div>
               ))}
@@ -2072,18 +2072,18 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className="rounded bg-green-50 p-2">
                 <div className="text-sm font-bold text-green-700 truncate">{cmp.bestBankName || '—'}</div>
-                <div className="text-[10px] text-gray-600">Meilleure offre</div>
+                <div className="text-xs text-gray-600">Meilleure offre</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{cmp.bestMonthlyPayment.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Mensualite mini</div>
+                <div className="text-xs text-gray-600">Mensualite mini</div>
               </div>
               <div className={`rounded p-2 ${cmp.savingsVsWorst > 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
                 <div className={`text-sm font-bold ${cmp.savingsVsWorst > 0 ? 'text-green-700' : 'text-gray-900'}`}>{cmp.savingsVsWorst.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Économie vs pire</div>
+                <div className="text-xs text-gray-600">Économie vs pire</div>
               </div>
             </div>
-            <div className="px-1 pb-1 text-[10px] text-gray-500">
+            <div className="px-1 pb-1 text-xs text-gray-500">
               {cmp.usingRealApp
                 ? <>Sur demande : <span className="font-medium text-gray-700">{cmp.refLabel || 'derniere demande'}</span> · {cmp.refAmount.toLocaleString('fr-FR')} MAD / {cmp.refDuration} mois</>
                 : <>Montant de reference : {cmp.refAmount.toLocaleString('fr-FR')} MAD / {cmp.refDuration} mois (aucune demande enregistree)</>}
@@ -2093,19 +2093,19 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div key={b.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${b.isBest ? 'border-green-300 bg-green-50' : b.eligible ? 'border-gray-100 bg-white' : 'border-amber-200 bg-amber-50'}`}>
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">
-                      {b.bankName}{b.isBest && <span className="ml-1 text-[10px] font-semibold text-green-700">• Recommandée</span>}
+                      {b.bankName}{b.isBest && <span className="ml-1 text-xs font-semibold text-green-700">• Recommandée</span>}
                     </div>
-                    <div className="text-[10px] text-gray-500">Taux {b.annualRate.toLocaleString('fr-FR')}% · {b.durationMonths} mois{b.fileFees > 0 ? ' · frais ' + b.fileFees.toLocaleString('fr-FR') + ' MAD' : ''}{!b.eligible ? ' · hors criteres' : ''}</div>
+                    <div className="text-xs text-gray-500">Taux {b.annualRate.toLocaleString('fr-FR')}% · {b.durationMonths} mois{b.fileFees > 0 ? ' · frais ' + b.fileFees.toLocaleString('fr-FR') + ' MAD' : ''}{!b.eligible ? ' · hors criteres' : ''}</div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     <div className={`font-bold ${b.isBest ? 'text-green-700' : 'text-gray-900'}`}>{b.monthlyPayment.toLocaleString('fr-FR')} MAD/mois</div>
-                    <div className="text-[10px] text-gray-500">Cout credit {b.totalCost.toLocaleString('fr-FR')} MAD</div>
+                    <div className="text-xs text-gray-500">Cout credit {b.totalCost.toLocaleString('fr-FR')} MAD</div>
                   </div>
                 </div>
               ))}
             </div>
             {cmp.eligibleCount < cmp.bankCount && (
-              <div className="px-1 pt-1 text-[10px] text-amber-600 text-right">{cmp.bankCount - cmp.eligibleCount} banque(s) hors criteres (montant/duree)</div>
+              <div className="px-1 pt-1 text-xs text-amber-600 text-right">{cmp.bankCount - cmp.eligibleCount} banque(s) hors criteres (montant/duree)</div>
             )}
           </div>
         );
@@ -2134,15 +2134,15 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="grid grid-cols-3 gap-2 px-1 pb-2 text-center">
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{yg.totalExpected.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Revenu attendu</div>
+                <div className="text-xs text-gray-600">Revenu attendu</div>
               </div>
               <div className="rounded bg-gray-50 p-2">
                 <div className="text-sm font-bold text-gray-900">{yg.totalRealized.toLocaleString('fr-FR')} MAD</div>
-                <div className="text-[10px] text-gray-600">Revenu réalisé</div>
+                <div className="text-xs text-gray-600">Revenu réalisé</div>
               </div>
               <div className={`rounded p-2 ${yg.totalGap < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
                 <div className={`text-sm font-bold ${yg.totalGap < 0 ? 'text-red-700' : 'text-green-700'}`}>{yg.totalGap >= 0 ? '+' : ''}{yg.totalGap.toLocaleString('fr-FR')} MAD</div>
-                <div className={`text-[10px] ${yg.totalGap < 0 ? 'text-red-600' : 'text-green-700/80'}`}>Écart global ({yg.totalGapPercent >= 0 ? '+' : ''}{yg.totalGapPercent}%)</div>
+                <div className={`text-xs ${yg.totalGap < 0 ? 'text-red-600' : 'text-green-700/80'}`}>Écart global ({yg.totalGapPercent >= 0 ? '+' : ''}{yg.totalGapPercent}%)</div>
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-auto space-y-1 px-1">
@@ -2150,17 +2150,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div key={i.id} className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs ${i.underperforming ? 'border-red-100 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
                   <div className="min-w-0">
                     <div className="font-medium text-gray-800 truncate">{i.label}</div>
-                    <div className="text-[10px] text-gray-500">{i.status} · attendu {i.expectedRevenue.toLocaleString('fr-FR')} · réalisé {i.realizedRevenue.toLocaleString('fr-FR')} MAD · {i.monthsHeld} mois</div>
+                    <div className="text-xs text-gray-500">{i.status} · attendu {i.expectedRevenue.toLocaleString('fr-FR')} · réalisé {i.realizedRevenue.toLocaleString('fr-FR')} MAD · {i.monthsHeld} mois</div>
                   </div>
                   <div className="text-right shrink-0 ml-2">
                     <div className={`font-bold ${i.gap < 0 ? 'text-red-700' : 'text-green-700'}`}>{i.gap >= 0 ? '+' : ''}{i.gap.toLocaleString('fr-FR')} MAD</div>
-                    <div className={`text-[10px] ${i.gap < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.gapPercent >= 0 ? '+' : ''}{i.gapPercent}%</div>
+                    <div className={`text-xs ${i.gap < 0 ? 'text-red-600' : 'text-gray-500'}`}>{i.gapPercent >= 0 ? '+' : ''}{i.gapPercent}%</div>
                   </div>
                 </div>
               ))}
             </div>
             {yg.underperformingCount > 0 && (
-              <div className="px-1 pt-1 text-[10px] text-red-500 text-right">{yg.underperformingCount} actif(s) sous-performant(s) · {Math.abs(yg.shortfall).toLocaleString('fr-FR')} MAD de manque à gagner</div>
+              <div className="px-1 pt-1 text-xs text-red-500 text-right">{yg.underperformingCount} actif(s) sous-performant(s) · {Math.abs(yg.shortfall).toLocaleString('fr-FR')} MAD de manque à gagner</div>
             )}
           </div>
         );
@@ -2218,7 +2218,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <FileText className="h-3.5 w-3.5 text-orange-600" />
                 <span>{credits.length} demandes</span>
                 {inProgress > 0 && (
-                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-semibold text-blue-700">
                     {inProgress} en cours
                   </span>
                 )}
@@ -2251,7 +2251,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
               </div>
             ) : (
               <>
-                <div className="mb-2 grid grid-cols-4 gap-1 text-center text-[10px]">
+                <div className="mb-2 grid grid-cols-4 gap-1 text-center text-xs">
                   <div className="rounded bg-blue-50 py-1"><div className="font-bold text-blue-700">{inProgress}</div><div className="text-blue-700/70">En cours</div></div>
                   <div className="rounded bg-green-50 py-1"><div className="font-bold text-green-700">{approved}</div><div className="text-green-700/70">Approuvés</div></div>
                   <div className="rounded bg-purple-50 py-1"><div className="font-bold text-purple-700">{disbursed}</div><div className="text-purple-700/70">Décaissés</div></div>
@@ -2270,16 +2270,16 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-xs font-semibold text-gray-900">{c.equipment_label}</div>
-                            <div className="truncate text-[10px] text-gray-500">
+                            <div className="truncate text-xs text-gray-500">
                               {c.client_name_snapshot || '—'} {c.bank_name ? `· ${c.bank_name}` : ''}
                               {c.reference ? ` · ${c.reference}` : ''}
                             </div>
                           </div>
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusColor}`}>
+                          <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${statusColor}`}>
                             {c.status}
                           </span>
                         </div>
-                        <div className="mt-1 flex items-center justify-between text-[10px] text-gray-600">
+                        <div className="mt-1 flex items-center justify-between text-xs text-gray-600">
                           <span>
                             <span className="font-semibold text-gray-900">{Number(c.requested_amount || 0).toLocaleString('fr-FR')} MAD</span>
                             {c.duration_months ? ` · ${c.duration_months} mois` : ''}
@@ -2334,12 +2334,12 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <Shield className="h-3.5 w-3.5 text-orange-600" />
                 <span>{policies.length} polices</span>
                 {expiringSoon.length > 0 && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">
                     {expiringSoon.length} échéance &lt; 30j
                   </span>
                 )}
                 {expired > 0 && (
-                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
                     {expired} expirées
                   </span>
                 )}
@@ -2394,19 +2394,19 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate text-xs font-semibold text-gray-900">{p.policy_type}</span>
-                            <span className="text-[10px] text-gray-400">— {p.insurer_name}</span>
+                            <span className="text-xs text-gray-400">— {p.insurer_name}</span>
                           </div>
-                          <div className="truncate text-[10px] text-gray-500">
+                          <div className="truncate text-xs text-gray-500">
                             {p.client_name_snapshot || '—'}
                             {p.equipment_label ? ` · ${p.equipment_label}` : ''}
                             {p.policy_number ? ` · ${p.policy_number}` : ''}
                           </div>
                         </div>
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusColor}`}>
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${statusColor}`}>
                           {isExpired ? 'Expirée' : isExpiringSoon ? `${days}j` : p.status}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-gray-600">
+                      <div className="mt-1 flex items-center justify-between text-xs text-gray-600">
                         <span>
                           Prime <span className="font-semibold text-gray-900">{Number(p.annual_premium || 0).toLocaleString('fr-FR')} MAD</span>
                           {p.payment_frequency ? ` / an · ${p.payment_frequency.toLowerCase()}` : ''}
@@ -2420,7 +2420,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                               type="button"
                               onClick={() => handleRenew(p.id)}
                               disabled={renewingPolicyId === p.id}
-                              className="flex items-center gap-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-medium text-white transition hover:bg-orange-700 disabled:bg-gray-300"
+                              className="flex items-center gap-1 rounded bg-orange-600 px-1.5 py-0.5 text-xs font-medium text-white transition hover:bg-orange-700 disabled:bg-gray-300"
                               title="Renouveler 1 an"
                             >
                               <RefreshCw className="h-2.5 w-2.5" />
@@ -2486,13 +2486,13 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                       <div className="truncate text-xs font-semibold text-gray-900">
                         {c.company_name || c.name}
                       </div>
-                      <div className="truncate text-[10px] text-gray-500">
+                      <div className="truncate text-xs text-gray-500">
                         {c.type}
                         {c.sector ? ` · ${c.sector}` : ''}
                         {c.city ? ` · ${c.city}` : ''}
                       </div>
                     </div>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${
+                    <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${
                       c.status === 'Actif' ? 'bg-green-100 text-green-700'
                       : c.status === 'Prospect' ? 'bg-blue-100 text-blue-700'
                       : 'bg-gray-100 text-gray-600'
@@ -2500,7 +2500,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                       {c.status}
                     </span>
                   </div>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-gray-600">
+                  <div className="mt-1 flex items-center justify-between text-xs text-gray-600">
                     <span className="flex items-center gap-2">
                       {c.activeCredits > 0 && (
                         <span className="flex items-center gap-0.5"><FileText className="h-2.5 w-2.5 text-purple-600" />{c.activeCredits}</span>
@@ -2593,17 +2593,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                             {o.equipment_label}
                             {o.year ? <span className="ml-1 text-gray-400">({o.year})</span> : null}
                           </div>
-                          <div className="truncate text-[10px] text-gray-500">
+                          <div className="truncate text-xs text-gray-500">
                             {o.source}
                             {o.contact_name ? ` · ${o.contact_name}` : ''}
                             {o.reference ? ` · ${o.reference}` : ''}
                           </div>
                         </div>
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${recoColor}`}>
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${recoColor}`}>
                           {o.recommendation}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-gray-600">
+                      <div className="mt-1 flex items-center justify-between text-xs text-gray-600">
                         <span>
                           <span className="font-semibold text-gray-900">{Number(o.asking_price || 0).toLocaleString('fr-FR')} MAD</span>
                           {o.expected_roi_percent != null && (
@@ -2616,7 +2616,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                         </span>
                         <span className="flex items-center gap-1.5">
                           {(isExpiringSoon || isExpired) && (
-                            <span className={`text-[10px] font-medium ${isExpired ? 'text-red-600' : 'text-amber-700'}`}>
+                            <span className={`text-xs font-medium ${isExpired ? 'text-red-600' : 'text-amber-700'}`}>
                               {isExpired ? 'Expirée' : `${days}j`}
                             </span>
                           )}
@@ -2625,7 +2625,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                               type="button"
                               onClick={() => handleConvert(o.id)}
                               disabled={convertingOpportunityId === o.id}
-                              className="flex items-center gap-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-medium text-white transition hover:bg-orange-700 disabled:bg-gray-300"
+                              className="flex items-center gap-1 rounded bg-orange-600 px-1.5 py-0.5 text-xs font-medium text-white transition hover:bg-orange-700 disabled:bg-gray-300"
                               title="Convertir en investissement réel"
                             >
                               <ArrowRight className="h-2.5 w-2.5" />
@@ -2635,7 +2635,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                         </span>
                       </div>
                       {o.risk_factors && (
-                        <div className="mt-1 truncate text-[10px] text-gray-500 italic" title={o.risk_factors}>
+                        <div className="mt-1 truncate text-xs text-gray-500 italic" title={o.risk_factors}>
                           ⚠ {o.risk_factors}
                         </div>
                       )}
@@ -2675,7 +2675,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <span>{docs.length} document{docs.length > 1 ? 's' : ''}</span>
               </div>
               {urgent > 0 && (
-                <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">{urgent} urgent{urgent > 1 ? 's' : ''}</span>
+                <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">{urgent} urgent{urgent > 1 ? 's' : ''}</span>
               )}
             </div>
             {docs.length === 0 ? (
@@ -2687,7 +2687,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
               <ListWidget widget={widget} data={docs as any[]} widgetSize={widgetSize as any} onAction={handleWidgetAction} />
             )}
             {pending > 0 && (
-              <div className="mt-1 px-1 text-[10px] text-amber-700">{pending} en attente / brouillon</div>
+              <div className="mt-1 px-1 text-xs text-amber-700">{pending} en attente / brouillon</div>
             )}
           </div>
         );
@@ -2711,7 +2711,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <span>{alerts.length} alerte{alerts.length > 1 ? 's' : ''} ouverte{alerts.length > 1 ? 's' : ''}</span>
               </div>
               {urgent > 0 && (
-                <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">{urgent} urgent{urgent > 1 ? 's' : ''}</span>
+                <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">{urgent} urgent{urgent > 1 ? 's' : ''}</span>
               )}
             </div>
             {alerts.length === 0 ? (
@@ -2836,30 +2836,30 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="flex flex-1 flex-col items-center justify-center px-2">
               <div className="text-center">
                 <div className="text-4xl font-bold text-gray-900">{c.openCount}</div>
-                <div className="mt-0.5 text-[11px] text-gray-500">
+                <div className="mt-0.5 text-xs text-gray-500">
                   dossiers ouverts · {c.totalDeclarations} dossiers au total
                 </div>
               </div>
               <div className="mt-3 grid w-full grid-cols-3 gap-2 text-center">
                 <div className="rounded bg-blue-50 p-2">
                   <div className="text-xs font-bold text-blue-800">{c.inProgress}</div>
-                  <div className="text-[10px] text-blue-700/80">En cours</div>
+                  <div className="text-xs text-blue-700/80">En cours</div>
                 </div>
                 <div className="rounded bg-amber-50 p-2">
                   <div className="text-xs font-bold text-amber-800">{c.blocked}</div>
-                  <div className="text-[10px] text-amber-800/80">Bloqués</div>
+                  <div className="text-xs text-amber-800/80">Bloqués</div>
                 </div>
                 <div className="rounded bg-red-50 p-2">
                   <div className="text-xs font-bold text-red-800">{c.delayed}</div>
-                  <div className="text-[10px] text-red-800/80">En retard</div>
+                  <div className="text-xs text-red-800/80">En retard</div>
                 </div>
               </div>
               {c.totalValueOpen > 0 && (
-                <div className="mt-3 w-full rounded border border-gray-100 bg-gray-50 px-2 py-1.5 text-center text-[11px] text-gray-700">
+                <div className="mt-3 w-full rounded border border-gray-100 bg-gray-50 px-2 py-1.5 text-center text-xs text-gray-700">
                   Valeur déclarée (ouverts) : <strong>{c.totalValueOpen.toLocaleString('fr-FR')} MAD</strong>
                 </div>
               )}
-              <div className="mt-1 text-[10px] text-gray-400">{c.liquidated} liquidée{c.liquidated > 1 ? 's' : ''}</div>
+              <div className="mt-1 text-xs text-gray-400">{c.liquidated} liquidée{c.liquidated > 1 ? 's' : ''}</div>
             </div>
           </div>
         );
@@ -2895,18 +2895,18 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
               <div className={`text-center text-4xl font-bold ${pctColor}`}>
                 {w.weightedOccupancyPct}%
               </div>
-              <div className="mt-0.5 text-[11px] text-gray-500">
+              <div className="mt-0.5 text-xs text-gray-500">
                 {w.warehouseCount} site{w.warehouseCount > 1 ? 's' : ''} · {w.totalUsedPallets.toLocaleString('fr-FR')} /{' '}
                 {w.totalCapacityPallets.toLocaleString('fr-FR')} palettes
               </div>
               <div className="mt-3 grid w-full grid-cols-2 gap-2 text-center">
                 <div className="rounded bg-amber-50 p-2">
                   <div className="text-xs font-bold text-amber-800">{w.criticalWarehouses}</div>
-                  <div className="text-[10px] text-amber-800/80">Critique / saturé</div>
+                  <div className="text-xs text-amber-800/80">Critique / saturé</div>
                 </div>
                 <div className="rounded bg-slate-50 p-2">
                   <div className="text-xs font-bold text-slate-700">{w.maintenanceWarehouses}</div>
-                  <div className="text-[10px] text-slate-600">Hors prod.</div>
+                  <div className="text-xs text-slate-600">Hors prod.</div>
                 </div>
               </div>
             </div>
@@ -2964,7 +2964,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div className="text-3xl font-bold text-gray-900">
                   {(p.totalMarketValue / 1000000).toFixed(2)} <span className="text-base text-gray-500">M MAD</span>
                 </div>
-                <div className="mt-0.5 text-[11px] text-gray-500">
+                <div className="mt-0.5 text-xs text-gray-500">
                   {p.activeCount} actifs · cash flow net {p.monthlyNet.toLocaleString('fr-FR')} MAD/mois
                 </div>
               </div>
@@ -2973,17 +2973,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                   <div className={`text-xs font-bold ${p.unrealizedGain >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                     {p.unrealizedGain >= 0 ? '+' : ''}{Math.round(p.unrealizedGain / 1000).toLocaleString('fr-FR')}k
                   </div>
-                  <div className={`text-[10px] ${p.unrealizedGain >= 0 ? 'text-green-700/80' : 'text-red-700/80'}`}>
+                  <div className={`text-xs ${p.unrealizedGain >= 0 ? 'text-green-700/80' : 'text-red-700/80'}`}>
                     PV latente ({p.unrealizedGainPercent}%)
                   </div>
                 </div>
                 <div className="rounded bg-blue-50 p-2">
                   <div className="text-xs font-bold text-blue-700">{Math.round(p.totalRevenue / 1000).toLocaleString('fr-FR')}k</div>
-                  <div className="text-[10px] text-blue-700/80">Revenus cumulés</div>
+                  <div className="text-xs text-blue-700/80">Revenus cumulés</div>
                 </div>
               </div>
               {p.soldCount > 0 && (
-                <div className={`mt-2 rounded px-2 py-1 text-[11px] font-medium ${p.realizedGain >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <div className={`mt-2 rounded px-2 py-1 text-xs font-medium ${p.realizedGain >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {p.soldCount} cédé{p.soldCount > 1 ? 's' : ''} · PV réalisée {p.realizedGain >= 0 ? '+' : ''}{Math.round(p.realizedGain / 1000)}k MAD
                 </div>
               )}
@@ -3044,31 +3044,31 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="flex flex-1 flex-col items-center justify-center px-2">
               <div className="text-center">
                 <div className="text-3xl font-bold text-gray-900">{o.activeCount}</div>
-                <div className="mt-0.5 text-[11px] text-gray-500">
+                <div className="mt-0.5 text-xs text-gray-500">
                   actives · {(o.totalValue / 1000000).toFixed(2)} M MAD · ROI moyen {o.avgRoi}%
                 </div>
               </div>
               <div className="mt-3 grid w-full grid-cols-3 gap-2 text-center">
                 <div className="rounded bg-green-50 p-2">
                   <div className="text-xs font-bold text-green-700">{o.recommendBuy}</div>
-                  <div className="text-[10px] text-green-700/80">À acheter</div>
+                  <div className="text-xs text-green-700/80">À acheter</div>
                 </div>
                 <div className="rounded bg-orange-50 p-2">
                   <div className="text-xs font-bold text-orange-700">{o.recommendStudy}</div>
-                  <div className="text-[10px] text-orange-700/80">À étudier</div>
+                  <div className="text-xs text-orange-700/80">À étudier</div>
                 </div>
                 <div className="rounded bg-red-50 p-2">
                   <div className="text-xs font-bold text-red-700">{o.highRisk}</div>
-                  <div className="text-[10px] text-red-700/80">Haut risque</div>
+                  <div className="text-xs text-red-700/80">Haut risque</div>
                 </div>
               </div>
               {o.expiringIn7d > 0 && (
-                <div className="mt-2 flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-700">
+                <div className="mt-2 flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
                   <Clock className="h-3 w-3" />
                   {o.expiringIn7d} expire{o.expiringIn7d > 1 ? 'nt' : ''} dans 7 jours
                 </div>
               )}
-              <div className="mt-2 text-[10px] text-gray-500">
+              <div className="mt-2 text-xs text-gray-500">
                 Taux conversion historique : <span className="font-semibold text-gray-700">{o.conversionRate}%</span>
                 {' '}({o.converted} achetées · {o.refused} refusées)
               </div>
@@ -3101,7 +3101,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="flex flex-1 flex-col items-center justify-center px-2">
               <div className="text-center">
                 <div className="text-3xl font-bold text-gray-900">{Math.round(c.totalCommission).toLocaleString('fr-FR')} <span className="text-base text-gray-500">MAD</span></div>
-                <div className="mt-0.5 text-[11px] text-gray-500">
+                <div className="mt-0.5 text-xs text-gray-500">
                   {c.creditCount + c.policyCount} dossiers · {Math.round(c.monthCommission).toLocaleString('fr-FR')} MAD ce mois
                 </div>
               </div>
@@ -3111,16 +3111,16 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                     <FileText className="h-3 w-3" />
                     <span className="text-xs font-bold">{Math.round(c.creditCommission).toLocaleString('fr-FR')}</span>
                   </div>
-                  <div className="text-[10px] text-purple-700/80">Crédit ({creditShare}%)</div>
-                  <div className="text-[10px] text-purple-700/60">{c.creditCount} dossiers</div>
+                  <div className="text-xs text-purple-700/80">Crédit ({creditShare}%)</div>
+                  <div className="text-xs text-purple-700/60">{c.creditCount} dossiers</div>
                 </div>
                 <div className="rounded bg-blue-50 p-2">
                   <div className="flex items-center justify-center gap-1 text-blue-700">
                     <Shield className="h-3 w-3" />
                     <span className="text-xs font-bold">{Math.round(c.policyCommission).toLocaleString('fr-FR')}</span>
                   </div>
-                  <div className="text-[10px] text-blue-700/80">Assurance ({policyShare}%)</div>
-                  <div className="text-[10px] text-blue-700/60">{c.policyCount} polices</div>
+                  <div className="text-xs text-blue-700/80">Assurance ({policyShare}%)</div>
+                  <div className="text-xs text-blue-700/60">{c.policyCount} polices</div>
                 </div>
               </div>
               {c.totalCommission > 0 && (
@@ -3135,11 +3135,11 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <div className="mt-3 grid w-full grid-cols-2 gap-2 text-center">
                   <div className="rounded bg-green-50 p-2">
                     <div className="text-xs font-bold text-green-700">{Math.round(c.commissionEarned).toLocaleString('fr-FR')} MAD</div>
-                    <div className="text-[10px] text-green-700/80">Encaissées (décaissé)</div>
+                    <div className="text-xs text-green-700/80">Encaissées (décaissé)</div>
                   </div>
                   <div className="rounded bg-amber-50 p-2">
                     <div className="text-xs font-bold text-amber-700">{Math.round(c.commissionDue).toLocaleString('fr-FR')} MAD</div>
-                    <div className="text-[10px] text-amber-700/80">Dues — à recouvrer</div>
+                    <div className="text-xs text-amber-700/80">Dues — à recouvrer</div>
                   </div>
                 </div>
               )}
@@ -3182,19 +3182,19 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
               <div className="mt-3 grid w-full grid-cols-3 gap-2 text-center">
                 <div className="rounded bg-orange-50 p-2">
                   <div className="text-xs font-bold text-orange-700">{stats.inProgress}</div>
-                  <div className="text-[10px] text-orange-700/80">En route</div>
+                  <div className="text-xs text-orange-700/80">En route</div>
                 </div>
                 <div className="rounded bg-blue-50 p-2">
                   <div className="text-xs font-bold text-blue-700">{stats.planned}</div>
-                  <div className="text-[10px] text-blue-700/80">Planifiées</div>
+                  <div className="text-xs text-blue-700/80">Planifiées</div>
                 </div>
                 <div className="rounded bg-red-50 p-2">
                   <div className="text-xs font-bold text-red-700">{stats.delayed}</div>
-                  <div className="text-[10px] text-red-700/80">Retardées</div>
+                  <div className="text-xs text-red-700/80">Retardées</div>
                 </div>
               </div>
               {stats.urgent > 0 && (
-                <div className="mt-2 flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[11px] font-medium text-red-700">
+                <div className="mt-2 flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700">
                   <AlertTriangle className="h-3 w-3" />
                   {stats.urgent} mission{stats.urgent > 1 ? 's' : ''} prioritaire{stats.urgent > 1 ? 's' : ''}
                 </div>
@@ -3297,7 +3297,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                 <span className="font-medium text-gray-900">{schedule.length}</span> chauffeurs ·{' '}
                 <span className="font-medium text-gray-900">{totalMissions}</span> missions / 7j
               </span>
-              <span className="flex items-center gap-1 text-[10px] text-gray-400">
+              <span className="flex items-center gap-1 text-xs text-gray-400">
                 <Clock className="h-3 w-3" /> 7 jours à venir
               </span>
             </div>
@@ -3320,14 +3320,14 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-900">
                           <span className="truncate">{driver.name}</span>
                           {licenseExpiringSoon && (
-                            <span title="Permis arrive à expiration" className="text-[10px] text-amber-600">⚠</span>
+                            <span title="Permis arrive à expiration" className="text-xs text-amber-600">⚠</span>
                           )}
                         </div>
                         {driver.phone && (
-                          <div className="text-[10px] text-gray-500">{driver.phone}</div>
+                          <div className="text-xs text-gray-500">{driver.phone}</div>
                         )}
                       </div>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColor}`}>
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${statusColor}`}>
                         {driver.status}
                       </span>
                     </div>
@@ -3339,30 +3339,30 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
                             ? date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
                             : '';
                           return (
-                            <div key={m.id} className="flex items-center justify-between gap-2 rounded bg-gray-50 px-2 py-1 text-[11px]">
+                            <div key={m.id} className="flex items-center justify-between gap-2 rounded bg-gray-50 px-2 py-1 text-xs">
                               <div className="min-w-0 flex-1">
                                 <div className="truncate font-medium text-gray-700">{m.label}</div>
                                 {m.destination && (
-                                  <div className="truncate text-[10px] text-gray-500">→ {m.destination}</div>
+                                  <div className="truncate text-xs text-gray-500">→ {m.destination}</div>
                                 )}
                               </div>
                               <div className="text-right">
-                                <div className="text-[10px] text-gray-600">{dateLabel}</div>
+                                <div className="text-xs text-gray-600">{dateLabel}</div>
                                 {(m.priority === 'Urgente' || m.priority === 'Haute') && (
-                                  <div className="text-[10px] font-semibold text-red-600">{m.priority}</div>
+                                  <div className="text-xs font-semibold text-red-600">{m.priority}</div>
                                 )}
                               </div>
                             </div>
                           );
                         })}
                         {driver.missions.length > 3 && (
-                          <div className="text-center text-[10px] text-gray-400">
+                          <div className="text-center text-xs text-gray-400">
                             +{driver.missions.length - 3} mission{driver.missions.length - 3 > 1 ? 's' : ''}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="mt-1.5 text-[10px] text-gray-400 italic">Aucune mission planifiée</div>
+                      <div className="mt-1.5 text-xs text-gray-400 italic">Aucune mission planifiée</div>
                     )}
                   </div>
                 );
@@ -3450,7 +3450,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         });
         return (
           <div className="flex h-full flex-col">
-            <div className="flex flex-wrap items-center gap-2 px-1 pb-2 text-[10px] text-gray-600">
+            <div className="flex flex-wrap items-center gap-2 px-1 pb-2 text-xs text-gray-600">
               <span className="flex items-center gap-1">
                 <Ship className="h-3 w-3 text-teal-600" />
                 {(liveFreightContainers ?? []).length} suivi{(liveFreightContainers ?? []).length > 1 ? 's' : ''}
@@ -3494,7 +3494,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         const active = routes.filter((r) => r.status === 'En route' || r.status === 'Retard').length;
         return (
           <div className="flex h-full flex-col">
-            <div className="flex flex-wrap items-center gap-2 px-1 pb-2 text-[10px] text-gray-600">
+            <div className="flex flex-wrap items-center gap-2 px-1 pb-2 text-xs text-gray-600">
               <span className="flex items-center gap-1">
                 <Truck className="h-3 w-3 text-emerald-600" />
                 {routes.length} route{routes.length > 1 ? 's' : ''}

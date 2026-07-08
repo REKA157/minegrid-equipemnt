@@ -274,7 +274,7 @@ const QuickCreditApplicationForm: React.FC<QuickCreditApplicationFormProps> = ({
                   placeholder="750000"
                   className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 />
-                <div className="mt-0.5 text-[10px] text-gray-500">Calculé automatiquement à partir du prix et de l'apport</div>
+                <div className="mt-0.5 text-xs text-gray-500">Calculé automatiquement à partir du prix et de l'apport</div>
               </div>
 
               {/* Durée + Taux */}
@@ -310,22 +310,22 @@ const QuickCreditApplicationForm: React.FC<QuickCreditApplicationFormProps> = ({
               {/* Calcul mensualité */}
               {monthlyPayment > 0 && (
                 <div className="rounded border border-blue-200 bg-blue-50 p-3">
-                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-blue-700">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
                     <Calculator className="h-3 w-3" />
                     Simulation
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div>
                       <div className="text-base font-bold text-blue-900">{monthlyPayment.toLocaleString('fr-FR')}</div>
-                      <div className="text-[10px] text-blue-700">MAD / mois</div>
+                      <div className="text-xs text-blue-700">MAD / mois</div>
                     </div>
                     <div>
                       <div className="text-base font-bold text-blue-900">{Math.round(totalInterest).toLocaleString('fr-FR')}</div>
-                      <div className="text-[10px] text-blue-700">Intérêts totaux</div>
+                      <div className="text-xs text-blue-700">Intérêts totaux</div>
                     </div>
                     <div>
                       <div className="text-base font-bold text-orange-700">{commissionPreview.toLocaleString('fr-FR')}</div>
-                      <div className="text-[10px] text-orange-700">Votre commission</div>
+                      <div className="text-xs text-orange-700">Votre commission</div>
                     </div>
                   </div>
                 </div>

@@ -14,7 +14,14 @@ import type {
   ShellWidgetsSource,
   ShellSaveStatus,
 } from './shellTypes';
-import { generatePreviewLayout, getHeightFromWidget, getWidthFromSize } from './layoutHelpers';
+import {
+  findFirstFreeSlot,
+  generatePreviewLayout,
+  getHeightFromWidget,
+  getSizeFromWidth,
+  getWidthFromSize,
+  repackLayout,
+} from './layoutHelpers';
 
 /**
  * Hook centralisant toute la logique d'etat commune aux 8 dashboards
@@ -298,7 +305,18 @@ export function useShellState(options: UseShellStateOptions) {
       setLayout({ lg: newLayout });
       setConfig((prev) => {
         if (!prev) return prev;
-        const next = { ...prev, layout: { ...prev.layout, lg: newLayout } };
+        // Synchronise les RATIOS (source de vérité des largeurs) avec les nouvelles
+        // largeurs : un redimensionnement à la souris devient un ratio (1/3, 1/2,
+        // 2/3, 1/1) et survit donc au rechargement.
+        const syncedSizes = { ...prev.widgetSizes };
+        for (const l of newLayout) {
+          syncedSizes[l.i] = getSizeFromWidth(l.w);
+        }
+        const next = {
+          ...prev,
+          layout: { ...prev.layout, lg: newLayout },
+          widgetSizes: syncedSizes,
+        };
         persistLocalAndCloud(role, next);
         return next;
       });
@@ -311,7 +329,8 @@ export function useShellState(options: UseShellStateOptions) {
       setLayout((prev) => {
         const current = prev.lg.find((l) => l.i === widgetId);
         if (!current) return prev;
-        const nextH = current.h < 4 ? 4 : current.h < 6 ? 6 : 2;
+        // Paliers en unités de grille rowHeight=30px (petit ≈ 260px, moyen ≈ 490px).
+        const nextH = current.h < 9 ? 9 : current.h < 14 ? 14 : 5;
         const newLg = prev.lg.map((l) => (l.i === widgetId ? { ...l, h: nextH } : l));
         const updated = { ...prev, lg: newLg };
         setConfig((prevConfig) => {
@@ -325,6 +344,25 @@ export function useShellState(options: UseShellStateOptions) {
     },
     [role, persistLocalAndCloud],
   );
+
+  /** Range tous les widgets : hauteurs appariées, lignes complétées à 12 colonnes. */
+  const reorganizeLayout = useCallback(() => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const packed = repackLayout(prev.widgets, prev.layout.lg, prev.widgetSizes);
+      // Synchronise les RATIOS avec les largeurs du rangement (élargissements
+      // compris) : la disposition rangée survit au rechargement.
+      const syncedSizes = { ...prev.widgetSizes };
+      for (const l of packed) syncedSizes[l.i] = getSizeFromWidth(l.w);
+      const next = { ...prev, layout: { ...prev.layout, lg: packed }, widgetSizes: syncedSizes };
+      setLayout({ lg: packed });
+      persistLocalAndCloud(role, next);
+      return next;
+    });
+  }, [role, persistLocalAndCloud]);
+
+  /** Dernier widget ajouté — permet au shell de le surligner et d'y défiler. */
+  const [lastAddedId, setLastAddedId] = useState<string | null>(null);
 
   const resetWidgetSize = useCallback(
     (widgetId: string) => {
@@ -407,13 +445,17 @@ export function useShellState(options: UseShellStateOptions) {
       }
 
       const newWidgets = [...config.widgets, widgetToAdd];
+      // Placement au PREMIER emplacement libre (trou dans la grille) plutôt
+      // qu'à une position arbitraire qui éparpillait l'agencement.
+      const w = getWidthFromSize(widgetToAdd.size);
+      const slot = findFirstFreeSlot(layout.lg, w);
       const newLayoutItem: ShellLayoutItem = originalPosition
         ? originalPosition
         : {
             i: widgetId,
-            x: 0,
-            y: layout.lg.length,
-            w: getWidthFromSize(widgetToAdd.size),
+            x: slot.x,
+            y: slot.y,
+            w,
             h: getHeightFromWidget(widgetToAdd),
           };
       const newLg = [...layout.lg, newLayoutItem];
@@ -421,6 +463,9 @@ export function useShellState(options: UseShellStateOptions) {
       setConfig(newConfig);
       setLayout(newConfig.layout);
       persistLocalAndCloud(role, newConfig);
+      // Signale l'ajout au shell (surlignage + défilement vers le widget).
+      setLastAddedId(widgetId);
+      window.setTimeout(() => setLastAddedId((cur) => (cur === widgetId ? null : cur)), 3500);
 
       setAddStatus((s) => ({ ...s, [widgetId]: 'added' }));
       if (addTimeouts.current[widgetId]) clearTimeout(addTimeouts.current[widgetId]);
@@ -447,16 +492,8 @@ export function useShellState(options: UseShellStateOptions) {
     if (missing.length === 0) return;
 
     const newWidgets = [...config.widgets, ...missing];
-    const newLg: ShellLayoutItem[] = [
-      ...layout.lg,
-      ...missing.map((wg, idx) => ({
-        i: wg.id,
-        x: 0,
-        y: layout.lg.length + idx,
-        w: getWidthFromSize(wg.size),
-        h: getHeightFromWidget(wg),
-      })),
-    ];
+    // Rangement complet en lignes pleines après restauration (pas d'empilement arbitraire).
+    const newLg: ShellLayoutItem[] = repackLayout(newWidgets, layout.lg, config.widgetSizes);
     const newConfig = { ...config, widgets: newWidgets, layout: { ...config.layout, lg: newLg } };
     setConfig(newConfig);
     setLayout(newConfig.layout);
@@ -503,9 +540,11 @@ export function useShellState(options: UseShellStateOptions) {
     layout,
     addStatus,
     saveStatus,
+    lastAddedId,
     onLayoutChange,
     cycleWidgetHeight,
     resetWidgetSize,
+    reorganizeLayout,
     addWidget,
     removeWidget,
     restoreAllWidgets,

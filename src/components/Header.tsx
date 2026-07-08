@@ -42,6 +42,7 @@ const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMachinesMenuOpen, setIsMachinesMenuOpen] = useState(false);
   const [isServicesMenuOpen, setIsServicesMenuOpen] = useState(false);
+  const [isProMenuOpen, setIsProMenuOpen] = useState(false);
   const [hoveredCategoryId, setHoveredCategoryId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   /** Accordéon menu mobile : Machines / Services */
@@ -60,6 +61,7 @@ const Header = () => {
     !window.location.hash.startsWith('#machines');
   const machinesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const servicesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const proTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { user } = useAuth();
   const accountId = user?.id ?? null;
@@ -127,6 +129,20 @@ const Header = () => {
   const handleServicesMenuLeave = () => {
     servicesTimeoutRef.current = setTimeout(() => {
       setIsServicesMenuOpen(false);
+    }, 300);
+  };
+
+  const handleProMenuEnter = () => {
+    if (proTimeoutRef.current) {
+      clearTimeout(proTimeoutRef.current);
+      proTimeoutRef.current = null;
+    }
+    setIsProMenuOpen(true);
+  };
+
+  const handleProMenuLeave = () => {
+    proTimeoutRef.current = setTimeout(() => {
+      setIsProMenuOpen(false);
     }, 300);
   };
 
@@ -322,12 +338,46 @@ const Header = () => {
               )}
             </div>
 
-            <a
-              href="#pro"
-              className="text-gray-700 hover:text-primary-600 font-semibold"
-            >
-              Espace Pro
-            </a>
+            <div className="relative">
+              <button
+                className="flex items-center text-gray-700 hover:text-primary-600 font-semibold"
+                onMouseEnter={handleProMenuEnter}
+                onMouseLeave={handleProMenuLeave}
+              >
+                Espace Pro
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </button>
+              {isProMenuOpen && (
+                <div
+                  className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg py-2 z-50"
+                  onMouseEnter={handleProMenuEnter}
+                  onMouseLeave={handleProMenuLeave}
+                >
+                  <a
+                    href="#pro"
+                    className="flex items-start px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                  >
+                    <User className="h-4 w-4 mr-2 mt-0.5 text-gray-400" />
+                    <span>
+                      <span className="font-medium">Compte Pro</span>
+                      <br />
+                      <span className="text-xs text-gray-400">Espace vendeur professionnel</span>
+                    </span>
+                  </a>
+                  <a
+                    href="#dashboard-entreprise-display"
+                    className="flex items-start px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                  >
+                    <Building2 className="h-4 w-4 mr-2 mt-0.5 text-gray-400" />
+                    <span>
+                      <span className="font-medium">Compte Entreprise</span>
+                      <br />
+                      <span className="text-xs text-gray-400">Votre tableau de bord métier enregistré</span>
+                    </span>
+                  </a>
+                </div>
+              )}
+            </div>
 
             <a
               href="#global-monitor"
@@ -335,13 +385,6 @@ const Header = () => {
             >
               <Globe className="h-4 w-4" />
               Global Monitor
-            </a>
-
-            <a
-              href="#opportunites-vente"
-              className="text-gray-700 hover:text-primary-600 font-semibold"
-            >
-              Opportunités
             </a>
 
             <a href="#blog" className="text-gray-700 hover:text-primary-600">Blog</a>
@@ -387,6 +430,13 @@ const Header = () => {
                     >
                       <Globe className="h-4 w-4 mr-2" />
                       Global Monitor
+                    </a>
+                    <a
+                      href="#opportunites-vente"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                    >
+                      <Wallet className="h-4 w-4 mr-2" />
+                      Opportunités
                     </a>
                     <a
                       href="#leads"
@@ -520,9 +570,15 @@ const Header = () => {
               </div>
             )}
 
-            <a href="#pro" onClick={closeMobileMenu} className="py-2 text-gray-800 font-semibold border-b border-gray-100">
-              Espace Pro
-            </a>
+            <div className="py-2 border-b border-gray-100">
+              <div className="text-gray-800 font-semibold mb-1">Espace Pro</div>
+              <a href="#pro" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
+                Compte Pro
+              </a>
+              <a href="#dashboard-entreprise-display" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
+                Compte Entreprise
+              </a>
+            </div>
             <a
               href="#global-monitor"
               onClick={closeMobileMenu}
@@ -530,13 +586,6 @@ const Header = () => {
             >
               <Globe className="h-4 w-4" />
               Global Monitor
-            </a>
-            <a
-              href="#opportunites-vente"
-              onClick={closeMobileMenu}
-              className="py-2 text-gray-800 font-semibold border-b border-gray-100"
-            >
-              Opportunités
             </a>
             <a href="#blog" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 border-b border-gray-100">
               Blog
@@ -555,6 +604,10 @@ const Header = () => {
                 </a>
                 <a href="#leads" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
                   Leads
+                </a>
+                <a href="#opportunites-vente" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                  <Wallet className="h-4 w-4" />
+                  Opportunités
                 </a>
                 <button
                   type="button"

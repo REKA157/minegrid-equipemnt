@@ -65,11 +65,11 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-blue-50 rounded-lg p-2 text-center">
           <div className="text-lg font-bold text-blue-700">{sortedRentals.length}</div>
-          <div className="text-[10px] text-blue-600">Locations</div>
+          <div className="text-xs text-blue-600">Locations</div>
         </div>
         <div className="bg-green-50 rounded-lg p-2 text-center">
           <div className="text-lg font-bold text-green-700">{confirmed}</div>
-          <div className="text-[10px] text-green-600">Confirmées</div>
+          <div className="text-xs text-green-600">Confirmées</div>
         </div>
         <div className="bg-orange-50 rounded-lg p-2 text-center">
           <div className="text-lg font-bold text-orange-700">
@@ -78,7 +78,7 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
               return d >= 1e6 ? `${(d / 1e6).toFixed(1)}M` : `${(d / 1000).toFixed(0)}k`;
             })()}
           </div>
-          <div className="text-[10px] text-orange-600">{currentCurrency} prévus</div>
+          <div className="text-xs text-orange-600">{currentCurrency} prévus</div>
         </div>
       </div>
 
@@ -107,12 +107,12 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-gray-900 truncate">{rental.equipment}</span>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${cfg.bg} ${cfg.color}`}>
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${cfg.bg} ${cfg.color}`}>
                       {cfg.label}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-500 flex-wrap">
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span className="flex items-center gap-0.5">
                       <Calendar className="h-3 w-3" /> {fmtDate(rental.startDate)} → {fmtDate(rental.endDate)}
                     </span>
@@ -123,10 +123,10 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
                   </div>
 
                   <div className="flex items-center justify-between mt-1.5">
-                    <span className="flex items-center gap-1 text-[11px] text-gray-600">
+                    <span className="flex items-center gap-1 text-xs text-gray-600">
                       <User className="h-3 w-3" /> {rental.client}
                     </span>
-                    <span className="text-[11px] font-medium text-orange-700">
+                    <span className="text-xs font-medium text-orange-700">
                       {daysUntil(rental.startDate)}
                     </span>
                   </div>
@@ -155,14 +155,14 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={(e) => { e.stopPropagation(); onAction?.('contact', rental); }}
-                      className="text-[11px] px-3 py-1.5 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors"
+                      className="text-xs px-3 py-1.5 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors"
                     >
                       Contacter
                     </button>
                     {rental.status === 'pending' && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onAction?.('confirm', rental); }}
-                        className="text-[11px] px-3 py-1.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors"
+                        className="text-xs px-3 py-1.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors"
                       >
                         Confirmer
                       </button>

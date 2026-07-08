@@ -409,7 +409,7 @@ function SignalList({ signals, emptyText }: { signals: CockpitSignal[]; emptyTex
             <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${dotClass(s.tone)}`} />
             <span className="min-w-0">
               <span className="block truncate text-xs font-medium text-gray-800">{s.label}</span>
-              {s.detail && <span className="block truncate text-[11px] text-gray-500">{s.detail}</span>}
+              {s.detail && <span className="block truncate text-xs text-gray-500">{s.detail}</span>}
             </span>
           </div>
         );
@@ -460,7 +460,7 @@ function CockpitView({ data }: { data: CockpitSummaryData }) {
     <section className="mb-6">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-bold text-gray-900">Aujourd'hui</h2>
-        <span className="text-[11px] text-gray-400">Temps réel · données de votre activité</span>
+        <span className="text-xs text-gray-400">Temps réel · données de votre activité</span>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
         <CockpitCard icon={<TrendingUp className="h-3.5 w-3.5" />} title={data.revenueLabel} accent="text-emerald-700">
@@ -471,7 +471,7 @@ function CockpitView({ data }: { data: CockpitSummaryData }) {
           ) : (
             <div className="text-xl font-bold text-gray-400">—</div>
           )}
-          {data.revenueHint ? <p className="mt-0.5 text-[11px] text-gray-500">{data.revenueHint}</p> : null}
+          {data.revenueHint ? <p className="mt-0.5 text-xs text-gray-500">{data.revenueHint}</p> : null}
         </CockpitCard>
 
         <CockpitCard icon={<Target className="h-3.5 w-3.5" />} title="Priorités du jour" accent="text-orange-700">

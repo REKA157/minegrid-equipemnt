@@ -66,13 +66,13 @@ const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = () => {
             <li key={r.id} className={`rounded-lg border p-3 ${PRIO_CLS[r.priority] ?? 'border-gray-200 bg-gray-50'}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="text-sm font-medium text-gray-900">{r.title}</div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIO_BADGE[r.priority] ?? PRIO_BADGE.normal}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PRIO_BADGE[r.priority] ?? PRIO_BADGE.normal}`}>
                   {PRIO_LABEL[r.priority] ?? r.priority}
                 </span>
               </div>
               {r.reason && <div className="text-xs text-gray-600 mt-0.5">{r.reason}</div>}
               <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="text-[10px] text-gray-400">Source : {r.source}</span>
+                <span className="text-xs text-gray-400">Source : {r.source}</span>
                 <a href={r.href} className="text-xs font-medium text-orange-700 hover:underline">
                   → {r.action}
                 </a>

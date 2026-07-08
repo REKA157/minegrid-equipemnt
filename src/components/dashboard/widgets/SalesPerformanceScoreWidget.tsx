@@ -268,23 +268,19 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
   const displayData = realData;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Score de Performance Commerciale</h3>
-          <p className="text-sm text-gray-600">
-            {loading
-              ? 'Actualisation des indicateurs…'
-              : 'Indice convergent : catalogue, pipeline (leads) et couverture annonces — mis à jour avec le Kanban'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    // Chrome allégé : la carte hôte (shell) fournit déjà bordure + fond + padding.
+    <div className="bg-white rounded-lg p-4">
+
+      {/* Fine rangée d'état (le TITRE vit dans la barre de la carte hôte). */}
+      <div
+        className="flex flex-wrap items-center justify-end gap-2 mb-3"
+        title="Indice convergent : catalogue, pipeline (leads) et couverture annonces — mis à jour avec le Kanban"
+      >
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           {loading && (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
           )}
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreBgColor(displayData.score)} ${getScoreColor(displayData.score)}`}>
+          <div className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${getScoreBgColor(displayData.score)} ${getScoreColor(displayData.score)}`}>
             {displayData.totalVendors <= 1
               ? 'Votre compte'
               : `Rang ${displayData.rank}/${displayData.totalVendors}`}
@@ -293,14 +289,15 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
       </div>
 
       {displayData.convergent && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5 text-left">
+        // auto-fit : s'adapte à la largeur RÉELLE de la carte (pas au viewport).
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 mb-5 text-left">
           <div className="rounded-lg border border-orange-100 bg-orange-50/70 p-3">
             <div className="text-xs font-semibold text-orange-900">Visibilité & contacts</div>
             <div className={`text-xl font-bold ${getScoreColor(Math.min(100, displayData.convergent.engagementScore * 2))}`}>
               {displayData.convergent.engagementScore}
               <span className="text-sm font-normal text-gray-500">/50</span>
             </div>
-            <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
+            <p className="text-xs text-gray-600 leading-snug mt-0.5">
               Vues, messages et offres par rapport au nombre d&apos;annonces — même logique que l&apos;activité catalogue.
             </p>
           </div>
@@ -310,7 +307,7 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
               {displayData.convergent.pipelineScore}
               <span className="text-sm font-normal text-gray-500">/30</span>
             </div>
-            <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
+            <p className="text-xs text-gray-600 leading-snug mt-0.5">
               {displayData.convergent.pipelineOpen} ouvert(s) · {displayData.convergent.pipelineWon} conclu(s) ·{' '}
               {displayData.convergent.staleOpenLeads > 0
                 ? `${displayData.convergent.staleOpenLeads} sans contact 14j`
@@ -323,7 +320,7 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
               {displayData.convergent.stockCoverageScore}
               <span className="text-sm font-normal text-gray-500">/20</span>
             </div>
-            <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
+            <p className="text-xs text-gray-600 leading-snug mt-0.5">
               Densité du catalogue vendeur — cohérent avec le widget Plan d&apos;action stock. Global Monitor :{' '}
               {displayData.convergent.monitorLinkedLeads} lead(s) lié(s) à un projet.
             </p>
@@ -380,8 +377,8 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
         </div>
       </div>
 
-      {/* Métriques détaillées */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      {/* Métriques détaillées — auto-fit : 2 colonnes en carte étroite, plus en carte large. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3 mb-6">
         <div className="bg-gray-50 p-3 rounded-lg">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-600">Ventes</span>
