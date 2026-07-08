@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useDeferredValue } from 'react';
 import { useMachineSearchSuggest } from '../hooks/queries/useMachineSearchSuggest';
 import { useAuth } from '../hooks/useAuth';
+import { useSubscription } from '../hooks/useSubscription';
+import { hasEnterprise } from '../utils/api/subscription';
 import { trackEvent } from '../utils/analytics';
 import {
   Search,
@@ -67,6 +69,15 @@ const Header = () => {
   const { user } = useAuth();
   const accountId = user?.id ?? null;
   const [showMyDashboardTab, setShowMyDashboardTab] = useState(false);
+
+  // Abonnement effectif côté SERVEUR (inclut l'héritage « le propriétaire paie,
+  // l'équipe hérite »). Un membre invité d'une société entreprise doit voir
+  // l'onglet même sans indicateur local. Additif : n'active jamais que la
+  // visibilité (le vrai accès reste gardé par RequireSubscription).
+  const { subscription } = useSubscription();
+  useEffect(() => {
+    if (hasEnterprise(subscription)) setShowMyDashboardTab(true);
+  }, [subscription]);
 
   useEffect(() => {
     const computeDashboardEligibility = () => {

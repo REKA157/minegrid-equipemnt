@@ -17,32 +17,32 @@ export const INACTIVE_SUBSCRIPTION: SubscriptionState = {
   endsAt: null,
 };
 
-// SOURCE DE VÉRITÉ de l'abonnement = lecture SERVEUR (table pro_clients protégée par
-// RLS SELECT propriétaire). Ne JAMAIS dériver l'état payant de localStorage : c'est
-// falsifiable en une ligne de console (finding #5 de l'audit). L'activation, elle,
-// est écrite uniquement par le webhook Stripe (cf. stripe-webhook + RLS durcie).
+// SOURCE DE VÉRITÉ de l'abonnement = lecture SERVEUR. Ne JAMAIS dériver l'état
+// payant de localStorage : c'est falsifiable en une ligne de console (finding #5).
+// L'activation est écrite uniquement par le webhook Stripe (RLS durcie).
+//
+// On passe par la fonction SQL get_effective_subscription() (SECURITY DEFINER) :
+// elle renvoie le MEILLEUR abonnement actif entre celui de l'utilisateur et celui
+// du PROPRIÉTAIRE de sa société — ainsi un membre invité hérite du forfait
+// entreprise du propriétaire (« le propriétaire paie, l'équipe hérite »). Le
+// calcul is_active (statut 'active' ET non expiré) est fait côté serveur.
 export async function getMySubscription(): Promise<SubscriptionState> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return INACTIVE_SUBSCRIPTION;
 
-    const { data, error } = await supabase
-      .from('pro_clients')
-      .select('subscription_type, subscription_status, subscription_end')
-      .eq('user_id', user.id)
-      .single();
+    const { data, error } = await supabase.rpc('get_effective_subscription');
+    if (error) return INACTIVE_SUBSCRIPTION;
 
-    if (error || !data) return INACTIVE_SUBSCRIPTION;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return INACTIVE_SUBSCRIPTION;
 
-    const notExpired =
-      !data.subscription_end || new Date(data.subscription_end).getTime() > Date.now();
-    const isActive = data.subscription_status === 'active' && notExpired;
-
+    const isActive = Boolean(row.is_active);
     return {
       isActive,
-      type: isActive ? ((data.subscription_type as SubscriptionType) ?? null) : null,
-      status: data.subscription_status ?? null,
-      endsAt: data.subscription_end ?? null,
+      type: isActive ? ((row.type as SubscriptionType) ?? null) : null,
+      status: row.status ?? null,
+      endsAt: row.ends_at ?? null,
     };
   } catch {
     return INACTIVE_SUBSCRIPTION;
