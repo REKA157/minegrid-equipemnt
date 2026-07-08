@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Info, X, Lightbulb, ListChecks } from 'lucide-react';
 
 /** Explication détaillée d'un widget (affichée au CLIC sur le « i »). */
@@ -83,16 +84,19 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({
         </span>
       )}
 
-      {/* Niveau 2 : fenêtre détaillée au clic (overlay plein écran) */}
-      {mode === 'open' && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-          onMouseDown={(e) => {
-            // clic sur le fond -> fermer (mais pas clic dans la carte)
-            if (e.target === e.currentTarget) setMode('closed');
-          }}
-        >
-          <div className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl bg-white p-5 text-left shadow-xl">
+      {/* Niveau 2 : fenêtre détaillée au clic. Rendue via un PORTAL dans
+          document.body pour échapper au transform des cartes (react-grid-layout),
+          sinon `position: fixed` serait piégé dans la carte et rogné. */}
+      {mode === 'open' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+            onMouseDown={(e) => {
+              // clic sur le fond -> fermer (mais pas clic dans la carte)
+              if (e.target === e.currentTarget) setMode('closed');
+            }}
+          >
+            <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-6 text-left shadow-2xl">
             <div className="mb-3 flex items-start justify-between gap-3">
               <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
                 <Info className="h-4 w-4 text-orange-600 shrink-0" />
@@ -149,9 +153,10 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({
             >
               J'ai compris
             </button>
-          </div>
-        </div>
-      )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </span>
   );
 };
