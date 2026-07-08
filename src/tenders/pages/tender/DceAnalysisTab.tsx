@@ -36,6 +36,24 @@ const RISK_STYLES: Record<string, string> = {
   eleve: 'bg-red-100 text-red-700',
 };
 
+// Limites d'envoi vers l'API réelle (l'API accepte 32 Mo par requête ;
+// on garde de la marge pour l'encodage base64 ≈ +33 %).
+const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 Mo par PDF
+const MAX_TOTAL_BYTES = 18 * 1024 * 1024; // 18 Mo au total
+
+/** Lit un fichier en base64 (sans le préfixe data:). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function DceAnalysisTab({ tender }: { tender: Tender }) {
   const setDceAnalysis = useTendersStore((s) => s.setDceAnalysis);
   const updateTender = useTendersStore((s) => s.updateTender);
@@ -63,13 +81,40 @@ export default function DceAnalysisTab({ tender }: { tender: Tender }) {
   const runAnalysis = async () => {
     setAnalyzing(true);
     try {
+      // IA connectée : joint le contenu des PDF (base64) pour une vraie
+      // lecture. Word/Excel/ZIP restent listés par nom (non lus à ce stade).
+      let totalSent = 0;
+      const filePayloads = await Promise.all(
+        files.map(async (f) => {
+          const base = { name: f.name, size: f.size };
+          if (!isAiConnected() || !f.name.toLowerCase().endsWith('.pdf')) return base;
+          if (f.size > MAX_PDF_BYTES) {
+            toast.warning(`« ${f.name} » dépasse 10 Mo — envoyé en nom seul, non lu.`);
+            return base;
+          }
+          if (totalSent + f.size > MAX_TOTAL_BYTES) {
+            toast.warning(`Limite d'envoi atteinte — « ${f.name} » non lu cette fois.`);
+            return base;
+          }
+          totalSent += f.size;
+          try {
+            return { ...base, base64: await fileToBase64(f) };
+          } catch {
+            return base;
+          }
+        }),
+      );
       const result = await analyzeTender({
-        files: files.map((f) => ({ name: f.name, size: f.size })),
+        files: filePayloads,
         sector: tender.sector,
         title: tender.title,
       });
       setDceAnalysis(tender.id, result);
-      toast.success('Analyse terminée. Passez en revue les points bloquants.');
+      toast.success(
+        result.simulated
+          ? 'Analyse terminée (simulation). Passez en revue les points bloquants.'
+          : 'Analyse IA terminée. Passez en revue les points bloquants.',
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -138,10 +183,16 @@ export default function DceAnalysisTab({ tender }: { tender: Tender }) {
 
   return (
     <div className="space-y-6">
-      {!isAiConnected() && (
+      {isAiConnected() ? (
+        <GuideBanner>
+          ✓ IA connectée : les <strong>PDF</strong> importés sont réellement lus et analysés
+          (10 Mo max par fichier). Les Word/Excel/ZIP sont listés par nom — convertissez-les en
+          PDF pour qu'ils soient lus aussi.
+        </GuideBanner>
+      ) : (
         <GuideBanner>
           Mode simulation : l'analyse produit un résultat réaliste sans lire réellement vos
-          fichiers. Branchez une API IA dans <a href="#appels-offres/parametres" className="font-semibold underline">Paramètres</a> pour
+          fichiers. Branchez l'IA dans <a href="#appels-offres/parametres" className="font-semibold underline">Paramètres</a> pour
           activer l'analyse réelle — les écrans resteront identiques.
         </GuideBanner>
       )}

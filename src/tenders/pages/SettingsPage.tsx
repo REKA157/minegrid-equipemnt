@@ -6,9 +6,9 @@
  */
 
 import React, { useState } from 'react';
-import { Bot, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { Bot, PlugZap, RefreshCcw, ShieldCheck } from 'lucide-react';
 import { useTendersStore } from '../store/tendersStore';
-import { isAiConnected } from '../ai/aiService';
+import { isAiConnected, pingAi } from '../ai/aiService';
 import {
   ConfirmDialog,
   Field,
@@ -37,6 +37,18 @@ export default function SettingsPage() {
   const tenders = useTendersStore((s) => s.tenders);
   const documents = useTendersStore((s) => s.documents);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
+
+  const runPing = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      setTestResult(await pingAi());
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -82,7 +94,7 @@ export default function SettingsPage() {
           </p>
         </SectionCard>
 
-        <SectionCard title="Intelligence artificielle" hint="Analyse DCE, génération et amélioration de documents.">
+        <SectionCard title="Intelligence artificielle" hint="Analyse réelle des PDF du DCE, génération et amélioration de documents via l'API Claude.">
           <div
             className={`rounded-lg border px-4 py-3 text-sm ${
               isAiConnected()
@@ -92,7 +104,7 @@ export default function SettingsPage() {
           >
             <Bot className="mr-1.5 inline h-4 w-4" />
             {isAiConnected() ? (
-              <>API IA connectée — les analyses et générations utilisent votre endpoint.</>
+              <>API IA configurée — utilisez « Tester la connexion » pour vérifier le serveur.</>
             ) : (
               <>
                 <strong>Mode simulation actif.</strong> Toutes les fonctions marchent avec des
@@ -100,20 +112,54 @@ export default function SettingsPage() {
               </>
             )}
           </div>
-          <div className="mt-3 text-sm text-gray-600">
-            <p className="mb-2">
-              Pour brancher une vraie API, définissez ces variables dans le fichier{' '}
-              <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.env.local</code> à la
-              racine du projet, puis redémarrez :
+
+          <div className="mt-3 flex items-center gap-3">
+            <SecondaryButton onClick={runPing} disabled={testing}>
+              <PlugZap className="h-4 w-4" />
+              {testing ? 'Test en cours…' : 'Tester la connexion'}
+            </SecondaryButton>
+            {testResult && (
+              <span className={`text-sm ${testResult.ok ? 'text-green-700' : 'text-red-600'}`}>
+                {testResult.ok ? '✓ ' : '✗ '}
+                {testResult.detail}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 text-sm text-gray-600">
+            <p className="mb-2 font-medium text-gray-800">
+              Activer l'IA réelle (3 étapes, une seule fois) :
             </p>
-            <pre className="overflow-x-auto rounded-lg bg-gray-900 px-4 py-3 text-xs text-gray-100">
-{`VITE_TENDERS_AI_URL=https://votre-api.exemple.com/tenders-ai
-VITE_TENDERS_AI_KEY=votre_cle_api`}
-            </pre>
-            <p className="mt-2 text-xs text-gray-400">
-              ⚠ Gardez la clé locale : ne la collez jamais dans un chat, un email ou un dépôt
-              public. L'endpoint reçoit <code>{'{ action, payload }'}</code> et répond en JSON ;
-              en cas d'échec, l'application retombe automatiquement sur la simulation.
+            <ol className="mb-3 list-inside list-decimal space-y-1.5 text-sm">
+              <li>
+                Créez une clé API sur{' '}
+                <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">console.anthropic.com</code>{' '}
+                et enregistrez-la comme <strong>secret Supabase</strong> (jamais dans le code) :
+                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
+{`supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`}
+                </pre>
+              </li>
+              <li>
+                Déployez la fonction serveur (incluse dans le projet) :
+                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
+{`supabase functions deploy tenders-ai`}
+                </pre>
+              </li>
+              <li>
+                Activez côté application, dans{' '}
+                <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.env.local</code>, puis
+                redémarrez :
+                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
+{`VITE_TENDERS_AI_URL=supabase`}
+                </pre>
+              </li>
+            </ol>
+            <p className="text-xs text-gray-400">
+              ⚠ La clé Anthropic reste sur le serveur Supabase : ne la collez jamais dans un
+              chat, un fichier du site ou un dépôt. En production, ajoutez le secret{' '}
+              <code>TENDERS_AI_REQUIRE_AUTH=true</code> pour réserver l'IA aux utilisateurs
+              connectés (protège votre crédit API). En cas de panne ou de quota, l'application
+              retombe automatiquement sur la simulation — personne n'est bloqué.
             </p>
           </div>
         </SectionCard>

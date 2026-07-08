@@ -1,16 +1,25 @@
 /**
  * Couche IA abstraite du module Appels d'offres.
  *
- * Toutes les fonctions marchent AUJOURD'HUI en mode simulation (mock
- * déterministe, latence simulée) et pourront être branchées plus tard sur
- * une vraie API sans toucher aux écrans :
+ * Deux modes, sans changement d'écran :
  *
- *   VITE_TENDERS_AI_URL  — endpoint HTTP (POST JSON { action, payload })
- *   VITE_TENDERS_AI_KEY  — clé d'API (Bearer)
+ * 1. SIMULATION (défaut) — mock déterministe avec latence simulée.
  *
- * Si ces variables sont définies, chaque fonction tente l'appel réel et
- * retombe sur le mock en cas d'échec (résilience : l'utilisateur n'est
- * jamais bloqué). Le champ `simulated` des résultats indique la source.
+ * 2. API RÉELLE — Edge Function Supabase `tenders-ai` (voir
+ *    supabase/functions/tenders-ai/index.ts) qui appelle l'API Claude ;
+ *    la clé Anthropic reste côté serveur, jamais dans le navigateur.
+ *    Activation dans .env.local :
+ *
+ *      VITE_TENDERS_AI_URL=supabase
+ *        → utilise VITE_SUPABASE_URL/functions/v1/tenders-ai avec la clé
+ *          anon Supabase déjà présente dans l'app (rien d'autre à fournir).
+ *
+ *      ou une URL complète + VITE_TENDERS_AI_KEY pour un endpoint custom
+ *      (POST JSON { action, payload }).
+ *
+ * En cas d'échec de l'API (réseau, quota, fonction non déployée), chaque
+ * fonction retombe sur le mock : l'utilisateur n'est jamais bloqué.
+ * Le champ `simulated` des résultats indique la source.
  */
 
 import type {
@@ -33,21 +42,35 @@ import { computeCoverageStats } from '../lib/requirements';
 // Transport (API réelle optionnelle)
 // ---------------------------------------------------------------------------
 
-const AI_URL: string | undefined = import.meta.env.VITE_TENDERS_AI_URL;
-const AI_KEY: string | undefined = import.meta.env.VITE_TENDERS_AI_KEY;
+const RAW_AI_URL: string | undefined = import.meta.env.VITE_TENDERS_AI_URL;
+const RAW_AI_KEY: string | undefined = import.meta.env.VITE_TENDERS_AI_KEY;
+
+/** Résout le sentinel « supabase » vers l'Edge Function du projet. */
+function resolveEndpoint(): { url: string; key?: string } | null {
+  if (!RAW_AI_URL) return null;
+  if (RAW_AI_URL === 'supabase') {
+    const base: string | undefined = import.meta.env.VITE_SUPABASE_URL;
+    const anon: string | undefined = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!base) return null;
+    return { url: `${base.replace(/\/$/, '')}/functions/v1/tenders-ai`, key: anon };
+  }
+  return { url: RAW_AI_URL, key: RAW_AI_KEY };
+}
+
+const ENDPOINT = resolveEndpoint();
 
 export function isAiConnected(): boolean {
-  return Boolean(AI_URL);
+  return Boolean(ENDPOINT);
 }
 
 async function callRealApi<T>(action: string, payload: unknown): Promise<T | null> {
-  if (!AI_URL) return null;
+  if (!ENDPOINT) return null;
   try {
-    const res = await fetch(AI_URL, {
+    const res = await fetch(ENDPOINT.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(AI_KEY ? { Authorization: `Bearer ${AI_KEY}` } : {}),
+        ...(ENDPOINT.key ? { Authorization: `Bearer ${ENDPOINT.key}` } : {}),
       },
       body: JSON.stringify({ action, payload }),
     });
@@ -55,6 +78,40 @@ async function callRealApi<T>(action: string, payload: unknown): Promise<T | nul
     return (await res.json()) as T;
   } catch {
     return null; // fallback mock
+  }
+}
+
+/**
+ * Test de connexion (bouton « Tester » des Paramètres) : contrairement aux
+ * autres fonctions, ne retombe pas silencieusement sur le mock — remonte le
+ * détail pour que l'utilisateur comprenne ce qui manque.
+ */
+export async function pingAi(): Promise<{ ok: boolean; detail: string }> {
+  if (!ENDPOINT) {
+    return { ok: false, detail: 'Aucun endpoint configuré (VITE_TENDERS_AI_URL absent).' };
+  }
+  try {
+    const res = await fetch(ENDPOINT.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ENDPOINT.key ? { Authorization: `Bearer ${ENDPOINT.key}` } : {}),
+      },
+      body: JSON.stringify({ action: 'ping', payload: {} }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, detail: data.error ?? `Le serveur a répondu ${res.status}.` };
+    }
+    return {
+      ok: true,
+      detail: `Connecté — modèle ${data.model ?? '?'}${data.hasKey ? '' : ' (⚠ clé Anthropic absente côté serveur)'}.`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      detail: `Endpoint injoignable (${e instanceof Error ? e.message : 'erreur réseau'}). La fonction est-elle déployée ?`,
+    };
   }
 }
 
@@ -68,7 +125,8 @@ function simulateLatency(ms = 900): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export interface AnalyzeTenderInput {
-  files: { name: string; size: number }[];
+  /** base64 : contenu des PDF, envoyé uniquement à l'API réelle (jamais stocké). */
+  files: { name: string; size: number; base64?: string }[];
   sector: Sector;
   title?: string;
 }
@@ -156,7 +214,8 @@ export async function analyzeTender(input: AnalyzeTenderInput): Promise<DceAnaly
   return {
     analyzedAt: nowIso(),
     simulated: true,
-    files: input.files,
+    // Ne jamais conserver le base64 (poids en localStorage) : nom + taille suffisent.
+    files: input.files.map((f) => ({ name: f.name, size: f.size })),
     detectedDocuments: detected,
     keyClauses: [
       {
@@ -199,7 +258,7 @@ export async function analyzeTender(input: AnalyzeTenderInput): Promise<DceAnaly
     ],
     blockingPoints: sectorData.blockingPoints ?? [],
     summary:
-      `Analyse ${AI_URL ? '' : 'simulée '}du DCE « ${input.title ?? 'consultation'} » (secteur ${SECTOR_LABELS[input.sector]}). ` +
+      `Analyse simulée du DCE « ${input.title ?? 'consultation'} » (secteur ${SECTOR_LABELS[input.sector]}). ` +
       `${detected.length} document(s) détecté(s). Les critères de jugement privilégient le prix (50 %) mais la valeur technique (40 %) reste déterminante : ` +
       'un mémoire technique soigné est indispensable. Vérifiez en priorité les points bloquants et les dates clés ci-dessous.',
   };
@@ -544,7 +603,7 @@ export async function draftRequirementResponse(
     (cert ? ` Notre organisation s'appuie sur ${cert}.` : '') +
     `\n\nÉléments de preuve : ${hints.preuve}.` +
     (ref ? ` Référence comparable : ${ref.title} (${ref.client}, ${ref.year}).` : '') +
-    `\n\n[Projet de réponse ${AI_URL ? 'généré par l\'API IA' : 'généré en simulation'} — précisez les moyens, chiffres et modalités propres à ce marché avant validation.]`
+    `\n\n[Projet de réponse généré en simulation — précisez les moyens, chiffres et modalités propres à ce marché avant validation.]`
   );
 }
 
