@@ -924,7 +924,7 @@ export default function PublicationRapide() {
               <BackToDashboardButton />
               <div className="h-6 w-px bg-gray-300"></div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Service Enterprise - Gestion des Annonces
+                Publier une annonce
               </h1>
             </div>
           </div>

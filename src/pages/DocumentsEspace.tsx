@@ -236,7 +236,7 @@ export default function DocumentsEspace() {
           <div className="flex items-center">
             <BackToDashboardButton className="mr-6" />
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Espace Documents</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Mes documents</h1>
               <p className="text-gray-600">Gérez vos factures, contrats et fiches techniques</p>
             </div>
           </div>

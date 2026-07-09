@@ -210,7 +210,7 @@ export default function MessagesBoite() {
           <div className="flex items-center">
             <BackToDashboardButton className="mr-6" />
             <div>
-              <h1 className="text-3xl font-bold text-orange-800">Boîte de réception</h1>
+              <h1 className="text-3xl font-bold text-orange-800">Messagerie</h1>
               <p className="text-orange-600">Gérez vos messages et demandes clients</p>
             </div>
           </div>
