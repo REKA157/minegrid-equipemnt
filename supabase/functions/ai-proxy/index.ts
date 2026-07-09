@@ -114,12 +114,12 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json(req, { error: 'Méthode non autorisée.' }, 405);
 
   try {
-    // 1) Identifier l'utilisateur via son jeton.
+    // 1) Identifier l'utilisateur via son jeton (à passer EXPLICITEMENT :
+    //    dans une fonction serveur il n'y a pas de session persistée).
     const authHeader = req.headers.get('Authorization') || '';
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data: { user } } = await userClient.auth.getUser(token);
     if (!user) return json(req, { error: 'Connexion requise.' }, 401);
 
     // 2) Lire la société + sa clé IA (service_role, côté serveur uniquement).
