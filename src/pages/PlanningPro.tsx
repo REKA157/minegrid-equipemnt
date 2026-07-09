@@ -19,6 +19,26 @@ import supabase from '../utils/supabaseClient';
 import { PLANNING_EVENTS_COLUMNS } from '../constants/apiQueryFields';
 import { toast } from '../utils/toast';
 import BackToDashboardButton from '../components/common/BackToDashboardButton';
+import InfoTooltip, { type WidgetExplanation } from '../components/common/InfoTooltip';
+
+/** Aide « i » de la page (survol = rôle + 1re action ; clic = mode d'emploi). */
+const PLANNING_HELP: WidgetExplanation = {
+  summary:
+    "Votre agenda personnel : notez ici, à une date précise, vos rendez-vous, livraisons, interventions et maintenances, avec les coordonnées du client et le lieu.",
+  howItWorks: [
+    "Ce sont vos vrais événements, enregistrés pour votre compte : la liste se remplit au fur et à mesure que vous en créez ; elle reste vide au départ.",
+    "Chaque événement a un type (rendez-vous, livraison, intervention, maintenance), une priorité et un statut (planifié, en cours, terminé, annulé), avec une couleur pour repérer d'un coup d'œil.",
+    "Les filtres du haut (Tous, Rendez-vous, Livraison…) n'affichent qu'un type d'événement à la fois.",
+    "Un rendez-vous programmé depuis un prospect (bouton « Programmer un appel » du pipeline commercial) apparaît aussi automatiquement ici.",
+  ],
+  whatToDo: [
+    "Pour ajouter un événement, cliquez « + Nouvel événement » en haut à droite, indiquez la date, le client et le lieu, puis enregistrez.",
+    "Sur une carte d'événement, utilisez les boutons pour le modifier, changer son statut (par ex. le marquer « terminé ») ou le supprimer.",
+    "Servez-vous des filtres par type pour retrouver vite, par exemple, toutes vos livraisons à venir.",
+    "Quand l'utiliser : pour tout ce que VOUS planifiez à une date précise. Pour votre to-do commerciale générée automatiquement (relances, devis à envoyer), regardez plutôt le widget « Actions commerciales » du tableau de bord.",
+  ],
+};
+
 interface PlanningEvent {
   id?: string;
   title: string;
@@ -431,9 +451,14 @@ export default function PlanningPro() {
             <div className="flex items-center space-x-4">
               <BackToDashboardButton />
               <div className="h-6 w-px bg-gray-300"></div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Mon planning
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">Mon planning</h1>
+                <InfoTooltip
+                  text="Votre agenda daté : rendez-vous, livraisons, interventions, maintenances."
+                  title="Mon planning"
+                  details={PLANNING_HELP}
+                />
+              </div>
             </div>
             <button
               onClick={() => {

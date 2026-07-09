@@ -6,6 +6,7 @@ import {
 import { showNotification, exportData } from '../../../services/apiService';
 import { getDashboardStats } from '../../../utils/api';
 import { RealPipelineService } from '../../../services/realPipelineService';
+import { createPlanningEvent } from '../../../utils/api/planningEvents';
 import { prospectKindOfLead, prospectKindLabel } from '../../../utils/monitorProspectMatch';
 import { toast } from '../../../utils/toast';
 import { useWidgetMadCurrency } from '../../../hooks/useWidgetMadCurrency';
@@ -514,8 +515,24 @@ const SalesPipelineWidget = ({
     applyLeadLocalUpdate(selectedLead.id, { nextAction: appointment, lastContact: date });
     const saved = await RealPipelineService.updateLead(selectedLead.id, { next_action: appointment, last_contact: date });
     if (!saved) { toast.error('Échec d’enregistrement du rendez-vous.'); return; }
+
+    // Synchro agenda : le RDV apparaît aussi dans « Mon planning » (si la date est valide).
+    const dt = new Date(`${date}T${time}`);
+    let addedToPlanning = false;
+    if (!Number.isNaN(dt.getTime())) {
+      addedToPlanning = await createPlanningEvent({
+        title: `Rendez-vous — ${selectedLead.contact?.name || selectedLead.title || 'Prospect'}`,
+        description: 'Créé automatiquement depuis le pipeline commercial.',
+        startDate: dt.toISOString(),
+        type: 'rendez-vous',
+        clientName: selectedLead.contact?.name || selectedLead.title || '',
+        clientPhone: selectedLead.contact?.phone || '',
+        clientEmail: selectedLead.contact?.email || '',
+        notes: `Prospect : ${selectedLead.title || ''}`,
+      });
+    }
     window.dispatchEvent(new Event('pipeline:refresh'));
-    toast('✅ Rendez-vous programmé');
+    toast(addedToPlanning ? '✅ Rendez-vous programmé (ajouté à Mon planning)' : '✅ Rendez-vous programmé');
   };
 
   const handleAddNewLead = async () => {
