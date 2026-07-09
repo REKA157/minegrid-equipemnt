@@ -23,7 +23,7 @@ interface ProviderMeta {
 
 const PROVIDERS: ProviderMeta[] = [
   { id: 'openai', label: 'OpenAI (ChatGPT)', keyPlaceholder: 'sk-…', modelPlaceholder: 'gpt-4o', keyPrefixHint: 'Commence par « sk- »', helpUrl: 'https://platform.openai.com/api-keys' },
-  { id: 'anthropic', label: 'Claude (Anthropic)', keyPlaceholder: 'sk-ant-…', modelPlaceholder: 'claude-sonnet-4', keyPrefixHint: 'Commence par « sk-ant- »', helpUrl: 'https://console.anthropic.com/settings/keys' },
+  { id: 'anthropic', label: 'Claude (Anthropic)', keyPlaceholder: 'sk-ant-…', modelPlaceholder: 'claude-opus-4-8', keyPrefixHint: 'Commence par « sk-ant- »', helpUrl: 'https://console.anthropic.com/settings/keys' },
   { id: 'xai', label: 'Grok (xAI)', keyPlaceholder: 'xai-…', modelPlaceholder: 'grok-2', keyPrefixHint: 'Commence par « xai- »', helpUrl: 'https://console.x.ai' },
   { id: 'custom', label: 'Autre (compatible OpenAI)', keyPlaceholder: 'votre clé API', modelPlaceholder: 'nom du modèle', keyPrefixHint: 'Indiquez aussi l’adresse du service', needsBaseUrl: true },
 ];

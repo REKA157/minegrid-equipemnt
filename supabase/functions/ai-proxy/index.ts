@@ -68,7 +68,8 @@ const DEFAULT_BASE: Record<string, string> = {
 const DEFAULT_MODEL: Record<string, string> = {
   openai: 'gpt-4o-mini',
   xai: 'grok-2-latest',
-  anthropic: 'claude-3-5-sonnet-latest',
+  // Génération actuelle (les alias « …-latest » de Claude 3.5 sont retirés).
+  anthropic: 'claude-haiku-4-5-20251001',
 };
 
 async function callProvider(cred: Cred, messages: ChatMessage[], maxTokens = 1024): Promise<string> {
