@@ -39,6 +39,11 @@ import { getOrgMembers, type OrgMember, type OrgRole } from '../utils/api/organi
 import { useSubscription } from '../hooks/useSubscription';
 import { hasEnterprise } from '../utils/api/subscription';
 import { toast } from '../utils/toast';
+import { useTendersStore } from '../tenders/store/tendersStore';
+import { ROLE_LABELS as TENDER_ROLE_LABELS, defaultTenderRole, type UserRole as TenderRole } from '../tenders/types';
+
+/** Rôles du module Appels d'offres proposés à l'affectation (ordre d'affichage). */
+const TENDER_ROLES: TenderRole[] = ['admin', 'redacteur', 'validateur', 'lecteur'];
 interface TeamMember {
   id: string;
   name: string;
@@ -301,8 +306,15 @@ const MultiUserManagement: React.FC = () => {
     }
   };
 
+  // Rôles du module Appels d'offres (stockés dans le store tenders, partagés à
+  // l'équipe en mode partagé). Réglés ICI, au même endroit que la gestion d'équipe.
+  const tenderRoleAssignments = useTendersStore((s) => s.roleAssignments);
+  const upsertTenderRole = useTendersStore((s) => s.upsertRoleAssignment);
+  const aoRoleOf = (m: TeamMember): TenderRole =>
+    tenderRoleAssignments.find((a) => a.memberId === m.id)?.role ?? defaultTenderRole(m.role);
+
   const handleUpdateMember = (memberId: string, updates: Partial<TeamMember>) => {
-    setTeamMembers(teamMembers.map(member => 
+    setTeamMembers(teamMembers.map(member =>
       member.id === memberId ? { ...member, ...updates } : member
     ));
     setShowEditModal(false);
@@ -495,13 +507,19 @@ const MultiUserManagement: React.FC = () => {
                         <div>
                           <h3 className="text-lg font-medium text-gray-900">{member.name}</h3>
                           <p className="text-sm text-gray-600">{member.email}</p>
-                          <div className="flex items-center space-x-2 mt-1">
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getRoleInfo(member.role).color}`}>
                               {getRoleInfo(member.role).icon}
                               <span className="ml-1">{getRoleInfo(member.role).name}</span>
                             </span>
                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(member.status)}`}>
                               {member.status === 'active' ? 'Actif' : member.status === 'pending' ? 'En attente' : 'Inactif'}
+                            </span>
+                            <span
+                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-violet-50 text-violet-700"
+                              title="Rôle dans le module Appels d’offres"
+                            >
+                              AO : {TENDER_ROLE_LABELS[aoRoleOf(member)]}
                             </span>
                           </div>
                         </div>
@@ -619,6 +637,13 @@ const MultiUserManagement: React.FC = () => {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Actions Rapides</h3>
               <div className="space-y-2">
+                <a
+                  href="#appels-offres/equipe-roles"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg transition-colors flex items-center"
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Rôles Appels d’offres (vue détaillée)
+                </a>
                 <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg transition-colors">
                   <Mail className="h-4 w-4 inline mr-2" />
                   Envoyer un message à l'équipe
@@ -772,6 +797,15 @@ const MultiUserManagement: React.FC = () => {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              // Affectation AO : persistée dans le store tenders AVANT handleUpdateMember
+              // (qui remet selectedMember à null).
+              upsertTenderRole({
+                memberId: selectedMember.id,
+                name: selectedMember.name,
+                email: selectedMember.email,
+                role: formData.get('tenderRole') as TenderRole,
+                fromOrg: true,
+              });
               handleUpdateMember(selectedMember.id, {
                 role: formData.get('role') as any,
                 status: formData.get('status') as any
@@ -807,6 +841,22 @@ const MultiUserManagement: React.FC = () => {
                       <option key={role.id} value={role.id}>{role.name}</option>
                     ))}
                   </select>
+                  <p className="mt-1 text-xs text-gray-500">Rôle « société » — pilote les droits d’accès (base de données).</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Rôle Appels d’offres (AO)</label>
+                  <select
+                    name="tenderRole"
+                    defaultValue={aoRoleOf(selectedMember)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    {TENDER_ROLES.map((r) => (
+                      <option key={r} value={r}>{TENDER_ROLE_LABELS[r]}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Ce que ce salarié peut faire dans le module « Appels d’offres » (distinct du rôle société). Le salarié en hérite à sa connexion.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
