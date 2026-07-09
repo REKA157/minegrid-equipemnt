@@ -26,6 +26,7 @@ import { getSellerMachines } from '../utils/api';
 import { getCurrentUser } from '../utils/auth';
 import { fetchModelSpecs, fetchModelSpecsFull, toPublicationRapideForm, summarizeSpecs, missingForPublication } from '../services/autoSpecsService';
 import { toast } from '../utils/toast';
+import { generateListingCopy } from '../utils/api/aiListing';
 import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface MachineFormData {
   name: string;
@@ -55,6 +56,7 @@ export default function PublicationRapide() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [aiWriting, setAiWriting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
@@ -1209,7 +1211,7 @@ export default function PublicationRapide() {
                       required
                     />
                   </div>
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
                       className="px-3 py-1 text-sm bg-orange-600 text-white rounded hover:bg-orange-700"
@@ -1250,7 +1252,38 @@ export default function PublicationRapide() {
                         }
                       }}
                     >
-                      Remplir automatiquement (IA)
+                      Récupérer les caractéristiques
+                    </button>
+                    <button
+                      type="button"
+                      disabled={aiWriting}
+                      className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300"
+                      onClick={async () => {
+                        if (!formData.brand || !formData.model) { toast('Renseignez la marque et le modèle'); return; }
+                        setAiWriting(true);
+                        try {
+                          const specsStr = [
+                            formData.total_hours ? `${formData.total_hours} h` : '',
+                            ...Object.entries(formData.specifications || {}).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`),
+                          ].filter(Boolean).join(' · ');
+                          const res = await generateListingCopy({
+                            brand: formData.brand, model: formData.model, year: formData.year,
+                            price: formData.price, category: formData.category, specs: specsStr,
+                          });
+                          if (res.ok) {
+                            setFormData(prev => ({ ...prev, name: res.title || prev.name, description: res.description || prev.description }));
+                            toast('✨ Titre et description rédigés par l’IA');
+                          } else if (res.error && /aucune ia/i.test(res.error)) {
+                            toast('Connectez d’abord votre IA dans « Assistant IA ».');
+                          } else {
+                            toast(`IA : ${res.error || 'échec de la rédaction'}`);
+                          }
+                        } finally {
+                          setAiWriting(false);
+                        }
+                      }}
+                    >
+                      {aiWriting ? '✨ Rédaction…' : '✨ Rédiger avec l’IA'}
                     </button>
                   </div>
                   <div>
