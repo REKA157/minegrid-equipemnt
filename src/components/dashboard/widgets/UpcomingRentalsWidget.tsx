@@ -152,22 +152,16 @@ export default function UpcomingRentalsWidget({ data, widgetSize, onAction }: Up
                       {rental.notes}
                     </div>
                   )}
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onAction?.('contact', rental); }}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-700 transition-colors"
-                    >
-                      Contacter
-                    </button>
-                    {rental.status === 'pending' && (
+                  {rental.status === 'pending' && (
+                    <div className="flex gap-2 mt-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); onAction?.('confirm', rental); }}
                         className="text-xs px-3 py-1.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors"
                       >
-                        Confirmer
+                        Confirmer la location
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

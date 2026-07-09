@@ -6,7 +6,9 @@ import {
   getRentalRevenue,
   getUpcomingRentals,
   getRentalOverdue,
+  updateRentalStatus,
 } from '../../utils/enterpriseApi/rentals';
+import { toast } from '../../utils/toast';
 import { getEquipmentAvailability } from '../../utils/enterpriseApi/equipment';
 import { buildCorrelatedRentalActions } from '../../utils/buildCorrelatedRentalActions';
 import { getDailyInterventions } from '../../utils/enterpriseApi/interventions';
@@ -1186,7 +1188,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
 
   const rawData = getWidgetData(widget.id, widget.dataSource);
 
-  const handleWidgetAction = (action: string, actionData: any) => {
+  const handleWidgetAction = async (action: string, actionData: any) => {
+    // Locations : « Confirmer » persiste réellement le statut (rentals.status),
+    // puis rafraîchit la liste via l'événement pipeline:refresh.
+    if (action === 'confirm' && actionData?.id) {
+      const saved = await updateRentalStatus(String(actionData.id), 'confirmed');
+      if (saved) {
+        toast('✅ Location confirmée');
+        window.dispatchEvent(new Event('pipeline:refresh'));
+      }
+      return;
+    }
     onAction?.(action, actionData);
   };
 

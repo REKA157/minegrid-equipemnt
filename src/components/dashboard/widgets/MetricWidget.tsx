@@ -178,6 +178,11 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
                   Prévision
                 </button>
               </div>
+              {selectedPeriod !== 'current' && (
+                <p className="text-[11px] italic text-gray-400">
+                  ≈ Estimation calculée sur la tendance — non basée sur l’historique réel.
+                </p>
+              )}
 
               {/* Indicateurs de performance */}
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -386,19 +391,6 @@ const MetricWidget: React.FC<MetricWidgetProps> = ({ widget, data, widgetSize = 
                       {extendedData.current.count}
                     </span>
                   </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Actions</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <button className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors">
-                    Exporter rapport
-                  </button>
-                  <button className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors">
-                    Planifier actions
-                  </button>
                 </div>
               </div>
             </div>

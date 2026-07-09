@@ -475,87 +475,68 @@ const SalesPipelineWidget = ({
     setShowEditForm(true);
   };
 
-  const handleSaveEdit = () => {
-    const updatedLeads = leadsData.map(l => {
-      if (l.id === editForm.id) {
-        return { ...l, ...editForm };
-      }
-      return l;
+  const handleSaveEdit = async () => {
+    const f = editForm;
+    if (!f.id) return;
+    // MAJ locale immédiate (feedback), puis persistance en base.
+    applyLeadLocalUpdate(f.id, {
+      title: f.title, stage: f.stage, value: f.value,
+      probability: f.probability, nextAction: f.nextAction, notes: f.notes,
     });
-    setLeadsData(updatedLeads);
     setShowEditForm(false);
     setEditForm({});
-    toast('✅ Lead modifié avec succès');
+    const saved = await RealPipelineService.updateLead(f.id, {
+      title: f.title, stage: f.stage, value: f.value,
+      probability: f.probability, next_action: f.nextAction, notes: f.notes,
+    });
+    if (!saved) { toast.error('Échec de sauvegarde du lead dans la base.'); return; }
+    window.dispatchEvent(new Event('pipeline:refresh'));
+    toast('✅ Lead modifié');
   };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     const note = prompt('Ajouter une note:');
-    if (note && selectedLead) {
-      const updatedLeads = leadsData.map(l => {
-        if (l.id === selectedLead.id) {
-          return {
-            ...l,
-            notes: l.notes ? `${l.notes}\n${new Date().toLocaleDateString()}: ${note}` : `${new Date().toLocaleDateString()}: ${note}`
-          };
-        }
-        return l;
-      });
-      setLeadsData(updatedLeads);
-      setSelectedLead({
-        ...selectedLead,
-        notes: selectedLead.notes ? `${selectedLead.notes}\n${new Date().toLocaleDateString()}: ${note}` : `${new Date().toLocaleDateString()}: ${note}`
-      });
-      toast('✅ Note ajoutée avec succès');
-    }
+    if (!note || !selectedLead) return;
+    const stamp = new Date().toLocaleDateString();
+    const notes = selectedLead.notes ? `${selectedLead.notes}\n${stamp}: ${note}` : `${stamp}: ${note}`;
+    applyLeadLocalUpdate(selectedLead.id, { notes });
+    const saved = await RealPipelineService.updateLead(selectedLead.id, { notes });
+    if (!saved) { toast.error('Échec d’enregistrement de la note.'); return; }
+    window.dispatchEvent(new Event('pipeline:refresh'));
+    toast('✅ Note ajoutée');
   };
 
-  const handleScheduleCall = () => {
+  const handleScheduleCall = async () => {
     const date = prompt('Date du rendez-vous (YYYY-MM-DD):');
     const time = prompt('Heure du rendez-vous (HH:MM):');
-    if (date && time && selectedLead) {
-      const appointment = `Rendez-vous programmé: ${date} à ${time}`;
-      const updatedLeads = leadsData.map(l => {
-        if (l.id === selectedLead.id) {
-          return {
-            ...l,
-            nextAction: appointment,
-            lastContact: date
-          };
-        }
-        return l;
-      });
-
-      setLeadsData(updatedLeads);
-
-      // Mettre à jour le lead sélectionné
-      setSelectedLead({
-        ...selectedLead,
-        nextAction: appointment,
-        lastContact: date
-      });
-
-      toast('✅ Rendez-vous programmé avec succès');
-    }
+    if (!date || !time || !selectedLead) return;
+    const appointment = `Rendez-vous programmé: ${date} à ${time}`;
+    applyLeadLocalUpdate(selectedLead.id, { nextAction: appointment, lastContact: date });
+    const saved = await RealPipelineService.updateLead(selectedLead.id, { next_action: appointment, last_contact: date });
+    if (!saved) { toast.error('Échec d’enregistrement du rendez-vous.'); return; }
+    window.dispatchEvent(new Event('pipeline:refresh'));
+    toast('✅ Rendez-vous programmé');
   };
 
-  const handleAddNewLead = () => {
-    const newLead = {
-      id: `lead-${Date.now()}`,
-      title: prompt('Nom du prospect:') || 'Nouveau prospect',
+  const handleAddNewLead = async () => {
+    const title = prompt('Nom du prospect:');
+    if (!title) return;
+    const value = parseInt(prompt('Valeur estimée (MAD):') || '0', 10) || 0;
+    // Persistance réelle : seller_id posé par le service, organization_id/assigned_to
+    // par le trigger équipe côté base.
+    const created = await RealPipelineService.createLead({
+      title,
       stage: 'Prospection',
       priority: 'medium',
-      value: parseInt(prompt('Valeur estimée (MAD):') || '0'),
+      value,
       probability: 10,
-      nextAction: 'Premier contact',
-      assignedTo: prompt('Assigné à:') || 'Commercial',
-      lastContact: new Date().toISOString().split('T')[0],
-      notes: ''
-    };
-
-    if (newLead.title !== 'Nouveau prospect') {
-      setLeadsData([...leadsData, newLead]);
-      toast('✅ Nouveau lead ajouté avec succès');
-    }
+      next_action: 'Premier contact',
+      last_contact: new Date().toISOString(),
+      source: 'manual',
+    });
+    if (!created) { toast.error('Échec de création du lead.'); return; }
+    window.dispatchEvent(new Event('pipeline:refresh'));
+    toast('✅ Nouveau lead créé');
   };
 
   const handleAIInsightAction = (insight: any) => {

@@ -14,6 +14,7 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
   const [showDetails, setShowDetails] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [showAll, setShowAll] = useState(false);
 
   // Fonction pour obtenir la taille adaptative
   const getAdaptiveSize = (type: 'text' | 'spacing' | 'grid') => {
@@ -115,7 +116,7 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
 
     return (
       <div className="space-y-2">
-        {filteredData.slice(0, maxItems).map((item, index) => (
+        {filteredData.slice(0, showAll ? filteredData.length : maxItems).map((item, index) => (
           <div
             key={item.id}
             className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
@@ -159,11 +160,14 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
           </div>
         ))}
 
-        {/* Bouton "Voir plus" */}
+        {/* Bouton "Voir plus" / "Réduire" — développe la liste sur place */}
         {filteredData.length > maxItems && (
           <div className="text-center pt-2">
-            <button className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors">
-              Voir tous les {filteredData.length} éléments
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-1 rounded-lg hover:bg-orange-200 transition-colors"
+            >
+              {showAll ? 'Réduire la liste' : `Voir tous les ${filteredData.length} éléments`}
             </button>
           </div>
         )}

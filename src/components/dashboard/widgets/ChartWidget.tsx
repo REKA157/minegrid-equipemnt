@@ -12,7 +12,6 @@ interface ChartWidgetProps {
 
 const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'medium' }) => {
   useCurrencyStore((s) => s.currentCurrency);
-  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
   const [showDetails, setShowDetails] = useState(false);
 
   // Fonction pour obtenir la taille adaptative
@@ -222,42 +221,6 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'm
 
     return (
       <div className="space-y-3">
-        {/* Contrôles de période pour les graphiques d'évolution */}
-        {(widget.id.includes('evolution') || widget.id.includes('trend')) && (
-          <div className="flex space-x-1">
-            <button
-              onClick={() => setSelectedPeriod('week')}
-              className={`px-2 py-1 text-xs rounded ${
-                selectedPeriod === 'week'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              Semaine
-            </button>
-            <button
-              onClick={() => setSelectedPeriod('month')}
-              className={`px-2 py-1 text-xs rounded ${
-                selectedPeriod === 'month'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              Mois
-            </button>
-            <button
-              onClick={() => setSelectedPeriod('quarter')}
-              className={`px-2 py-1 text-xs rounded ${
-                selectedPeriod === 'quarter'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              Trimestre
-            </button>
-          </div>
-        )}
-
         {/* Graphique */}
         <div className="flex items-center justify-center">
           {renderChart()}
@@ -388,19 +351,6 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data, widgetSize = 'm
                       })}
                     </tbody>
                   </table>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Actions</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <button className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors">
-                    Exporter données
-                  </button>
-                  <button className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200 text-sm transition-colors">
-                    Générer rapport
-                  </button>
                 </div>
               </div>
             </div>
