@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Package, AlertTriangle, Plus, Download,
-  Send, BarChart3, DollarSign, ChevronRight, ChevronDown,
+  DollarSign, ChevronRight, ChevronDown,
   Users, ExternalLink, Copy, Scale,
 } from 'lucide-react';
 import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
@@ -1009,22 +1009,34 @@ const StockStatusWidget = () => {
 
   const handleOptimizePricing = () => {
     try {
-      // Calcul immédiat
-      const optimizations = equipments.map(eq => ({
-        id: eq.id,
-        name: eq.name,
-        currentPrice: eq.price,
-        suggestedPrice: eq.price ? Math.round(eq.price * (1 + (eq.visibilityScore - 50) / 100)) : undefined,
-        reason: eq.visibilityScore > 70 ? 'Prix sous-évalué' : eq.visibilityScore < 30 ? 'Prix surévalué' : 'Prix correct'
-      }));
+      // Suggestions RÉELLES : on compare le prix de chaque annonce à la MÉDIANE
+      // des vraies annonces comparables publiées sur le site (marketStatsByCategory,
+      // gate >=2 comparables). Pas d'heuristique inventée.
+      const rows = equipments
+        .map((eq) => {
+          const st = marketStatsByCategory.get(eq.category);
+          if (!st || st.count < 2 || !eq.price || eq.price <= 0) return null;
+          return { name: eq.name, pct: Math.round((eq.price / st.median - 1) * 100) };
+        })
+        .filter((r): r is { name: string; pct: number } => r !== null);
 
-      // HONNÊTETÉ : l'heuristique de prix n'est pas un vrai modèle de marché.
-      void optimizations;
-      showNotification('info', 'Optimisation des prix en démonstration — utilisez la ligne « Marché : médiane » de chaque machine pour vous situer.');
-      
+      if (!rows.length) {
+        showNotification('info', "Pas assez d'annonces comparables sur le site pour situer vos prix.");
+        return;
+      }
+      const above = rows.filter((r) => r.pct >= 15).sort((a, b) => b.pct - a.pct);
+      const below = rows.filter((r) => r.pct <= -15).sort((a, b) => a.pct - b.pct);
+      if (!above.length && !below.length) {
+        showNotification('success', `Vos ${rows.length} annonce(s) comparable(s) sont dans la fourchette du marché (±15 %).`);
+        return;
+      }
+      const parts: string[] = [];
+      if (above.length) parts.push(`${above.length} au-dessus du marché (à baisser) : ${above.slice(0, 3).map((r) => `${r.name} +${r.pct}%`).join(', ')}`);
+      if (below.length) parts.push(`${below.length} en dessous (marge possible) : ${below.slice(0, 3).map((r) => `${r.name} ${r.pct}%`).join(', ')}`);
+      showNotification('info', parts.join(' · '));
     } catch (error) {
       logger.error('Erreur lors de l\'optimisation:', error);
-      showNotification('error', 'Impossible d\'optimiser les prix');
+      showNotification('error', 'Impossible d\'analyser les prix');
     }
   };
 
@@ -1243,36 +1255,11 @@ const StockStatusWidget = () => {
             </button>
 
             <button
-              onClick={(e) => handleQuickAction('send-promotion', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
-            >
-              <Send className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span className="text-left">
-                Campagne promo
-                <span className="block text-xs font-normal text-amber-800/90">démo</span>
-              </span>
-            </button>
-
-            <button
-              onClick={(e) => handleQuickAction('analyze-performance', undefined, e)}
-              className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
-            >
-              <BarChart3 className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span className="text-left">
-                Analyse agrégée
-                <span className="block text-xs font-normal text-amber-800/90">démo</span>
-              </span>
-            </button>
-
-            <button
               onClick={(e) => handleQuickAction('optimize-pricing', undefined, e)}
               className="inline-flex items-center gap-1 justify-center sm:justify-start px-2 py-1.5 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors text-xs leading-tight font-medium text-orange-900"
             >
               <DollarSign className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span className="text-left">
-                Suggestions prix
-                <span className="block text-xs font-normal text-amber-800/90">démo</span>
-              </span>
+              <span className="text-left">Suggestions prix</span>
             </button>
           </div>
         )}
