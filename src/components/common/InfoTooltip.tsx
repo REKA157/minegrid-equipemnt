@@ -73,14 +73,20 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({
         <Info className="w-3.5 h-3.5" />
       </button>
 
-      {/* Niveau 1 : bulle courte au survol */}
+      {/* Niveau 1 : bulle courte au survol — rôle + 1re action concrète */}
       {mode === 'hover' && (
         <span
           role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1 w-56 max-w-[70vw] rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal normal-case leading-snug text-white shadow-lg"
+          className="absolute left-0 top-full z-50 mt-1 w-64 max-w-[75vw] rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal normal-case leading-snug text-white shadow-lg"
         >
           {text}
-          <span className="mt-1 block text-[10px] text-gray-300">Cliquez pour en savoir plus →</span>
+          {details?.whatToDo?.[0] && (
+            <span className="mt-1.5 flex gap-1.5 text-[11px] text-orange-200">
+              <Lightbulb className="mt-px h-3 w-3 shrink-0" />
+              <span className="leading-snug">{details.whatToDo[0]}</span>
+            </span>
+          )}
+          <span className="mt-1.5 block text-[10px] text-gray-300">Cliquez pour le mode d’emploi complet →</span>
         </span>
       )}
 
