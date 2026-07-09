@@ -1051,76 +1051,14 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       </div>
       )}
 
-      {/* Automatisations (client léger : API simulée sauf export) */}
+      {/* Export des actions affichées (fichier CSV réel — seule automatisation réellement branchée). */}
       <div className="border-t border-gray-200 pt-4 mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900">Automatisations</h4>
-            <p className="text-xs text-gray-500 mt-1 max-w-2xl">
-              <span className="font-medium text-gray-700">Exporter</span> génère un fichier depuis les actions affichées.
-              Les autres boutons passent par une <span className="font-medium">simulation d&apos;API</span> (aucun serveur métier pour l&apos;instant).
-            </p>
-          </div>
-          <button
-            className="p-1 text-orange-500 hover:text-orange-700 transition-colors shrink-0"
-            onClick={() => setShowQuickActions((v) => !v)}
-            title={showQuickActions ? 'Fermer' : 'Ouvrir'}
-          >
-            {showQuickActions ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-        </div>
-        {showQuickActions && (
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('new-task', e)}
-            >
-              Nouvelle tâche <span className="opacity-70">· démo</span>
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('auto-followup', e)}
-            >
-              Relance auto <span className="opacity-70">· démo</span>
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('schedule', e)}
-            >
-              Planifier <span className="opacity-70">· démo</span>
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('ai-report', e)}
-            >
-              Rapport IA <span className="opacity-70">· démo</span>
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('export-actions', e)}
-            >
-              Exporter
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('notify-team', e)}
-            >
-              Notifier équipe <span className="opacity-70">· démo</span>
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('sync-crm', e)}
-            >
-              Sync CRM <span className="opacity-70">· démo</span>
-            </button>
-            <button 
-              className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors" 
-              onClick={(e) => handleQuickAction('optimize-schedule', e)}
-            >
-              Optimiser planning <span className="opacity-70">· démo</span>
-            </button>
-          </div>
-        )}
+        <button
+          className="text-xs bg-orange-100 text-orange-800 border border-orange-300 px-3 py-2 rounded-lg hover:bg-orange-200 transition-colors"
+          onClick={(e) => handleQuickAction('export-actions', e)}
+        >
+          Exporter les actions (CSV)
+        </button>
       </div>
     </div>
   );

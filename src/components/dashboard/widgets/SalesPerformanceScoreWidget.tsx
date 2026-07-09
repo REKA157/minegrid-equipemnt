@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { MouseEvent } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { getSalesPerformanceData } from '../../../utils/api';
-import { apiCall, showNotification } from '../../../services/apiService';
 import { supabaseClient } from '../../../utils/supabaseClient';
 import { aiWidgetService } from '../../../services/aiWidgetService';
 import type { AIRecommendation } from '../../../services/aiWidgetService';
@@ -173,47 +171,6 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
       case 'stable': return 'text-gray-600';
       default: return 'text-gray-600';
     }
-  };
-
-  const handleRecommendationAction = (
-    e: MouseEvent<HTMLButtonElement>,
-    recommendation: PerformanceRecommendationRow
-  ) => {
-    if (!recommendation.aiSource) return;
-
-    const button = e.currentTarget;
-    button.disabled = true;
-    button.style.opacity = '0.6';
-    button.style.cursor = 'not-allowed';
-
-    // Honnêteté : on ne prétend PAS que l'action a réussi avant de connaître le résultat.
-    // Le backend d'exécution n'est pas câblé (apiCall renvoie notImplemented). On lit le
-    // résultat réel et on affiche un message honnête.
-    apiCall('POST', '/api/recommendations/execute', {
-      recommendationId: recommendation.id,
-      action: recommendation.action,
-      aiSource: recommendation.aiSource,
-      suggestedActions: recommendation.suggestedActions,
-    })
-      .then((result) => {
-        if (result?.success) {
-          showNotification('success', result.message || 'Action exécutée.');
-        } else {
-          showNotification(
-            'info',
-            result?.message || "Action non encore disponible (fonctionnalité en cours d'intégration).",
-          );
-        }
-      })
-      .catch((error) => {
-        console.error('Erreur API recommandation:', error);
-        showNotification('error', "Action impossible pour le moment.");
-      })
-      .finally(() => {
-        button.disabled = false;
-        button.style.opacity = '1';
-        button.style.cursor = 'pointer';
-      });
   };
 
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -442,7 +399,6 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
         {showQuickActions && (
           <div className="space-y-2">
             {recommendationRows.map((rec, index: number) => {
-              const agirEnabled = Boolean(rec.aiSource);
               return (
                 <div
                   key={rec.id ?? `${rec.action}-${index}`}
@@ -461,23 +417,6 @@ const SalesPerformanceScoreWidget = (_props?: { data?: unknown }) => {
                     <div className="text-sm font-medium text-gray-900">{rec.action}</div>
                     <div className="text-xs text-gray-500">Impact: {rec.impact}</div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={!agirEnabled}
-                    title={
-                      agirEnabled
-                        ? 'Exécuter une action liée à cette recommandation'
-                        : 'Connectez-vous et attendez les recommandations (serveur ou analyse locale)'
-                    }
-                    className={`text-xs shrink-0 px-2 py-1 rounded border transition-colors ${
-                      agirEnabled
-                        ? 'bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-200 cursor-pointer'
-                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-80'
-                    }`}
-                    onClick={(ev) => agirEnabled && handleRecommendationAction(ev, rec)}
-                  >
-                    Agir
-                  </button>
                 </div>
               );
             })}
