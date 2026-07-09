@@ -27,6 +27,7 @@ import { getCurrentUser } from '../utils/auth';
 import { fetchModelSpecs, fetchModelSpecsFull, toPublicationRapideForm, summarizeSpecs, missingForPublication } from '../services/autoSpecsService';
 import { toast } from '../utils/toast';
 import { generateListingCopy } from '../utils/api/aiListing';
+import { specFieldsForCategory } from '../constants/equipmentSpecFields';
 import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface MachineFormData {
   name: string;
@@ -1445,6 +1446,63 @@ export default function PublicationRapide() {
                       />
                     </div>
                   </div>
+
+                  {/* Caractéristiques spécifiques selon la catégorie choisie */}
+                  {!formData.category && (
+                    <p className="mt-4 text-xs italic text-gray-400">
+                      Choisissez une catégorie plus haut pour afficher les caractéristiques propres à ce type d’engin.
+                    </p>
+                  )}
+                  {specFieldsForCategory(formData.category).length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-semibold text-gray-800">
+                        Caractéristiques d’un(e) « {formData.category} »
+                      </h4>
+                      <p className="mb-3 text-xs text-gray-500">
+                        Renseignez ce qui est pertinent pour ce type d’engin : ces informations aident l’acheteur à décider.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {specFieldsForCategory(formData.category).map((f) => {
+                          const current = (formData.specifications as Record<string, any>)?.[f.key] ?? '';
+                          return (
+                            <div key={f.key}>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                {f.label}{f.unit ? ` (${f.unit})` : ''}
+                              </label>
+                              {f.type === 'select' ? (
+                                <select
+                                  value={current}
+                                  onChange={(e) => handleFormChange(`specifications.${f.key}`, e.target.value)}
+                                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                  <option value="">—</option>
+                                  {f.options?.map((o) => (
+                                    <option key={o} value={o}>{o}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type={f.type === 'text' ? 'text' : 'number'}
+                                  value={current}
+                                  min={f.type === 'text' ? undefined : '0'}
+                                  placeholder={f.placeholder}
+                                  onChange={(e) =>
+                                    handleFormChange(
+                                      `specifications.${f.key}`,
+                                      f.type === 'text'
+                                        ? e.target.value
+                                        : e.target.value === '' ? '' : parseFloat(e.target.value),
+                                    )
+                                  }
+                                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Images */}

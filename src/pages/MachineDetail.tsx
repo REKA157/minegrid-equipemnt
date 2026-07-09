@@ -10,6 +10,7 @@ import { SellerTrustInline, PriceVsMarketInline, FraudInline, FinancingInline, I
 import TransactionOptionsPanel from '../nextgen/integration/TransactionOptionsPanel';
 import RecommendedMachines from '../nextgen/integration/RecommendedMachines';
 import { MACHINE_LIST_COLUMNS } from '../constants/machineQueryFields';
+import { specFieldsForCategory } from '../constants/equipmentSpecFields';
 import { recordMachineView } from '../utils/api';
 import {
   buildSrcSet,
@@ -736,6 +737,32 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
                 </ul>
               </div>
             </div>
+
+            {/* Caractéristiques spécifiques au type d'engin (issues de la publication) */}
+            {(() => {
+              const catFields = specFieldsForCategory(machineData.category).filter((f) => {
+                const v = (machineData.specifications as Record<string, any>)?.[f.key];
+                return v != null && v !== '' && v !== 0;
+              });
+              if (catFields.length === 0) return null;
+              return (
+                <div className="mt-6 border-t pt-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Caractéristiques spécifiques</h3>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                    {catFields.map((f) => {
+                      const v = (machineData.specifications as Record<string, any>)[f.key];
+                      const val = typeof v === 'number' ? v.toLocaleString('fr-FR') : String(v);
+                      return (
+                        <li key={f.key} className="flex justify-between">
+                          <span className="text-gray-600">{f.label}</span>
+                          <span className="font-medium">{val}{f.unit ? ` ${f.unit}` : ''}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Simulateur de transport International déplacé ici */}
