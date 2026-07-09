@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { fetchModelSpecsFull, summarizeSpecs } from '../../../services/autoSpecsService';
+import { generateListingCopy } from '../../../utils/api/aiListing';
 import { toast } from '../../../utils/toast';
 export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment: ClientEquipment[], userMachines: any[], onRefresh: () => Promise<void> }) {
   const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
@@ -32,6 +33,7 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
     create_public_announcement: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiWriting, setAiWriting] = useState(false);
 
   const handleAddEquipment = () => {
     setShowAddEquipmentModal(true);
@@ -861,7 +863,7 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     placeholder="ex: 320D, L120H"
                   />
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
                       className="px-3 py-1 text-sm bg-orange-600 text-white rounded hover:bg-orange-700"
@@ -894,9 +896,9 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
                           const { specs } = await fetchModelSpecsFull(proEquipmentForm.brand, proEquipmentForm.model, context);
                           if (!specs) { toast('Aucune spécification trouvée'); return; }
                           const summary = summarizeSpecs(specs);
-                          setProEquipmentForm(prev => ({ 
-                            ...prev, 
-                            description: prev.description ? `${prev.description}\n\n${summary}` : summary 
+                          setProEquipmentForm(prev => ({
+                            ...prev,
+                            description: prev.description ? `${prev.description}\n\n${summary}` : summary
                           }));
                           toast('Spécifications récupérées et ajoutées à la description');
                         } catch (e) {
@@ -905,7 +907,40 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
                         }
                       }}
                     >
-                      Remplir automatiquement (IA)
+                      Récupérer les caractéristiques
+                    </button>
+                    <button
+                      type="button"
+                      disabled={aiWriting}
+                      className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300"
+                      onClick={async () => {
+                        if (!proEquipmentForm.brand || !proEquipmentForm.model) { toast('Renseignez la marque et le modèle'); return; }
+                        setAiWriting(true);
+                        try {
+                          const specsStr = proEquipmentForm.total_hours ? `${proEquipmentForm.total_hours} h` : '';
+                          const res = await generateListingCopy({
+                            brand: proEquipmentForm.brand,
+                            model: proEquipmentForm.model,
+                            year: proEquipmentForm.year,
+                            category: proEquipmentForm.equipment_type,
+                            specs: specsStr,
+                          });
+                          if (res.ok) {
+                            // proEquipmentForm n'a pas de champ titre : on replie le titre en tête de la description
+                            const nextDescription = [res.title, res.description].filter(Boolean).join('\n\n');
+                            setProEquipmentForm(prev => ({ ...prev, description: nextDescription || prev.description }));
+                            toast('✨ Titre et description rédigés par l’IA');
+                          } else if (res.error && /aucune ia/i.test(res.error)) {
+                            toast('Connectez d’abord votre IA dans « Assistant IA ».');
+                          } else {
+                            toast(`IA : ${res.error || 'échec de la rédaction'}`);
+                          }
+                        } finally {
+                          setAiWriting(false);
+                        }
+                      }}
+                    >
+                      {aiWriting ? '✨ Rédaction…' : '✨ Rédiger avec l’IA'}
                     </button>
                   </div>
                 </div>

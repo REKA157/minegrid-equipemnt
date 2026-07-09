@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle, Clock, Phone, Mail,
-  ChevronRight, ChevronDown, Zap, Target, Users,
+  Zap, Target, Users,
   FileText, CheckCircle
 } from 'lucide-react';
-import { apiCall, showNotification, sendMessage, exportData } from '../../../services/apiService';
+import { showNotification, exportData } from '../../../services/apiService';
 import { getMessages, getOffers, getDashboardStats } from '../../../utils/api';
 import type { DashboardStats } from '../../../utils/api/types';
 import { buildCorrelatedDailyActions } from '../../../utils/correlateLeadActions';
@@ -92,7 +92,6 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortBy, setSortBy] = useState<'priority' | 'time' | 'value'>('priority');
-  const [showQuickActions, setShowQuickActions] = useState(false);
   const [realActions, setRealActions] = useState<DailyAction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -567,39 +566,14 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
       button.style.cursor = 'not-allowed';
     }
 
-    console.log(`🔄 Action rapide: ${action}`);
-    
-    // Notification immédiate
-    showNotification('info', `Exécution de ${action}...`);
-    
-    // Actions synchrones immédiates
+    // Seule action rapide restante : l'export CSV (réel). Il notifie lui-même
+    // son succès/erreur — pas de « Exécution de… » générique.
     switch (action) {
-      case 'new-task':
-        handleNewTask();
-        break;
-      case 'auto-followup':
-        handleAutoFollowup();
-        break;
-      case 'schedule':
-        handleSchedule();
-        break;
-      case 'ai-report':
-        handleAIReport();
-        break;
       case 'export-actions':
         handleExportActions();
         break;
-      case 'notify-team':
-        handleNotifyTeam();
-        break;
-      case 'sync-crm':
-        handleSyncCRM();
-        break;
-      case 'optimize-schedule':
-        handleOptimizeSchedule();
-        break;
       default:
-        showNotification('warning', `L'action "${action}" n'est pas encore implémentée`);
+        break;
     }
 
     // Restaurer le bouton immédiatement après l'action
@@ -610,92 +584,6 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
         button.style.cursor = 'pointer';
       }
     }, 100);
-  };
-
-  const handleNewTask = () => {
-    try {
-      // Action immédiate
-      showNotification('info', 'Création de tâche en démonstration — pas encore active.');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/create', { 
-          title: 'Nouvelle tâche',
-          priority: 'medium',
-          category: 'follow-up'
-        }).catch(error => {
-          console.error('Erreur API création tâche:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la création de tâche:', error);
-      showNotification('error', 'Impossible de créer la tâche');
-    }
-  };
-
-  const handleAutoFollowup = () => {
-    try {
-      // Action immédiate
-      showNotification('info', 'Relances automatiques en démonstration — pas encore actives.');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/auto-followup', { 
-          actions: filteredActions.filter(a => a.status === 'pending')
-        }).catch(error => {
-          console.error('Erreur API relance auto:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la relance auto:', error);
-      showNotification('error', 'Impossible de programmer les relances');
-    }
-  };
-
-  const handleSchedule = () => {
-    try {
-      // Action immédiate
-      showNotification('info', 'Planification en démonstration — pas encore active.');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/schedule', { 
-          actions: filteredActions.filter(a => a.status === 'pending')
-        }).catch(error => {
-          console.error('Erreur API planification:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la planification:', error);
-      showNotification('error', 'Impossible de planifier les actions');
-    }
-  };
-
-  const handleAIReport = () => {
-    try {
-      // HONNÊTETÉ : ne pas annoncer un succès avant le résultat réel (démo).
-      showNotification('info', 'Génération du rapport IA en cours (fonction en démonstration)…');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('GET', '/api/actions/ai-report', { 
-          actions: filteredActions
-        }).then(report => {
-          exportData(report, 'rapport-actions-ia', 'pdf').catch(error => {
-            console.error('Erreur export rapport:', error);
-          });
-        }).catch(error => {
-          console.error('Erreur API rapport IA:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la génération du rapport:', error);
-      showNotification('error', 'Impossible de générer le rapport IA');
-    }
   };
 
   const handleExportActions = () => {
@@ -710,64 +598,6 @@ const DailyActionsPriorityWidget: React.FC<Props> = ({
     } catch (error) {
       console.error('Erreur lors de l\'export:', error);
       showNotification('error', 'Impossible d\'exporter les actions');
-    }
-  };
-
-  const handleNotifyTeam = () => {
-    try {
-      // HONNÊTETÉ : la notification d'équipe n'est pas encore branchée (démo).
-      showNotification('info', 'Notification d\'équipe en démonstration — pas encore active.');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        sendMessage('TEAM', 'all', `Actions prioritaires du jour : ${filteredActions.length} tâches`).catch(error => {
-          console.error('Erreur API notification équipe:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la notification:', error);
-      showNotification('error', 'Impossible de notifier l\'équipe');
-    }
-  };
-
-  const handleSyncCRM = () => {
-    try {
-      // HONNÊTETÉ : la synchronisation CRM n'est pas encore branchée (démo).
-      showNotification('info', 'Synchronisation CRM en démonstration — pas encore active.');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/sync-crm', { 
-          actions: filteredActions
-        }).catch(error => {
-          console.error('Erreur API sync CRM:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de la synchronisation CRM:', error);
-      showNotification('error', 'Impossible de synchroniser le CRM');
-    }
-  };
-
-  const handleOptimizeSchedule = () => {
-    try {
-      // Action immédiate
-      showNotification('info', 'Optimisation du planning en démonstration — pas encore active.');
-      
-      // Appel API en arrière-plan (sans await)
-      setTimeout(() => {
-        apiCall('POST', '/api/actions/optimize-schedule', { 
-          actions: filteredActions
-        }).catch(error => {
-          console.error('Erreur API optimisation planning:', error);
-        });
-      }, 50);
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'optimisation:', error);
-      showNotification('error', 'Impossible d\'optimiser le planning');
     }
   };
 

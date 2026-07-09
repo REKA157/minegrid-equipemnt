@@ -113,7 +113,7 @@ export const WIDGET_EXPLANATIONS: Record<string, WidgetExplanation> = {
       "Faites avancer une action : « Démarrer » pour la passer en cours, puis « Terminer » une fois faite. Le menu « ⋯ » permet aussi de « Reprogrammer à demain ».",
       "Contactez directement le client depuis la ligne : bouton « WhatsApp » pour ouvrir la conversation, ou « ⋯ » puis « Appeler » pour lancer un appel (le bouton « Appels » en haut sert à régler la téléphonie).",
       "Utilisez les filtres et le tri pour vous concentrer, par exemple n'afficher que la priorité Haute ou trier par valeur pour viser les plus gros montants d'abord.",
-      "Le bouton « Exporter » télécharge un vrai fichier (CSV) des actions affichées. Attention : les autres boutons d'automatisation (relance auto, planifier, rapport IA…) sont pour l'instant en démonstration et ne font encore rien de réel.",
+      "Le bouton « Exporter » télécharge un vrai fichier (CSV) des actions affichées.",
     ],
   },
 

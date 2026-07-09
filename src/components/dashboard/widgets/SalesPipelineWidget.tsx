@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, ChevronUp, ChevronDown, AlertTriangle, FileText, Star, TrendingUp, Info, X,
-  Calendar, Download, Send, Target, Users, TrendingDown, ChevronRight, ListFilter,
+  Plus, ChevronDown, AlertTriangle, FileText, Star, TrendingUp, Info, X,
+  Calendar, Download, Send, Target, ChevronRight, ListFilter,
 } from 'lucide-react';
 import { showNotification, exportData } from '../../../services/apiService';
 import { getDashboardStats } from '../../../utils/api';
@@ -560,9 +560,14 @@ const SalesPipelineWidget = ({
 
   const handleAIInsightAction = (insight: any) => {
     switch (insight.type) {
-      case 'blockage':
-        handleRelanceAutomatique();
+      case 'blockage': {
+        // Relance réelle : marque le premier lead bloqué comme recontacté
+        // (met à jour « dernier contact »), comme la relance d'un devis.
+        const lead = insight.leads?.[0];
+        if (lead) handleSendFollowup(lead);
+        else showNotification('warning', 'Aucun lead cible pour cette alerte');
         break;
+      }
       case 'quote': {
         const lead = insight.leads?.[0];
         if (lead) handleSendFollowup(lead);
@@ -576,7 +581,8 @@ const SalesPipelineWidget = ({
         break;
       }
       case 'conversion':
-        handleAnalysePerformance();
+        // Ouvre le détail réel des taux de conversion par étape.
+        setShowConversionRates(true);
         break;
     }
   };
@@ -606,18 +612,6 @@ const SalesPipelineWidget = ({
         break;
       case 'schedule-meeting':
         handleScheduleMeeting(lead);
-        break;
-      case 'generate-report':
-        handleGenerateReport();
-        break;
-      case 'relance-automatique':
-        handleRelanceAutomatique();
-        break;
-      case 'analyse-performance':
-        handleAnalysePerformance();
-        break;
-      case 'optimisation-ia':
-        handleOptimisationIA();
         break;
       default:
         showNotification('warning', `L'action "${action}" n'est pas encore implémentée`);
@@ -724,85 +718,6 @@ const SalesPipelineWidget = ({
     } catch (error) {
       console.error('Erreur lors de la programmation du rendez-vous:', error);
       showNotification('error', 'Impossible de programmer le rendez-vous');
-    }
-  };
-
-  const handleGenerateReport = () => {
-    try {
-      // Calcul immédiat
-      const report = {
-        totalLeads: leadsData.length,
-        leadsByStage: leadsData.reduce((acc, lead) => {
-          acc[lead.stage] = (acc[lead.stage] || 0) + 1;
-          return acc;
-        }, {}),
-        totalValue: leadsData.reduce((sum, lead) => sum + lead.value, 0),
-        averageProbability: Math.round(leadsData.reduce((sum, lead) => sum + lead.probability, 0) / Math.max(leadsData.length, 1))
-      };
-
-      showNotification('info', 'Génération de rapport en démonstration — pas encore active.');
-      
-    } catch (error) {
-      console.error('Erreur lors de la génération du rapport:', error);
-      showNotification('error', 'Impossible de générer le rapport');
-    }
-  };
-
-  const handleRelanceAutomatique = () => {
-    try {
-      // Mise à jour immédiate de l'interface
-      const leadsToRelance = leadsData.filter(lead => lead.probability < 50);
-      setLeadsData(prev => prev.map(lead => 
-        lead.probability < 50 
-          ? { ...lead, nextAction: 'Relance automatique programmée' }
-          : lead
-      ));
-      
-      showNotification('info', 'Relance automatique en démonstration — pas encore active.');
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'activation de la relance:', error);
-      showNotification('error', 'Impossible d\'activer la relance automatique');
-    }
-  };
-
-  const handleAnalysePerformance = () => {
-    try {
-      // Calcul immédiat
-      const analysis = {
-        totalLeads: leadsData.length,
-        conversionRate: leadsData.filter(l => l.stage === 'Négociation').length / Math.max(leadsData.length, 1) * 100,
-        averageValue: Math.round(leadsData.reduce((sum, l) => sum + l.value, 0) / Math.max(leadsData.length, 1)),
-        stageDistribution: leadsData.reduce((acc, lead) => {
-          acc[lead.stage] = (acc[lead.stage] || 0) + 1;
-          return acc;
-        }, {})
-      };
-
-      showNotification('info', 'Analyse de performance en démonstration — pas encore active.');
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'analyse:', error);
-      showNotification('error', 'Impossible d\'analyser la performance');
-    }
-  };
-
-  const handleOptimisationIA = () => {
-    try {
-      // Calcul immédiat
-      const optimizations = leadsData.map(lead => ({
-        id: lead.id,
-        title: lead.title,
-        currentStage: lead.stage,
-        suggestedAction: lead.probability < 30 ? 'Relancer' : lead.probability > 70 ? 'Finaliser' : 'Négocier',
-        priority: lead.value > 200000 ? 'high' : lead.value > 100000 ? 'medium' : 'low'
-      }));
-
-      showNotification('info', 'Optimisation IA en démonstration — pas encore active.');
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'optimisation:', error);
-      showNotification('error', 'Impossible d\'optimiser le pipeline');
     }
   };
 

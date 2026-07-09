@@ -7,6 +7,7 @@ import { categories } from '../data/categories';
 import { fetchModelSpecs, fetchModelSpecsFull, toSellEquipmentForm, summarizeSpecs, missingForSell } from '../services/autoSpecsService';
 import { logger } from '../utils/logger';
 import { toast } from '../utils/toast';
+import { generateListingCopy } from '../utils/api/aiListing';
 // NOTE: 'exceljs' (~600 kB minifie) est importe dynamiquement dans
 // handleExcelFileUpload ci-dessous. Cela evite d'alourdir le chunk de la
 // page SellEquipment pour les utilisateurs qui ne font pas d'import Excel.
@@ -55,6 +56,9 @@ export default function SellEquipment() {
       workingWeight: ''
     }
   });
+
+  // ✨ Rédaction d'annonce par l'IA connectée (titre + description)
+  const [aiWriting, setAiWriting] = useState(false);
 
   // 🔁 Import Excel vers n8n
   const [excelFile, setExcelFile] = useState<File | null>(null);
@@ -705,7 +709,7 @@ export default function SellEquipment() {
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500"
                   required
                 />
-                <div className="mt-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={async () => {
@@ -751,7 +755,44 @@ export default function SellEquipment() {
                     }}
                     className="px-3 py-1 text-sm bg-orange-600 text-white rounded hover:bg-orange-700"
                   >
-                    Remplir automatiquement (IA)
+                    Récupérer les caractéristiques
+                  </button>
+                  <button
+                    type="button"
+                    disabled={aiWriting}
+                    className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300"
+                    onClick={async () => {
+                      if (!formData.brand || !formData.model) {
+                        toast('Renseignez la marque et le modèle');
+                        return;
+                      }
+                      setAiWriting(true);
+                      try {
+                        const res = await generateListingCopy({
+                          brand: formData.brand,
+                          model: formData.model,
+                          year: formData.year,
+                          price: formData.price,
+                          category: formData.category,
+                        });
+                        if (res.ok) {
+                          setFormData(prev => ({
+                            ...prev,
+                            name: res.title || prev.name,
+                            description: res.description || prev.description,
+                          }));
+                          toast('✨ Titre et description rédigés par l’IA');
+                        } else if (res.error && /aucune ia/i.test(res.error)) {
+                          toast('Connectez d’abord votre IA dans « Assistant IA ».');
+                        } else {
+                          toast(`IA : ${res.error || 'échec de la rédaction'}`);
+                        }
+                      } finally {
+                        setAiWriting(false);
+                      }
+                    }}
+                  >
+                    {aiWriting ? '✨ Rédaction…' : '✨ Rédiger avec l’IA'}
                   </button>
                 </div>
               </div>
