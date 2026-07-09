@@ -7,7 +7,6 @@ import {
   Save, 
   Eye, 
   Download,
-  ArrowLeft,
   CheckCircle,
   AlertCircle,
   X,
@@ -27,6 +26,7 @@ import { getSellerMachines } from '../utils/api';
 import { getCurrentUser } from '../utils/auth';
 import { fetchModelSpecs, fetchModelSpecsFull, toPublicationRapideForm, summarizeSpecs, missingForPublication } from '../services/autoSpecsService';
 import { toast } from '../utils/toast';
+import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface MachineFormData {
   name: string;
   brand: string;
@@ -46,51 +46,6 @@ interface MachineFormData {
     operatingCapacity: number;
   };
   images: File[];
-}
-
-// Détermine le tableau de bord cible selon la formule d'abonnement
-function navigateBackToDashboard(): void {
-  console.log('🔍 Navigation vers le tableau de bord approprié...');
-  
-  try {
-    // 1) Vérifier l'abonnement actuel dans localStorage
-    const userSubscription = localStorage.getItem('userSubscription');
-    const tempSubscription = localStorage.getItem('tempSubscription');
-    const hasActiveSubscription = localStorage.getItem('tempHasActiveSubscription') === 'true';
-    
-    console.log('📊 Abonnement détecté:', { userSubscription, tempSubscription, hasActiveSubscription });
-    
-    // 2) Déterminer le tableau de bord selon l'abonnement.
-    // Défaut = tableau de bord ENTREPRISE : cette page « Service Enterprise » est
-    // atteinte depuis lui, et depuis la Phase 5 l'abonnement est géré côté serveur
-    // (les clés localStorage ci-dessous sont souvent vides). Seul un abonnement
-    // explicitement NON-entreprise renverra vers le dashboard standard.
-    let targetDashboard = '#dashboard-entreprise-display'; // Par défaut
-    
-    if (userSubscription || tempSubscription) {
-      const subscriptionType = userSubscription || tempSubscription;
-      
-      if (subscriptionType === 'entreprise' || subscriptionType === 'enterprise') {
-        targetDashboard = '#dashboard-entreprise-display';
-        console.log('🎯 Redirection vers Dashboard Enterprise');
-      } else {
-        targetDashboard = '#dashboard';
-        console.log('🎯 Redirection vers Dashboard Standard');
-      }
-    } else if (hasActiveSubscription) {
-      targetDashboard = '#dashboard';
-      console.log('🎯 Redirection vers Dashboard (abonnement temporaire)');
-    }
-    
-    // 3) Effectuer la redirection
-    console.log('🚀 Redirection vers:', targetDashboard);
-    window.location.hash = targetDashboard;
-    
-  } catch (error) {
-    console.error('❌ Erreur navigation:', error);
-    // En dernier recours, revenir en arrière
-    window.history.back();
-  }
 }
 
 export default function PublicationRapide() {
@@ -966,26 +921,11 @@ export default function PublicationRapide() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <button
-                onClick={navigateBackToDashboard}
-                className="text-gray-600 hover:text-gray-900"
-                title="Retourner au tableau de bord"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
+              <BackToDashboardButton />
               <div className="h-6 w-px bg-gray-300"></div>
               <h1 className="text-2xl font-bold text-gray-900">
                 Service Enterprise - Gestion des Annonces
               </h1>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={navigateBackToDashboard}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium flex items-center"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Retourner au tableau de bord
-              </button>
             </div>
           </div>
         </div>

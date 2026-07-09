@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Package, 
-  ArrowLeft, 
-  Upload, 
+import {
+  Package,
+  Upload,
   FileText, 
   Download, 
   Trash2, 
@@ -21,6 +20,7 @@ import {
 import supabase from '../utils/supabaseClient';
 import { DOCUMENTS_ESPACE_COLUMNS } from '../constants/apiQueryFields';
 import { toast } from '../utils/toast';
+import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface Document {
   id: string;
   name: string;
@@ -234,13 +234,7 @@ export default function DocumentsEspace() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center">
-            <a
-              href="#dashboard-entreprise-display"
-              className="flex items-center text-gray-600 hover:text-gray-900 mr-6"
-            >
-              <ArrowLeft className="h-5 w-5 mr-2" />
-              Retourner au tableau de bord
-            </a>
+            <BackToDashboardButton className="mr-6" />
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Espace Documents</h1>
               <p className="text-gray-600">Gérez vos factures, contrats et fiches techniques</p>

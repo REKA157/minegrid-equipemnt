@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  ArrowLeft, 
-  Plus, 
+import {
+  Calendar,
+  Plus,
   Clock, 
   MapPin, 
   User, 
@@ -19,6 +18,7 @@ import {
 import supabase from '../utils/supabaseClient';
 import { PLANNING_EVENTS_COLUMNS } from '../constants/apiQueryFields';
 import { toast } from '../utils/toast';
+import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface PlanningEvent {
   id?: string;
   title: string;
@@ -429,12 +429,7 @@ export default function PlanningPro() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <a 
-                href="#dashboard-entreprise-display"
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </a>
+              <BackToDashboardButton />
               <div className="h-6 w-px bg-gray-300"></div>
               <h1 className="text-2xl font-bold text-gray-900">
                 Planning Professionnel

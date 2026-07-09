@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Mail, 
-  ArrowLeft, 
+import {
+  Mail,
   Search,
   Filter,
   Plus,
@@ -24,6 +23,7 @@ import {
 import supabase from '../utils/supabaseClient';
 import { MESSAGES_INBOX_COLUMNS } from '../constants/apiQueryFields';
 import { toast } from '../utils/toast';
+import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface Message {
   id: string;
   sender_name: string;
@@ -208,13 +208,7 @@ export default function MessagesBoite() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8 bg-white rounded-lg shadow-md p-6 border-2 border-orange-300">
           <div className="flex items-center">
-            <a
-              href="#dashboard-entreprise-display"
-              className="flex items-center text-orange-700 hover:text-orange-900 mr-6 transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5 mr-2" />
-              Retourner au tableau de bord
-            </a>
+            <BackToDashboardButton className="mr-6" />
             <div>
               <h1 className="text-3xl font-bold text-orange-800">Boîte de réception</h1>
               <p className="text-orange-600">Gérez vos messages et demandes clients</p>
