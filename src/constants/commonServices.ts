@@ -1,44 +1,46 @@
-import { Building2, FileText, BarChart3, Package, Smartphone, Globe, Calendar, Zap } from 'lucide-react';
+import { Building2, Upload, FileText, FolderOpen, Mail, LayoutDashboard, Calendar, Sparkles } from 'lucide-react';
 
+// Raccourcis « services » affichés en haut du tableau de bord entreprise.
+// L'ordre doit rester aligné sur SERVICE_LINKS (EnterpriseDashboardShell).
 export const commonServices = [
   {
     icon: Building2,
-    title: 'Vitrine personnalisée',
-    description: 'Page publique entreprise avec logo, description, services'
+    title: 'Ma vitrine entreprise',
+    description: 'Votre page publique : logo, présentation, services et machines',
+  },
+  {
+    icon: Upload,
+    title: 'Publier une annonce',
+    description: 'Mettre en ligne une machine (formulaire ou import Excel)',
   },
   {
     icon: FileText,
-    title: 'Publication rapide',
-    description: 'Formulaire manuel ou import Excel avec OCR'
+    title: 'Créer un devis',
+    description: 'Générer un devis professionnel au format PDF',
   },
   {
-    icon: BarChart3,
-    title: 'Générateur de devis PDF',
-    description: 'Interface simple pour créer des devis professionnels'
+    icon: FolderOpen,
+    title: 'Mes documents',
+    description: 'Stocker factures, contrats et fiches techniques',
   },
   {
-    icon: Package,
-    title: 'Espace documents',
-    description: 'Stocker factures, contrats, fiches techniques'
+    icon: Mail,
+    title: 'Messagerie',
+    description: 'Vos messages et demandes clients au même endroit',
   },
   {
-    icon: Smartphone,
-    title: 'Boîte de réception',
-    description: 'Voir tous les messages/demandes client'
-  },
-  {
-    icon: Globe,
+    icon: LayoutDashboard,
     title: 'Tableau de bord',
-    description: 'Vue synthétique : machines, vues, demandes, conversions'
+    description: 'Vue synthétique : machines, vues, demandes, conversions',
   },
   {
     icon: Calendar,
-    title: 'Planning pro',
-    description: 'Gestion de planning : livraisons, rendez-vous, interventions'
+    title: 'Mon planning',
+    description: 'Livraisons, rendez-vous et interventions',
   },
   {
-    icon: Zap,
+    icon: Sparkles,
     title: 'Assistant IA',
-    description: 'Génère fiches machine, réponses client, devis automatiques'
-  }
-]; 
+    description: 'Génère fiches machine, réponses clients et devis',
+  },
+];

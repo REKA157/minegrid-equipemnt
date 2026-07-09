@@ -262,7 +262,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
 
   const renderServices = () => (
     <div className="mb-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
         {commonServices.map((service, idx) => {
           const Icon = service.icon;
           const link = SERVICE_LINKS[idx] || '#';
@@ -270,11 +270,15 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
             <a
               key={idx}
               href={link}
-              className="flex flex-col items-center justify-center py-2 px-1 rounded transition hover:bg-orange-100 focus:bg-orange-200 cursor-pointer border border-orange-100 bg-orange-50"
-              style={{ minWidth: 0, textDecoration: 'none' }}
+              title={service.description}
+              className="group flex flex-col items-center gap-2 rounded-xl border border-gray-200 bg-white px-2 py-3 text-center no-underline shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
             >
-              <Icon className="h-6 w-6 text-orange-500 mb-1" />
-              <span className="text-xs text-orange-800 text-center truncate">{service.title}</span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-orange-600 transition-colors group-hover:bg-orange-100">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="text-xs font-medium leading-tight text-gray-700 group-hover:text-orange-700">
+                {service.title}
+              </span>
             </a>
           );
         })}
