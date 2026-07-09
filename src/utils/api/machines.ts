@@ -59,8 +59,12 @@ export async function getSellerMachines() {
   const user = await getCurrentUser();
   if (!user) throw new Error('Utilisateur non connecté');
 
+  // Le vendeur peut être stocké dans l'une de ces colonnes selon l'origine de
+  // l'annonce (publication, import n8n…). On essaie chacune et on garde la
+  // PREMIÈRE qui renvoie réellement des lignes — sans s'arrêter sur une colonne
+  // valide mais vide (sinon des annonces réelles restaient invisibles).
   const possibleColumns = ['sellerid', 'seller_id', 'user_id', 'owner_id'];
-  let data: any[] | null = null;
+  let emptyOk: any[] | null = null;
   let lastError: any = null;
 
   for (const column of possibleColumns) {
@@ -75,12 +79,14 @@ export async function getSellerMachines() {
       continue;
     }
 
-    data = result.data || [];
-    break;
+    const rows = result.data || [];
+    if (rows.length) return rows; // colonne qui porte vraiment ses annonces
+    if (emptyOk === null) emptyOk = rows; // colonne valide mais vide -> repli honnête
   }
 
-  if (data === null && lastError) throw lastError;
-  return data;
+  if (emptyOk !== null) return emptyOk; // aucune colonne avec des lignes -> vide honnête
+  if (lastError) throw lastError;
+  return [];
 }
 
 // -------------------- STATISTIQUES --------------------

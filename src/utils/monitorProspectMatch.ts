@@ -8,8 +8,7 @@
  * Les cœurs (classifyRole, prospectAngle, matchNeedsToStock, stockMatchNotesBlock) sont
  * PURS/testables ; loadSellerStockCategories lit le vrai stock (catch -> []).
  */
-import supabase from './supabaseClient';
-import { getCurrentSellerUserId, getMachineIdsForSellerUser } from './enterpriseApi/sellerScope';
+import { getSellerMachines } from './api/machines';
 import type { EquipmentNeed } from '../types/monitor';
 
 export type ProspectKind = 'winner' | 'buyer' | 'unknown';
@@ -142,17 +141,21 @@ export function stockMatchNotesBlock(res: StockMatchResult): string | null {
   return [head, ...lines].join('\n');
 }
 
-/** Charge les libellés de stock (category + marque + modèle) des machines du vendeur. */
+/**
+ * Charge les libellés de stock (catégorie + marque + modèle) des machines du
+ * vendeur. Réutilise `getSellerMachines()` — EXACTEMENT la même source que la
+ * page « Mes annonces » — pour garantir la parité : si le vendeur voit ses
+ * annonces, les opportunités de vente les voient aussi (fin des divergences de
+ * colonne vendeur / d'identité).
+ */
 export async function loadSellerStockCategories(): Promise<string[]> {
   try {
-    const uid = await getCurrentSellerUserId();
-    if (!uid) return [];
-    const machineIds = await getMachineIdsForSellerUser(uid);
-    if (!machineIds.length) return [];
-    const { data } = await supabase.from('machines').select('category, brand, model').in('id', machineIds);
-    return ((data ?? []) as Array<{ category?: string | null; brand?: string | null; model?: string | null }>).map((m) =>
-      [m.category, m.brand, m.model].filter(Boolean).join(' '),
-    );
+    const machines = (await getSellerMachines()) as
+      | Array<{ category?: string | null; brand?: string | null; model?: string | null }>
+      | null;
+    return (machines ?? [])
+      .map((m) => [m.category, m.brand, m.model].filter(Boolean).join(' '))
+      .filter(Boolean);
   } catch {
     return [];
   }
