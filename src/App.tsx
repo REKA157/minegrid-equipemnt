@@ -86,6 +86,7 @@ const ApiDocs = lazy(() => import('./pages/ApiDocs'));
 const PrioritySupport = lazy(() => import('./pages/PrioritySupport'));
 const MultiUserManagement = lazy(() => import('./pages/MultiUserManagement'));
 const AcceptInvitation = lazy(() => import('./pages/AcceptInvitation'));
+const AiSettings = lazy(() => import('./pages/AiSettings'));
 const GlobalMonitor = lazy(() => import('./pages/GlobalMonitor'));
 const SalesOpportunities = lazy(() => import('./pages/SalesOpportunities'));
 const SourcesAdmin = lazy(() => import('./pages/SourcesAdmin'));
@@ -311,6 +312,10 @@ function AppContent() {
 
       case 'multi-user-management':
         return paidRoute('enterprise', <MultiUserManagement />);
+
+      // Panneau de connexion IA de la société (OpenAI / Claude / Grok / autre).
+      case 'assistant-ia':
+        return paidRoute('enterprise', <AiSettings />);
 
       // Page publique d'acceptation d'invitation : l'invité n'est pas encore
       // connecté et n'a pas d'abonnement -> aucun garde. La page gère l'auth.
