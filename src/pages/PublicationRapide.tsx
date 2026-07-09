@@ -60,8 +60,12 @@ function navigateBackToDashboard(): void {
     
     console.log('📊 Abonnement détecté:', { userSubscription, tempSubscription, hasActiveSubscription });
     
-    // 2) Déterminer le tableau de bord selon l'abonnement
-    let targetDashboard = '#dashboard'; // Par défaut
+    // 2) Déterminer le tableau de bord selon l'abonnement.
+    // Défaut = tableau de bord ENTREPRISE : cette page « Service Enterprise » est
+    // atteinte depuis lui, et depuis la Phase 5 l'abonnement est géré côté serveur
+    // (les clés localStorage ci-dessous sont souvent vides). Seul un abonnement
+    // explicitement NON-entreprise renverra vers le dashboard standard.
+    let targetDashboard = '#dashboard-entreprise-display'; // Par défaut
     
     if (userSubscription || tempSubscription) {
       const subscriptionType = userSubscription || tempSubscription;
