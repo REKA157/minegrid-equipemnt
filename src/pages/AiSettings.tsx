@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Sparkles, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, Link2, Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Sparkles, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, Link2, Trash2, Zap, Send } from 'lucide-react';
 import BackToDashboardButton from '../components/common/BackToDashboardButton';
 import {
   getOrgAiStatus,
@@ -8,6 +8,7 @@ import {
   type AiProvider,
   type AiStatus,
 } from '../utils/api/aiCredentials';
+import { testAiConnection, askAssistant, type ChatMessage } from '../utils/api/aiAssistant';
 import { toast } from '../utils/toast';
 
 interface ProviderMeta {
@@ -41,6 +42,14 @@ const AiSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Étape 2 : test de connexion + mini-chat (via la fonction serveur ai-proxy).
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatBusy, setChatBusy] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
   const meta = PROVIDERS.find((p) => p.id === provider)!;
 
   const loadStatus = async () => {
@@ -55,6 +64,10 @@ const AiSettings: React.FC = () => {
     loadStatus();
   }, []);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chat, chatBusy]);
+
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -68,6 +81,7 @@ const AiSettings: React.FC = () => {
     if (res.success) {
       setApiKey('');
       setShowKey(false);
+      setTestMsg(null);
       toast('✅ IA connectée !');
       await loadStatus();
     } else {
@@ -79,11 +93,38 @@ const AiSettings: React.FC = () => {
     if (!confirm('Déconnecter l’IA de votre société ? Les fonctions IA cesseront de fonctionner jusqu’à une nouvelle connexion.')) return;
     const res = await clearOrgAiKey();
     if (res.success) {
+      setChat([]);
+      setTestMsg(null);
       toast('IA déconnectée.');
       await loadStatus();
     } else {
       toast(`❌ ${res.error || 'Échec de la déconnexion.'}`);
     }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestMsg(null);
+    const res = await testAiConnection();
+    setTesting(false);
+    setTestMsg(
+      res.ok
+        ? { ok: true, text: `L’IA a répondu : « ${res.reply || 'OK'} »` }
+        : { ok: false, text: res.error || 'Le test a échoué.' },
+    );
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || chatBusy) return;
+    const next: ChatMessage[] = [...chat, { role: 'user', content: text }];
+    setChat(next);
+    setChatInput('');
+    setChatBusy(true);
+    const res = await askAssistant(next);
+    setChatBusy(false);
+    setChat([...next, { role: 'assistant', content: res.ok ? res.reply || '(réponse vide)' : `⚠️ ${res.error || 'Erreur.'}` }]);
   };
 
   return (
@@ -118,22 +159,34 @@ const AiSettings: React.FC = () => {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
                 <div>
-                  <p className="font-medium text-green-900">
-                    Connecté à {providerLabel(status.provider)}
-                  </p>
+                  <p className="font-medium text-green-900">Connecté à {providerLabel(status.provider)}</p>
                   <p className="text-sm text-green-800 mt-0.5">
                     Clé : ••••••••{status.keyLast4}
                     {status.model ? <> · Modèle : {status.model}</> : null}
                   </p>
                 </div>
               </div>
-              <button
-                onClick={handleDisconnect}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="h-4 w-4" /> Déconnecter
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={handleTest}
+                  disabled={testing}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors disabled:opacity-60"
+                >
+                  {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} Tester
+                </button>
+                <button
+                  onClick={handleDisconnect}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" /> Déconnecter
+                </button>
+              </div>
             </div>
+            {testMsg && (
+              <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${testMsg.ok ? 'bg-white text-green-800 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                {testMsg.text}
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
@@ -147,7 +200,6 @@ const AiSettings: React.FC = () => {
             {status?.configured ? 'Changer de connexion' : 'Connecter une IA'}
           </h2>
 
-          {/* Choix du service */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Service d’IA</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -168,7 +220,6 @@ const AiSettings: React.FC = () => {
             </div>
           </div>
 
-          {/* Clé API */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Clé API</label>
             <div className="relative">
@@ -203,7 +254,6 @@ const AiSettings: React.FC = () => {
             </p>
           </div>
 
-          {/* Adresse du service (custom uniquement) */}
           {meta.needsBaseUrl && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Adresse du service</label>
@@ -217,7 +267,6 @@ const AiSettings: React.FC = () => {
             </div>
           )}
 
-          {/* Modèle (optionnel) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Modèle <span className="font-normal text-gray-400">(optionnel)</span>
@@ -232,9 +281,7 @@ const AiSettings: React.FC = () => {
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
           )}
 
           <button
@@ -246,6 +293,52 @@ const AiSettings: React.FC = () => {
             {saving ? 'Connexion…' : status?.configured ? 'Mettre à jour' : 'Connecter'}
           </button>
         </form>
+
+        {/* Mini-chat assistant (visible une fois l'IA connectée) */}
+        {status?.configured && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">Tester l’assistant</h2>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 min-h-[8rem] max-h-80 overflow-y-auto space-y-3">
+              {chat.length === 0 ? (
+                <p className="text-sm text-gray-400">
+                  Posez une question (ex. « Rédige une annonce pour une pelle Caterpillar 320 de 2019 »).
+                </p>
+              ) : (
+                chat.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))
+              )}
+              {chatBusy && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> L’assistant réfléchit…
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            <form onSubmit={handleSend} className="mt-3 flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Votre message…"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+              <button
+                type="submit"
+                disabled={chatBusy || !chatInput.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 transition-colors disabled:bg-gray-300"
+              >
+                <Send className="h-4 w-4" /> Envoyer
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Note sécurité */}
         <div className="flex items-start gap-2 text-xs text-gray-500">
