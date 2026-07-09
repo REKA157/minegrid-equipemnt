@@ -1,4 +1,4 @@
-import { Building2, Upload, FileText, FolderOpen, Mail, LayoutDashboard, Calendar, Sparkles } from 'lucide-react';
+import { Building2, Upload, FileText, FolderOpen, Mail, Calendar, Sparkles } from 'lucide-react';
 
 // Raccourcis « services » affichés en haut du tableau de bord entreprise.
 // L'ordre doit rester aligné sur SERVICE_LINKS (EnterpriseDashboardShell).
@@ -27,11 +27,6 @@ export const commonServices = [
     icon: Mail,
     title: 'Messagerie',
     description: 'Vos messages et demandes clients au même endroit',
-  },
-  {
-    icon: LayoutDashboard,
-    title: 'Tableau de bord',
-    description: 'Vue synthétique : machines, vues, demandes, conversions',
   },
   {
     icon: Calendar,

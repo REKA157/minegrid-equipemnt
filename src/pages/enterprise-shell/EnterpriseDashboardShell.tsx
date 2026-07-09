@@ -67,7 +67,6 @@ const SERVICE_LINKS = [
   '/#devis',
   '/#documents',
   '/#messages',
-  '/#dashboard-entreprise-display',
   '/#planning',
   '/#assistant-ia',
 ];
@@ -262,7 +261,7 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
 
   const renderServices = () => (
     <div className="mb-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
         {commonServices.map((service, idx) => {
           const Icon = service.icon;
           const link = SERVICE_LINKS[idx] || '#';
