@@ -23,6 +23,7 @@ import {
 import supabase from '../utils/supabaseClient';
 import { MESSAGES_INBOX_COLUMNS } from '../constants/apiQueryFields';
 import { toast } from '../utils/toast';
+import { draftClientReply } from '../utils/api/aiAssistant';
 import BackToDashboardButton from '../components/common/BackToDashboardButton';
 interface Message {
   id: string;
@@ -48,6 +49,7 @@ export default function MessagesBoite() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [sending, setSending] = useState(false);
+  const [aiDrafting, setAiDrafting] = useState(false);
 
   useEffect(() => {
     loadMessages();
@@ -120,6 +122,26 @@ export default function MessagesBoite() {
       ));
     } catch (error) {
       console.error('Erreur:', error);
+    }
+  };
+
+  const handleDraftReply = async () => {
+    if (!selectedMessage) return;
+    setAiDrafting(true);
+    try {
+      const res = await draftClientReply({
+        message: selectedMessage.message,
+        senderName: selectedMessage.sender_name,
+      });
+      if (res.ok && res.reply) {
+        setReplyContent(res.reply);
+      } else if (res.error && /aucune ia/i.test(res.error)) {
+        toast('Connectez d’abord votre IA dans « Assistant IA ».');
+      } else {
+        toast(`IA : ${res.error || 'brouillon impossible'}`);
+      }
+    } finally {
+      setAiDrafting(false);
     }
   };
 
@@ -469,6 +491,14 @@ export default function MessagesBoite() {
                       />
                     </div>
                     <div className="flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        onClick={handleDraftReply}
+                        disabled={aiDrafting || sending}
+                        className="flex items-center px-4 py-2 text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-50 disabled:opacity-60 transition-colors"
+                      >
+                        {aiDrafting ? 'Rédaction…' : '✨ Générer un brouillon'}
+                      </button>
                       <button
                         onClick={() => setReplyContent('')}
                         className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors border border-gray-300 rounded-lg hover:bg-gray-50"

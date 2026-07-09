@@ -51,3 +51,19 @@ export async function testAiConnection(): Promise<AiProxyResult> {
 export async function askAssistant(messages: ChatMessage[]): Promise<AiProxyResult> {
   return callAiProxy({ action: 'chat', messages });
 }
+
+/** Rédige un brouillon de réponse à un message client (via l'IA connectée). */
+export async function draftClientReply(msg: {
+  message: string;
+  senderName?: string;
+  type?: string;
+}): Promise<{ ok: boolean; reply?: string; error?: string; code?: string }> {
+  const prompt =
+    "Rédige une réponse professionnelle et chaleureuse, en français, au message d'un client ci-dessous, " +
+    "de la part d'un vendeur d'engins de chantier/miniers sur MineGrid. Sois concret et courtois, et propose " +
+    "une suite (appel, visite, devis). Donne UNIQUEMENT le texte de la réponse, sans préambule.\n\n" +
+    (msg.senderName ? `Client : ${msg.senderName}\n` : '') +
+    (msg.type ? `Type de demande : ${msg.type}\n` : '') +
+    `Message reçu :\n"""${msg.message}"""`;
+  return askAssistant([{ role: 'user', content: prompt }]);
+}
