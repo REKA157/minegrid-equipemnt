@@ -150,12 +150,19 @@ const APP_ONLY_ROUTES = new Set<string>([
   'accepter-invitation',
 ]);
 
-// Espaces soumis à l'AFFECTATION du membre (cf. useMemberScope) :
+// Espaces soumis à l'AFFECTATION du membre (cf. useMemberScope).
+// COMMUNES (non listées ici, donc jamais bloquées) : messages, planning,
+// documents, global-monitor, assistant-ia, multi-user-management, support…
 const COMMERCIAL_SCOPE_PAGES = new Set([
+  // Espace Pro / vendeur de base
+  'dashboard', 'pro', 'premium-dashboard', 'vendre',
+  // Dashboards entreprise
   'dashboard-entreprise', 'dashboard-entreprise-display', 'dashboard-loueur-display',
   'dashboard-mecanicien-display', 'dashboard-transporteur-display', 'dashboard-transitaire-display',
   'dashboard-logisticien-display', 'dashboard-investisseur-display', 'dashboard-courtier-display',
   'dashboard-configurator',
+  // Outils commerciaux / transactionnels
+  'publication', 'devis', 'financement', 'opportunites-vente', 'leads', 'dossiers', 'dossier', 'vitrine',
 ]);
 const TENDERS_SCOPE_PAGES = new Set(['appels-offres']);
 
@@ -204,8 +211,8 @@ function AppContent() {
       if (TENDERS_SCOPE_PAGES.has(p) && !scope.tenders) {
         return (
           <ScopeRedirect
-            to="dashboard-entreprise-display"
-            message="Votre affectation ne couvre pas les Appels d'offres — redirection vers le tableau de bord…"
+            to="dashboard"
+            message="Votre affectation ne couvre pas les Appels d'offres — redirection vers votre espace…"
           />
         );
       }
