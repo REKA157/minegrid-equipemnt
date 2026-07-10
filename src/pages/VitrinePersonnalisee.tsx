@@ -1088,7 +1088,7 @@ export default function VitrinePersonnalisee() {
                     <option value="drill">Foreuses</option>
                   </select>
                   
-                  {isOwner && (
+                  {canEdit && (
                     <button 
                       onClick={() => window.location.hash = '#dashboard/annonces'}
                       className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center"
@@ -1112,7 +1112,7 @@ export default function VitrinePersonnalisee() {
                       : `Aucune machine dans la catégorie "${selectedCategory}"`
                     }
                   </p>
-                  {isOwner && selectedCategory === 'all' && (
+                  {canEdit && selectedCategory === 'all' && (
                     <button 
                       onClick={() => window.location.hash = '#dashboard/annonces'}
                       className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
@@ -1359,7 +1359,7 @@ export default function VitrinePersonnalisee() {
             </div>
 
             {/* Section d'information sur les données affichées */}
-            {isOwner && (
+            {canEdit && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mt-6">
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
