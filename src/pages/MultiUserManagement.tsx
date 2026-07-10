@@ -42,9 +42,27 @@ import { toast } from '../utils/toast';
 import { useTendersStore } from '../tenders/store/tendersStore';
 import { ROLE_LABELS as TENDER_ROLE_LABELS, defaultTenderRole, type UserRole as TenderRole } from '../tenders/types';
 import { addPendingTenderRole, getPendingTenderRole, removePendingTenderRole } from '../utils/pendingTenderRoles';
+import InfoTooltip, { type WidgetExplanation } from '../components/common/InfoTooltip';
 
 /** Rôles du module Appels d'offres proposés à l'affectation (ordre d'affichage). */
 const TENDER_ROLES: TenderRole[] = ['admin', 'redacteur', 'validateur', 'lecteur'];
+
+/** Aide « i » de la section « Membres de l'équipe » (survol = rôle + 1re action ; clic = mode d'emploi). */
+const TEAM_HELP: WidgetExplanation = {
+  summary:
+    "La liste des personnes de votre société qui partagent votre espace (pipeline commercial et/ou module Appels d'offres). Ce sont de vrais comptes : la liste se remplit à mesure que vos invitations sont acceptées.",
+  howItWorks: [
+    "Chaque membre porte deux rôles complémentaires : le rôle « société » (Propriétaire, Administrateur, Gestionnaire, Lecteur) qui pilote ses droits d'accès, et le badge « AO : … » qui indique son rôle dans le module Appels d'offres.",
+    "Le badge de statut (Actif / En attente / Inactif) montre où en est la personne.",
+    "Le propriétaire est le titulaire de l'abonnement ; toute l'équipe en profite. Les compteurs du haut résument l'équipe (total, actifs, en attente, connectés aujourd'hui).",
+  ],
+  whatToDo: [
+    "Pour ajouter un collègue, cliquez « Inviter un membre », choisissez son affectation (Commercial et/ou Appels d'offres) et ses rôles, puis partagez-lui le lien généré.",
+    "Pour changer les rôles d'un membre (société et Appels d'offres), cliquez l'icône crayon ✏️ sur sa ligne.",
+    "Le lien « Rôles Appels d'offres (vue détaillée) » (colonne de droite) ouvre la page dédiée avec la description de chaque rôle AO.",
+    "Utilisez la recherche et le filtre par rôle pour retrouver vite une personne quand l'équipe s'agrandit.",
+  ],
+};
 interface TeamMember {
   id: string;
   name: string;
@@ -467,7 +485,14 @@ const MultiUserManagement: React.FC = () => {
               {/* Header avec filtres */}
               <div className="p-6 border-b border-gray-200">
                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-                   <h2 className="text-lg font-semibold text-gray-900">Membres de l'équipe</h2>
+                   <div className="flex items-center gap-2">
+                     <h2 className="text-lg font-semibold text-gray-900">Membres de l'équipe</h2>
+                     <InfoTooltip
+                       text="Les personnes de votre société qui partagent votre espace (Commercial et/ou Appels d'offres)."
+                       title="Membres de l'équipe"
+                       details={TEAM_HELP}
+                     />
+                   </div>
                    <div className="flex space-x-3">
                      <button
                        onClick={() => setShowInviteModal(true)}
