@@ -15,8 +15,16 @@ export interface MemberScope {
 /** Défaut « accès à tout » : aucun blocage (membre sans affectation explicite, hors ligne, ou erreur). */
 export const FULL_SCOPE: MemberScope = { commercial: true, tenders: true };
 
-/** Affectation de l'utilisateur connecté (défaut : accès aux deux). */
-export async function getMyMemberScope(): Promise<MemberScope> {
+// Cache de session : App + menus partagent une seule requête (l'affectation ne
+// change pas en cours de session pour le membre lui-même).
+let scopeCache: Promise<MemberScope> | null = null;
+
+/** Force un nouveau chargement de l'affectation (après un changement admin). */
+export function invalidateMemberScopeCache(): void {
+  scopeCache = null;
+}
+
+async function fetchMyMemberScope(): Promise<MemberScope> {
   try {
     const { data, error } = await supabase.rpc('get_my_member_scope');
     if (error) return FULL_SCOPE;
@@ -27,6 +35,12 @@ export async function getMyMemberScope(): Promise<MemberScope> {
   } catch {
     return FULL_SCOPE;
   }
+}
+
+/** Affectation de l'utilisateur connecté (défaut : accès aux deux). Mise en cache. */
+export async function getMyMemberScope(): Promise<MemberScope> {
+  if (!scopeCache) scopeCache = fetchMyMemberScope();
+  return scopeCache;
 }
 
 /** Régler l'affectation d'un membre (réservé aux admins de la société côté serveur). */

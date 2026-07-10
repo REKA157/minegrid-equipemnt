@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useDeferredValue } from 'react';
 import { useMachineSearchSuggest } from '../hooks/queries/useMachineSearchSuggest';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
+import { useMemberScope } from '../hooks/useMemberScope';
 import { hasEnterprise } from '../utils/api/subscription';
 import { trackEvent } from '../utils/analytics';
 import {
@@ -76,6 +77,11 @@ const Header = () => {
   // l'onglet même sans indicateur local. Additif : n'active jamais que la
   // visibilité (le vrai accès reste gardé par RequireSubscription).
   const { subscription } = useSubscription();
+  // Affectation du membre : on masque les liens hors de son périmètre.
+  // Tant que l'affectation charge, on n'en masque aucun (évite le clignotement).
+  const { scope: memberScope, loading: scopeLoading } = useMemberScope();
+  const hideCommercial = !scopeLoading && !memberScope.commercial;
+  const hideTenders = !scopeLoading && !memberScope.tenders;
   useEffect(() => {
     if (hasEnterprise(subscription)) setShowMyDashboardTab(true);
   }, [subscription]);
@@ -351,6 +357,7 @@ const Header = () => {
               )}
             </div>
 
+            {!hideCommercial && (
             <div className="relative">
               <button
                 className="flex items-center text-gray-700 hover:text-primary-600 font-semibold"
@@ -391,6 +398,7 @@ const Header = () => {
                 </div>
               )}
             </div>
+            )}
 
             <a
               href="#global-monitor"
@@ -421,14 +429,16 @@ const Header = () => {
                 {user ? (
                   <>
                     <div className="px-4 py-2 text-sm text-gray-500">Bonjour, {user.user_metadata?.full_name || user.email}</div>
-                    <a
-                      href="#dashboard"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
-                    >
-                      <User className="h-4 w-4 mr-2" />
-                      Mon espace
-                    </a>
-                    {showMyDashboardTab && (
+                    {!hideCommercial && (
+                      <a
+                        href="#dashboard"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        Mon espace
+                      </a>
+                    )}
+                    {showMyDashboardTab && !hideCommercial && (
                       <a
                         href="#dashboard-entreprise-display"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
@@ -453,34 +463,40 @@ const Header = () => {
                       <Globe className="h-4 w-4 mr-2" />
                       Global Monitor
                     </a>
-                    <a
-                      href="#opportunites-vente"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
-                    >
-                      <Wallet className="h-4 w-4 mr-2" />
-                      Opportunités
-                    </a>
-                    <a
-                      href="#leads"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
-                    >
-                      <Bell className="h-4 w-4 mr-2" />
-                      Leads
-                    </a>
-                    <a
-                      href="#dossiers"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
-                    >
-                      <FolderOpen className="h-4 w-4 mr-2" />
-                      Mes dossiers
-                    </a>
-                    <a
-                      href="#appels-offres"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
-                    >
-                      <ScrollText className="h-4 w-4 mr-2" />
-                      Appels d'offres
-                    </a>
+                    {!hideCommercial && (
+                      <>
+                        <a
+                          href="#opportunites-vente"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                        >
+                          <Wallet className="h-4 w-4 mr-2" />
+                          Opportunités
+                        </a>
+                        <a
+                          href="#leads"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                        >
+                          <Bell className="h-4 w-4 mr-2" />
+                          Leads
+                        </a>
+                        <a
+                          href="#dossiers"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                        >
+                          <FolderOpen className="h-4 w-4 mr-2" />
+                          Mes dossiers
+                        </a>
+                      </>
+                    )}
+                    {!hideTenders && (
+                      <a
+                        href="#appels-offres"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
+                      >
+                        <ScrollText className="h-4 w-4 mr-2" />
+                        Appels d'offres
+                      </a>
+                    )}
                     <button
                       onClick={async () => {
                         await supabaseClient.auth.signOut();
@@ -599,6 +615,7 @@ const Header = () => {
               </div>
             )}
 
+            {!hideCommercial && (
             <div className="py-2 border-b border-gray-100">
               <div className="text-gray-800 font-semibold mb-1">Espace Pro</div>
               <a href="#pro" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
@@ -613,6 +630,7 @@ const Header = () => {
                 </a>
               )}
             </div>
+            )}
             <a
               href="#global-monitor"
               onClick={closeMobileMenu}
@@ -629,24 +647,34 @@ const Header = () => {
             </a>
             {user ? (
               <>
-                <a href="#dashboard" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
-                  Mon espace
-                </a>
-                <a href="#dossiers" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
-                  <FolderOpen className="h-4 w-4" />
-                  Mes dossiers
-                </a>
-                <a href="#appels-offres" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
-                  <ScrollText className="h-4 w-4" />
-                  Appels d'offres
-                </a>
-                <a href="#leads" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
-                  Leads
-                </a>
-                <a href="#opportunites-vente" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
-                  <Wallet className="h-4 w-4" />
-                  Opportunités
-                </a>
+                {!hideCommercial && (
+                  <>
+                    <a href="#dashboard" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
+                      Mon espace
+                    </a>
+                    <a href="#dossiers" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                      <FolderOpen className="h-4 w-4" />
+                      Mes dossiers
+                    </a>
+                  </>
+                )}
+                {!hideTenders && (
+                  <a href="#appels-offres" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                    <ScrollText className="h-4 w-4" />
+                    Appels d'offres
+                  </a>
+                )}
+                {!hideCommercial && (
+                  <>
+                    <a href="#leads" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
+                      Leads
+                    </a>
+                    <a href="#opportunites-vente" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                      <Wallet className="h-4 w-4" />
+                      Opportunités
+                    </a>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={async () => {
