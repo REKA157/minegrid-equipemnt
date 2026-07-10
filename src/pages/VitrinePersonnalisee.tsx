@@ -28,6 +28,8 @@ import { VITRINE_COLUMNS } from '../constants/apiQueryFields';
 import { useCurrencyStore } from '../stores/currencyStore';
 import Price from '../components/Price';
 import { toast } from '../utils/toast';
+import { useMemberScope } from '../hooks/useMemberScope';
+import { isInvitedMember } from '../utils/api/memberScope';
 interface VitrineData {
   id: string;
   company_name: string;
@@ -178,6 +180,9 @@ export default function VitrinePersonnalisee() {
   const [saving, setSaving] = useState(false);
   const { currentCurrency } = useCurrencyStore();
   const [isOwner, setIsOwner] = useState(false);
+  // Édition réservée au PROPRIÉTAIRE : un membre invité a la vitrine en lecture seule.
+  const { scope: memberScope } = useMemberScope();
+  const canEdit = isOwner && !isInvitedMember(memberScope);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showRentalForm, setShowRentalForm] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
@@ -402,6 +407,11 @@ export default function VitrinePersonnalisee() {
   };
 
   const handleSave = async () => {
+    // Sécurité : un membre invité ne peut pas enregistrer la vitrine (lecture seule).
+    if (!canEdit) {
+      toast('La vitrine est en lecture seule : seul le propriétaire peut la modifier.');
+      return;
+    }
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -620,14 +630,16 @@ export default function VitrinePersonnalisee() {
             <div className="flex items-center space-x-4">
               {!isEditing ? (
                 <>
-                  <button 
-                    onClick={() => setIsEditing(true)}
-                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Modifier
-                  </button>
-                  <button 
+                  {canEdit && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Modifier
+                    </button>
+                  )}
+                  <button
                     onClick={async () => {
                       const { data: { user } } = await supabase.auth.getUser();
                       if (user) {
@@ -1386,8 +1398,8 @@ export default function VitrinePersonnalisee() {
                      (vitrineData?.business_type || 'both') === 'renter' ? 'Conditions de Location' : 
                      'Conditions de Location et Vente'}
                   </h2>
-                  {isOwner && (
-                    <button 
+                  {canEdit && (
+                    <button
                       onClick={() => setIsEditing(true)}
                       className="px-3 py-1 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center text-sm"
                     >
