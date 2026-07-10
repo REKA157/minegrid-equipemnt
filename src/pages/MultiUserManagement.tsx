@@ -41,7 +41,12 @@ import { hasEnterprise } from '../utils/api/subscription';
 import { toast } from '../utils/toast';
 import { useTendersStore } from '../tenders/store/tendersStore';
 import { ROLE_LABELS as TENDER_ROLE_LABELS, defaultTenderRole, type UserRole as TenderRole } from '../tenders/types';
-import { addPendingTenderRole, getPendingTenderRole, removePendingTenderRole } from '../utils/pendingTenderRoles';
+import {
+  addPendingTenderRole, getPendingTenderRole, removePendingTenderRole,
+  addPendingMemberScope, getPendingMemberScope, removePendingMemberScope,
+} from '../utils/pendingTenderRoles';
+import { setMemberScope, type MemberScope } from '../utils/api/memberScope';
+import supabaseClient from '../utils/supabaseClient';
 import InfoTooltip, { type WidgetExplanation } from '../components/common/InfoTooltip';
 
 /** Rôles du module Appels d'offres proposés à l'affectation (ordre d'affichage). */
@@ -187,20 +192,43 @@ const MultiUserManagement: React.FC = () => {
         const members = await getOrgMembers();
         const mapped = members.map(orgMemberToTeamMember);
         if (!cancelled) setTeamMembers(mapped);
-        // Réconciliation : une affectation AO posée à l'invitation (par e-mail)
-        // devient un vrai rôle AO dès que la personne apparaît dans l'équipe.
+
+        // Réconciliation des affectations posées à l'invitation (par e-mail),
+        // dès que la personne apparaît dans l'équipe (elle a alors un user_id).
         for (const m of mapped) {
-          const pending = m.email ? getPendingTenderRole(m.email) : null;
-          if (pending) {
+          if (!m.email) continue;
+          // 1) Rôle Appels d'offres en attente -> vrai rôle AO.
+          const pendingRole = getPendingTenderRole(m.email);
+          if (pendingRole) {
             useTendersStore.getState().upsertRoleAssignment({
-              memberId: m.id,
-              name: m.name,
-              email: m.email,
-              role: pending,
-              fromOrg: true,
+              memberId: m.id, name: m.name, email: m.email, role: pendingRole, fromOrg: true,
             });
             removePendingTenderRole(m.email);
           }
+          // 2) Affectation (Commercial / Appels d'offres) en attente -> serveur.
+          const pendingScope = getPendingMemberScope(m.email);
+          if (pendingScope) {
+            const res = await setMemberScope(m.id, pendingScope.commercial, pendingScope.tenders);
+            // On ne retire qu'en cas de succès (retry plus tard si l'utilisateur
+            // courant n'est pas admin, donc non autorisé à régler).
+            if (res.success) removePendingMemberScope(m.email);
+          }
+        }
+
+        // Charger les affectations de l'org (pour l'édition + l'affichage).
+        try {
+          const { data } = await supabaseClient
+            .from('organization_member_scopes')
+            .select('user_id, commercial, tenders');
+          if (!cancelled && data) {
+            const map: Record<string, MemberScope> = {};
+            for (const row of data as Array<{ user_id: string; commercial: boolean; tenders: boolean }>) {
+              map[row.user_id] = { commercial: row.commercial, tenders: row.tenders };
+            }
+            setMemberScopes(map);
+          }
+        } catch {
+          /* RLS/table absente : on garde le défaut (accès à tout) */
         }
       } finally {
         if (!cancelled) setMembersLoading(false);
@@ -301,8 +329,9 @@ const MultiUserManagement: React.FC = () => {
       const result = await inviteUser(emailInvited, inviteFormData.name, orgRole);
 
       if (result.success) {
-        // Affectation AO : mémorisée par e-mail, appliquée dès que la personne rejoint.
-        if (affectAO) addPendingTenderRole(emailInvited, inviteAoRole);
+        // Affectations mémorisées par e-mail, appliquées dès que la personne rejoint.
+        addPendingMemberScope(emailInvited, affectCommercial, affectAO); // accès aux espaces
+        if (affectAO) addPendingTenderRole(emailInvited, inviteAoRole);   // rôle dans le module AO
         setInviteSuccess(true);
         // On affiche le LIEN à partager et on garde le modal ouvert
         // (l'admin doit copier le lien pour l'envoyer au collègue).
@@ -361,6 +390,12 @@ const MultiUserManagement: React.FC = () => {
   const upsertTenderRole = useTendersStore((s) => s.upsertRoleAssignment);
   const aoRoleOf = (m: TeamMember): TenderRole =>
     tenderRoleAssignments.find((a) => a.memberId === m.id)?.role ?? defaultTenderRole(m.role);
+
+  // Affectation (Commercial / Appels d'offres) par membre, chargée du serveur.
+  // Défaut : accès aux deux (aucun blocage tant que rien n'est restreint).
+  const [memberScopes, setMemberScopes] = useState<Record<string, MemberScope>>({});
+  const scopeOf = (m: TeamMember): MemberScope =>
+    memberScopes[m.id] ?? { commercial: true, tenders: true };
 
   const handleUpdateMember = (memberId: string, updates: Partial<TeamMember>) => {
     setTeamMembers(teamMembers.map(member =>
@@ -902,16 +937,32 @@ const MultiUserManagement: React.FC = () => {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
-              // Affectation AO : persistée dans le store tenders AVANT handleUpdateMember
-              // (qui remet selectedMember à null).
+              const memberId = selectedMember.id;
+              const isOwner = selectedMember.role === 'owner';
+              // Affectation (accès aux espaces). Le propriétaire garde toujours les deux.
+              const commercial = isOwner ? true : formData.get('scopeCommercial') === 'on';
+              const tenders = isOwner ? true : formData.get('scopeTenders') === 'on';
+              if (!commercial && !tenders) {
+                toast('Choisissez au moins une affectation (Commercial ou Appels d’offres).');
+                return;
+              }
+              // Rôle AO (module) : persisté dans le store tenders AVANT handleUpdateMember.
               upsertTenderRole({
-                memberId: selectedMember.id,
+                memberId,
                 name: selectedMember.name,
                 email: selectedMember.email,
                 role: formData.get('tenderRole') as TenderRole,
                 fromOrg: true,
               });
-              handleUpdateMember(selectedMember.id, {
+              // Affectation -> serveur (redirige hors des espaces non couverts).
+              void setMemberScope(memberId, commercial, tenders).then((res) => {
+                if (res.success) {
+                  setMemberScopes((prev) => ({ ...prev, [memberId]: { commercial, tenders } }));
+                } else {
+                  toast(`❌ ${res.error || 'Échec du réglage de l’affectation.'}`);
+                }
+              });
+              handleUpdateMember(memberId, {
                 role: formData.get('role') as any,
                 status: formData.get('status') as any
               });
@@ -961,6 +1012,36 @@ const MultiUserManagement: React.FC = () => {
                   </select>
                   <p className="mt-1 text-xs text-gray-500">
                     Ce que ce salarié peut faire dans le module « Appels d’offres » (distinct du rôle société). Le salarié en hérite à sa connexion.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Affectation (accès aux espaces)</label>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        name="scopeCommercial"
+                        defaultChecked={scopeOf(selectedMember).commercial}
+                        disabled={selectedMember.role === 'owner'}
+                        className="h-4 w-4 accent-orange-600"
+                      />
+                      Commercial (dashboard entreprise)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        name="scopeTenders"
+                        defaultChecked={scopeOf(selectedMember).tenders}
+                        disabled={selectedMember.role === 'owner'}
+                        className="h-4 w-4 accent-orange-600"
+                      />
+                      Appels d’offres
+                    </label>
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    {selectedMember.role === 'owner'
+                      ? 'Le propriétaire a toujours accès aux deux.'
+                      : 'Décoché = la personne est redirigée hors de cet espace.'}
                   </p>
                 </div>
                 <div>

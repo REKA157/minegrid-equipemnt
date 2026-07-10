@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { useRouteParams } from './router';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -16,6 +16,7 @@ import Login from './pages/Login';
 import Blog from './pages/Blog';
 import Dashboard from './pages/Dashboard.jsx';
 import { useExchangeRates } from './hooks/useExchangeRates';
+import { useMemberScope } from './hooks/useMemberScope';
 import SectorMachines from './pages/SectorMachines';
 import SellerMachines from './pages/SellerMachines';
 import Hero from './components/Hero';
@@ -149,10 +150,32 @@ const APP_ONLY_ROUTES = new Set<string>([
   'accepter-invitation',
 ]);
 
+// Espaces soumis à l'AFFECTATION du membre (cf. useMemberScope) :
+const COMMERCIAL_SCOPE_PAGES = new Set([
+  'dashboard-entreprise', 'dashboard-entreprise-display', 'dashboard-loueur-display',
+  'dashboard-mecanicien-display', 'dashboard-transporteur-display', 'dashboard-transitaire-display',
+  'dashboard-logisticien-display', 'dashboard-investisseur-display', 'dashboard-courtier-display',
+  'dashboard-configurator',
+]);
+const TENDERS_SCOPE_PAGES = new Set(['appels-offres']);
+
+/** Redirige en douceur vers l'espace autorisé quand l'affectation ne couvre pas la page. */
+const ScopeRedirect: React.FC<{ to: string; message: string }> = ({ to, message }) => {
+  useEffect(() => {
+    window.location.hash = `#${to}`;
+  }, [to]);
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center px-4 text-center">
+      <p className="text-sm text-gray-600">{message}</p>
+    </div>
+  );
+};
+
 function AppContent() {
   const { segments: pathParts, searchParams } = useRouteParams();
 
   useExchangeRates();
+  const { scope, loading: scopeLoading } = useMemberScope();
 
   const currentRoute = pathParts[0] ?? '';
   const showFooter =
@@ -162,6 +185,30 @@ function AppContent() {
   const renderContent = () => {
     if (window.location.pathname === '/update-password') {
       return <UpdatePassword />;
+    }
+
+    // Garde d'AFFECTATION : un membre est redirigé hors des espaces auxquels il
+    // n'est pas affecté (Commercial vs Appels d'offres). Défaut = accès à tout,
+    // donc aucun impact tant que l'admin n'a rien restreint. On ne redirige
+    // jamais pendant le chargement de l'affectation.
+    if (!scopeLoading) {
+      const p = pathParts[0] ?? '';
+      if (COMMERCIAL_SCOPE_PAGES.has(p) && !scope.commercial) {
+        return (
+          <ScopeRedirect
+            to="appels-offres"
+            message="Votre affectation ne couvre pas l'espace commercial — redirection vers les Appels d'offres…"
+          />
+        );
+      }
+      if (TENDERS_SCOPE_PAGES.has(p) && !scope.tenders) {
+        return (
+          <ScopeRedirect
+            to="dashboard-entreprise-display"
+            message="Votre affectation ne couvre pas les Appels d'offres — redirection vers le tableau de bord…"
+          />
+        );
+      }
     }
 
     switch (pathParts[0]) {

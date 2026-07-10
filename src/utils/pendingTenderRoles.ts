@@ -53,3 +53,57 @@ export function removePendingTenderRole(email: string): void {
   const e = norm(email);
   writeAll(readAll().filter((p) => norm(p.email) !== e));
 }
+
+// =====================================================================
+// AFFECTATION (Commercial / Appels d'offres) EN ATTENTE, par e-mail.
+// Même logique : posée à l'invitation, appliquée via set_member_scope dès que
+// la personne rejoint (elle a alors un user_id).
+// =====================================================================
+const SCOPE_KEY = 'minegrid-pending-member-scopes';
+
+export interface PendingMemberScope {
+  email: string;
+  commercial: boolean;
+  tenders: boolean;
+}
+
+function readAllScopes(): PendingMemberScope[] {
+  try {
+    const raw = localStorage.getItem(SCOPE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? (arr as PendingMemberScope[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeAllScopes(list: PendingMemberScope[]): void {
+  try {
+    localStorage.setItem(SCOPE_KEY, JSON.stringify(list));
+  } catch {
+    /* stockage indisponible : on ignore */
+  }
+}
+
+/** Enregistre (ou remplace) l'affectation en attente pour un e-mail. */
+export function addPendingMemberScope(email: string, commercial: boolean, tenders: boolean): void {
+  const e = norm(email);
+  if (!e) return;
+  const list = readAllScopes().filter((p) => norm(p.email) !== e);
+  list.push({ email: e, commercial, tenders });
+  writeAllScopes(list);
+}
+
+/** Affectation en attente pour un e-mail (ou null). */
+export function getPendingMemberScope(email: string): { commercial: boolean; tenders: boolean } | null {
+  const e = norm(email);
+  const found = readAllScopes().find((p) => norm(p.email) === e);
+  return found ? { commercial: found.commercial, tenders: found.tenders } : null;
+}
+
+/** Retire l'affectation en attente (après réconciliation). */
+export function removePendingMemberScope(email: string): void {
+  const e = norm(email);
+  writeAllScopes(readAllScopes().filter((p) => norm(p.email) !== e));
+}
