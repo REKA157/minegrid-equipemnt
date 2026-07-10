@@ -3,6 +3,7 @@ import { useMachineSearchSuggest } from '../hooks/queries/useMachineSearchSugges
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { useMemberScope } from '../hooks/useMemberScope';
+import { isInvitedMember } from '../utils/api/memberScope';
 import { hasEnterprise } from '../utils/api/subscription';
 import { trackEvent } from '../utils/analytics';
 import {
@@ -82,6 +83,8 @@ const Header = () => {
   const { scope: memberScope, loading: scopeLoading } = useMemberScope();
   const hideCommercial = !scopeLoading && !memberScope.commercial;
   const hideTenders = !scopeLoading && !memberScope.tenders;
+  // Pages du propriétaire (Mon espace, Gestion d'équipe) masquées aux invités.
+  const hideOwnerOnly = !scopeLoading && isInvitedMember(memberScope);
   useEffect(() => {
     if (hasEnterprise(subscription)) setShowMyDashboardTab(true);
   }, [subscription]);
@@ -429,7 +432,7 @@ const Header = () => {
                 {user ? (
                   <>
                     <div className="px-4 py-2 text-sm text-gray-500">Bonjour, {user.user_metadata?.full_name || user.email}</div>
-                    {!hideCommercial && (
+                    {!hideCommercial && !hideOwnerOnly && (
                       <a
                         href="#dashboard"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
@@ -447,7 +450,7 @@ const Header = () => {
                         Mon dashboard
                       </a>
                     )}
-                    {hasEnterprise(subscription) && (
+                    {hasEnterprise(subscription) && !hideOwnerOnly && (
                       <a
                         href="#multi-user-management"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
@@ -624,7 +627,7 @@ const Header = () => {
               <a href="#dashboard-entreprise-display" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
                 Compte Entreprise
               </a>
-              {hasEnterprise(subscription) && (
+              {hasEnterprise(subscription) && !hideOwnerOnly && (
                 <a href="#multi-user-management" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
                   Gestion d'équipe
                 </a>
@@ -647,16 +650,16 @@ const Header = () => {
             </a>
             {user ? (
               <>
+                {!hideCommercial && !hideOwnerOnly && (
+                  <a href="#dashboard" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
+                    Mon espace
+                  </a>
+                )}
                 {!hideCommercial && (
-                  <>
-                    <a href="#dashboard" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600">
-                      Mon espace
-                    </a>
-                    <a href="#dossiers" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
-                      <FolderOpen className="h-4 w-4" />
-                      Mes dossiers
-                    </a>
-                  </>
+                  <a href="#dossiers" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4" />
+                    Mes dossiers
+                  </a>
                 )}
                 {!hideTenders && (
                   <a href="#appels-offres" onClick={closeMobileMenu} className="py-2 text-gray-700 hover:text-primary-600 flex items-center gap-2">

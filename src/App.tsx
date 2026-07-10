@@ -17,6 +17,7 @@ import Blog from './pages/Blog';
 import Dashboard from './pages/Dashboard.jsx';
 import { useExchangeRates } from './hooks/useExchangeRates';
 import { useMemberScope } from './hooks/useMemberScope';
+import { isInvitedMember } from './utils/api/memberScope';
 import SectorMachines from './pages/SectorMachines';
 import SellerMachines from './pages/SellerMachines';
 import Hero from './components/Hero';
@@ -165,6 +166,9 @@ const COMMERCIAL_SCOPE_PAGES = new Set([
   'publication', 'devis', 'financement', 'opportunites-vente', 'leads', 'dossiers', 'dossier', 'vitrine',
 ]);
 const TENDERS_SCOPE_PAGES = new Set(['appels-offres']);
+// Pages réservées au PROPRIÉTAIRE du compte (pas aux membres invités) :
+// l'espace vendeur personnel et la gestion d'équipe.
+const OWNER_ONLY_PAGES = new Set(['dashboard', 'multi-user-management']);
 
 /** Redirige en douceur vers l'espace autorisé quand l'affectation ne couvre pas la page. */
 const ScopeRedirect: React.FC<{ to: string; message: string }> = ({ to, message }) => {
@@ -213,6 +217,16 @@ function AppContent() {
           <ScopeRedirect
             to="dashboard"
             message="Votre affectation ne couvre pas les Appels d'offres — redirection vers votre espace…"
+          />
+        );
+      }
+      // Pages du propriétaire (espace vendeur perso, gestion d'équipe) : un
+      // membre invité y est redirigé vers son espace de travail.
+      if (OWNER_ONLY_PAGES.has(p) && isInvitedMember(scope)) {
+        return (
+          <ScopeRedirect
+            to={scope.commercial ? 'dashboard-entreprise-display' : 'appels-offres'}
+            message="Cette page est réservée au propriétaire du compte — redirection vers votre espace…"
           />
         );
       }

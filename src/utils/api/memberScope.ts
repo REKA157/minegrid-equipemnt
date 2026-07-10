@@ -10,10 +10,21 @@ import supabase from '../supabaseClient';
 export interface MemberScope {
   commercial: boolean;
   tenders: boolean;
+  /** Rôle société de l'utilisateur : owner/admin/manager/viewer, ou null/absent
+   *  s'il n'est membre d'aucune société (compte autonome). Sert à réserver
+   *  certaines pages (Mon espace, Gestion d'équipe) au PROPRIÉTAIRE.
+   *  Optionnel : les affectations d'AUTRES membres (MultiUserManagement) n'ont
+   *  pas ce champ. */
+  role?: string | null;
 }
 
 /** Défaut « accès à tout » : aucun blocage (membre sans affectation explicite, hors ligne, ou erreur). */
-export const FULL_SCOPE: MemberScope = { commercial: true, tenders: true };
+export const FULL_SCOPE: MemberScope = { commercial: true, tenders: true, role: null };
+
+/** true = membre INVITÉ (dans une société, mais pas le propriétaire). */
+export function isInvitedMember(scope: MemberScope): boolean {
+  return scope.role != null && scope.role !== 'owner';
+}
 
 // Cache de session : App + menus partagent une seule requête (l'affectation ne
 // change pas en cours de session pour le membre lui-même).
@@ -24,17 +35,36 @@ export function invalidateMemberScopeCache(): void {
   scopeCache = null;
 }
 
-async function fetchMyMemberScope(): Promise<MemberScope> {
+async function fetchScope(): Promise<{ commercial: boolean; tenders: boolean }> {
   try {
     const { data, error } = await supabase.rpc('get_my_member_scope');
-    if (error) return FULL_SCOPE;
+    if (error) return { commercial: true, tenders: true };
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row) return FULL_SCOPE;
+    if (!row) return { commercial: true, tenders: true };
     // On ne restreint QUE sur un `false` explicite ; tout le reste = accès.
     return { commercial: row.commercial !== false, tenders: row.tenders !== false };
   } catch {
-    return FULL_SCOPE;
+    return { commercial: true, tenders: true };
   }
+}
+
+/** Rôle société de l'appelant, déduit de get_org_members (déjà déployée). */
+async function fetchMyRole(): Promise<string | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await supabase.rpc('get_org_members');
+    if (error) return null;
+    const rows = (data as Array<{ user_id: string; role: string }>) || [];
+    return rows.find((r) => r.user_id === user.id)?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchMyMemberScope(): Promise<MemberScope> {
+  const [scope, role] = await Promise.all([fetchScope(), fetchMyRole()]);
+  return { ...scope, role };
 }
 
 /** Affectation de l'utilisateur connecté (défaut : accès aux deux). Mise en cache. */
