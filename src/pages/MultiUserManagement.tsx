@@ -41,6 +41,7 @@ import { hasEnterprise } from '../utils/api/subscription';
 import { toast } from '../utils/toast';
 import { useTendersStore } from '../tenders/store/tendersStore';
 import { ROLE_LABELS as TENDER_ROLE_LABELS, defaultTenderRole, type UserRole as TenderRole } from '../tenders/types';
+import { addPendingTenderRole, getPendingTenderRole, removePendingTenderRole } from '../utils/pendingTenderRoles';
 
 /** Rôles du module Appels d'offres proposés à l'affectation (ordre d'affichage). */
 const TENDER_ROLES: TenderRole[] = ['admin', 'redacteur', 'validateur', 'lecteur'];
@@ -113,6 +114,11 @@ const MultiUserManagement: React.FC = () => {
     email: '',
     role: 'viewer' as 'admin' | 'manager' | 'viewer'
   });
+  // Affectation du nouveau membre : Commercial (dashboard entreprise) et/ou
+  // Appels d'offres. Le rôle AO est appliqué automatiquement dès qu'il rejoint.
+  const [affectCommercial, setAffectCommercial] = useState(true);
+  const [affectAO, setAffectAO] = useState(false);
+  const [inviteAoRole, setInviteAoRole] = useState<TenderRole>('redacteur');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState(false);
@@ -161,7 +167,23 @@ const MultiUserManagement: React.FC = () => {
       setMembersLoading(true);
       try {
         const members = await getOrgMembers();
-        if (!cancelled) setTeamMembers(members.map(orgMemberToTeamMember));
+        const mapped = members.map(orgMemberToTeamMember);
+        if (!cancelled) setTeamMembers(mapped);
+        // Réconciliation : une affectation AO posée à l'invitation (par e-mail)
+        // devient un vrai rôle AO dès que la personne apparaît dans l'équipe.
+        for (const m of mapped) {
+          const pending = m.email ? getPendingTenderRole(m.email) : null;
+          if (pending) {
+            useTendersStore.getState().upsertRoleAssignment({
+              memberId: m.id,
+              name: m.name,
+              email: m.email,
+              role: pending,
+              fromOrg: true,
+            });
+            removePendingTenderRole(m.email);
+          }
+        }
       } finally {
         if (!cancelled) setMembersLoading(false);
       }
@@ -243,6 +265,10 @@ const MultiUserManagement: React.FC = () => {
 
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!affectCommercial && !affectAO) {
+      setInviteError('Choisissez au moins une affectation : Commercial et/ou Appels d’offres.');
+      return;
+    }
     setInviteLoading(true);
     setInviteError('');
     setInviteSuccess(false);
@@ -250,18 +276,23 @@ const MultiUserManagement: React.FC = () => {
     setLinkCopied(false);
 
     try {
-      const result = await inviteUser(
-        inviteFormData.email,
-        inviteFormData.name,
-        inviteFormData.role
-      );
+      // Rôle société : celui choisi si affecté au Commercial ; sinon « viewer »
+      // (accès minimal — il faut être membre de la société pour utiliser le module AO).
+      const orgRole = affectCommercial ? inviteFormData.role : 'viewer';
+      const emailInvited = inviteFormData.email;
+      const result = await inviteUser(emailInvited, inviteFormData.name, orgRole);
 
       if (result.success) {
+        // Affectation AO : mémorisée par e-mail, appliquée dès que la personne rejoint.
+        if (affectAO) addPendingTenderRole(emailInvited, inviteAoRole);
         setInviteSuccess(true);
         // On affiche le LIEN à partager et on garde le modal ouvert
         // (l'admin doit copier le lien pour l'envoyer au collègue).
         setInviteLink(result.link || '');
         setInviteFormData({ name: '', email: '', role: 'viewer' });
+        setAffectCommercial(true);
+        setAffectAO(false);
+        setInviteAoRole('redacteur');
         await loadInvitations(); // Recharger les invitations
       } else {
         setInviteError(result.error || 'Erreur lors de l\'invitation');
@@ -743,18 +774,67 @@ const MultiUserManagement: React.FC = () => {
                     placeholder="utilisateur@entreprise.com"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rôle</label>
-                  <select
-                    value={inviteFormData.role}
-                    onChange={(e) => setInviteFormData(prev => ({ ...prev, role: e.target.value as any }))}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    {invitableRoles.map(role => (
-                      <option key={role.id} value={role.id}>{role.name}</option>
-                    ))}
-                  </select>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Affectation</p>
+
+                  {/* Commercial */}
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={affectCommercial}
+                      onChange={(e) => setAffectCommercial(e.target.checked)}
+                      className="mt-1 h-4 w-4 accent-orange-600"
+                    />
+                    <span className="text-sm text-gray-700">
+                      <span className="font-medium">Commercial</span> — dashboard entreprise, pipeline, annonces
+                    </span>
+                  </label>
+                  {affectCommercial && (
+                    <div className="ml-6 mt-2 mb-3">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Rôle société</label>
+                      <select
+                        value={inviteFormData.role}
+                        onChange={(e) => setInviteFormData(prev => ({ ...prev, role: e.target.value as any }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      >
+                        {invitableRoles.map(role => (
+                          <option key={role.id} value={role.id}>{role.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Appels d'offres */}
+                  <label className="flex items-start gap-2 cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={affectAO}
+                      onChange={(e) => setAffectAO(e.target.checked)}
+                      className="mt-1 h-4 w-4 accent-orange-600"
+                    />
+                    <span className="text-sm text-gray-700">
+                      <span className="font-medium">Appels d’offres</span> — réponses aux AO (module Appels d’offres)
+                    </span>
+                  </label>
+                  {affectAO && (
+                    <div className="ml-6 mt-2">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Rôle Appels d’offres</label>
+                      <select
+                        value={inviteAoRole}
+                        onChange={(e) => setInviteAoRole(e.target.value as TenderRole)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      >
+                        {TENDER_ROLES.map((r) => (
+                          <option key={r} value={r}>{TENDER_ROLE_LABELS[r]}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">Appliqué automatiquement dès que la personne rejoint l’équipe.</p>
+                    </div>
+                  )}
+
+                  {!affectCommercial && !affectAO && (
+                    <p className="mt-2 text-xs text-red-600">Choisissez au moins une affectation.</p>
+                  )}
                 </div>
               </div>
               <div className="flex justify-end space-x-3 mt-6">
