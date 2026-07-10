@@ -91,6 +91,16 @@ function TempAccessPanel() {
 }
 
 export default function Register({ initialType }: RegisterProps) {
+  // Mode INVITÉ : la personne rejoint une équipe (jeton d'invitation mémorisé par
+  // la page d'acceptation). On simplifie alors l'inscription — ni choix
+  // d'abonnement (il hérite de celui de sa société), ni type de compte, email
+  // verrouillé — et on la renvoie vers l'acceptation après création du compte.
+  const inviteToken =
+    typeof localStorage !== 'undefined' ? localStorage.getItem('pendingInvitationToken') : null;
+  const inviteEmail =
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('pendingInvitationEmail') : null) || '';
+  const inviteMode = !!inviteToken;
+
   const [formData, setFormData] = useState<{
     accountType: '' | 'client' | 'seller';
     email: string;
@@ -108,9 +118,10 @@ export default function Register({ initialType }: RegisterProps) {
     country: string;
     city: string;
   }>({
-    accountType:
-      initialType === 'seller' || initialType === 'client' ? initialType : '',
-    email: '',
+    accountType: inviteMode
+      ? 'client'
+      : initialType === 'seller' || initialType === 'client' ? initialType : '',
+    email: inviteMode ? inviteEmail : '',
     password: '',
     confirmPassword: '',
     firstName: '',
@@ -235,7 +246,9 @@ export default function Register({ initialType }: RegisterProps) {
         });
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('selectedSubscription', formData.subscription);
-        window.location.hash = '#dashboard';
+        // Invité : on le renvoie finaliser son adhésion (il rejoint la société
+        // et hérite de son abonnement) ; sinon accès direct au tableau de bord.
+        window.location.hash = inviteMode ? '#accepter-invitation' : '#dashboard';
       } catch (err: unknown) {
         toast('Erreur lors de l\'inscription : ' + getErrorMessage(err));
       } finally {
@@ -391,11 +404,18 @@ export default function Register({ initialType }: RegisterProps) {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-bold mb-8 text-gray-900 text-center">
-          Créer votre compte
+        <h2 className="text-3xl font-bold mb-2 text-gray-900 text-center">
+          {inviteMode ? 'Rejoindre votre équipe' : 'Créer votre compte'}
         </h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {inviteMode ? (
+          <p className="mb-8 text-center text-sm text-gray-600 max-w-lg mx-auto">
+            Créez simplement votre accès personnel. Aucun abonnement à choisir : vous héritez de celui de votre société.
+          </p>
+        ) : (
+          <div className="mb-6" />
+        )}
+
+        <div className={inviteMode ? 'max-w-lg mx-auto' : 'grid grid-cols-1 lg:grid-cols-2 gap-8'}>
           {/* Formulaire d'inscription */}
           <div className="bg-white shadow-md rounded-lg p-8">
             <h3 className="text-xl font-semibold mb-6">Informations personnelles</h3>
@@ -444,9 +464,13 @@ export default function Register({ initialType }: RegisterProps) {
                   type="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full border rounded px-3 py-2"
+                  readOnly={inviteMode}
+                  className={`w-full border rounded px-3 py-2 ${inviteMode ? 'bg-gray-100 text-gray-600' : ''}`}
                   required
                 />
+                {inviteMode && (
+                  <p className="mt-1 text-xs text-gray-500">C'est l'adresse de votre invitation — elle ne peut pas être modifiée.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -474,29 +498,31 @@ export default function Register({ initialType }: RegisterProps) {
                 </div>
               </div>
 
-              <div className="flex gap-4 mt-4">
-                <span className="block text-sm text-gray-700">Type de compte *</span>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="accountType"
-                    value="client"
-                    checked={formData.accountType === 'client'}
-                    onChange={handleInputChange}
-                  />
-                  Client
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="accountType"
-                    value="seller"
-                    checked={formData.accountType === 'seller'}
-                    onChange={handleInputChange}
-                  />
-                  Revendeur
-                </label>
-              </div>
+              {!inviteMode && (
+                <div className="flex gap-4 mt-4">
+                  <span className="block text-sm text-gray-700">Type de compte *</span>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="accountType"
+                      value="client"
+                      checked={formData.accountType === 'client'}
+                      onChange={handleInputChange}
+                    />
+                    Client
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="accountType"
+                      value="seller"
+                      checked={formData.accountType === 'seller'}
+                      onChange={handleInputChange}
+                    />
+                    Revendeur
+                  </label>
+                </div>
+              )}
 
               {(formData.accountType === 'seller' || formData.subscription === 'enterprise') && (
                 <div className="mt-6 border-t pt-4 space-y-4">
@@ -592,8 +618,15 @@ export default function Register({ initialType }: RegisterProps) {
             </form>
           </div>
 
-          {/* Sélection d'abonnement */}
+          {/* Sélection d'abonnement (masquée pour un invité — il hérite du plan de sa société) */}
           <div className="bg-white shadow-md rounded-lg p-8">
+            {inviteMode && (
+              <p className="mb-4 text-sm text-gray-600">
+                Dernière étape : créez votre accès. Vous rejoindrez ensuite votre société automatiquement.
+              </p>
+            )}
+            {!inviteMode && (
+            <>
             <h3 className="text-xl font-semibold mb-6">Choisissez votre abonnement</h3>
             <div className="space-y-4">
               {subscriptionPlans.map((plan) => (
@@ -633,6 +666,8 @@ export default function Register({ initialType }: RegisterProps) {
                 </div>
               ))}
             </div>
+            </>
+            )}
 
             <button
               type="submit"
@@ -644,7 +679,7 @@ export default function Register({ initialType }: RegisterProps) {
               }}
               className="w-full mt-6 bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 font-semibold"
             >
-              {loading ? 'Création en cours...' : formData.subscription === 'gratuit' ? 'Créer mon compte gratuit' : `Continuer vers le paiement (${subscriptionPlans.find(p => p.id === formData.subscription)?.price})`}
+              {loading ? 'Création en cours...' : inviteMode ? 'Créer mon accès et rejoindre l’équipe' : formData.subscription === 'gratuit' ? 'Créer mon compte gratuit' : `Continuer vers le paiement (${subscriptionPlans.find(p => p.id === formData.subscription)?.price})`}
             </button>
           </div>
         </div>

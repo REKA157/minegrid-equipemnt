@@ -7,6 +7,7 @@ import { acceptInvitation } from '../utils/userManagement';
 // On mémorise le jeton : si la personne doit d'abord se connecter, elle le
 // retrouve en revenant sur cette page après authentification.
 const PENDING_TOKEN_KEY = 'pendingInvitationToken';
+const PENDING_EMAIL_KEY = 'pendingInvitationEmail';
 
 type AcceptState = 'checking' | 'need-auth' | 'accepting' | 'success' | 'error';
 
@@ -15,22 +16,26 @@ const AcceptInvitation: React.FC = () => {
   const { searchParams } = useRouteParams();
 
   const [token, setToken] = useState<string>('');
+  const [invitedEmail, setInvitedEmail] = useState<string>('');
   const [state, setState] = useState<AcceptState>('checking');
   const [message, setMessage] = useState<string>('');
   const [orgName, setOrgName] = useState<string>('');
   const attempted = useRef(false);
 
-  // 1) Récupérer le jeton (URL en priorité, sinon celui mémorisé).
+  // 1) Récupérer le jeton (URL en priorité, sinon celui mémorisé) + l'email invité.
   useEffect(() => {
     const fromUrl = searchParams.get('token');
     const t = fromUrl || localStorage.getItem(PENDING_TOKEN_KEY) || '';
     setToken(t);
-    if (t) {
-      try {
-        localStorage.setItem(PENDING_TOKEN_KEY, t);
-      } catch {
-        /* stockage indisponible : on continue avec le jeton en mémoire */
-      }
+    const emailFromUrl = searchParams.get('email');
+    const e = emailFromUrl || localStorage.getItem(PENDING_EMAIL_KEY) || '';
+    setInvitedEmail(e);
+    try {
+      if (t) localStorage.setItem(PENDING_TOKEN_KEY, t);
+      // On mémorise l'email pour pré-remplir l'inscription simplifiée d'un invité.
+      if (e) localStorage.setItem(PENDING_EMAIL_KEY, e);
+    } catch {
+      /* stockage indisponible : on continue avec les valeurs en mémoire */
     }
   }, [searchParams]);
 
@@ -55,6 +60,7 @@ const AcceptInvitation: React.FC = () => {
         setState('success');
         try {
           localStorage.removeItem(PENDING_TOKEN_KEY);
+          localStorage.removeItem(PENDING_EMAIL_KEY);
         } catch {
           /* ignore */
         }
@@ -86,8 +92,8 @@ const AcceptInvitation: React.FC = () => {
           <div className="mt-4">
             <p className="text-sm text-gray-600">
               Vous y êtes presque ! Connectez-vous (ou créez un compte) avec{' '}
-              <strong>l'adresse email qui a reçu cette invitation</strong>, puis rouvrez ce lien pour
-              rejoindre l'équipe.
+              <strong>{invitedEmail || "l'adresse email qui a reçu cette invitation"}</strong>, puis
+              rouvrez ce lien pour rejoindre l'équipe.
             </p>
             <div className="mt-6 flex flex-col gap-3">
               <button

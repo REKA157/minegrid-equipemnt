@@ -29,9 +29,12 @@ export interface CreateUserData {
  * Construit le lien d'invitation à partager (WhatsApp, email…). Le collègue
  * l'ouvre, se connecte avec l'email invité, puis rejoint la société.
  */
-export function buildInvitationLink(token: string): string {
+export function buildInvitationLink(token: string, email?: string): string {
   const base = `${window.location.origin}${window.location.pathname}`.replace(/\/+$/, '');
-  return `${base}/#accepter-invitation?token=${encodeURIComponent(token)}`;
+  // On joint l'email (déjà connu de l'invité) : la page d'acceptation le pré-remplit
+  // et l'inscription d'un invité s'affiche en mode simplifié.
+  const emailQ = email ? `&email=${encodeURIComponent(email)}` : '';
+  return `${base}/#accepter-invitation?token=${encodeURIComponent(token)}${emailQ}`;
 }
 
 /**
@@ -72,7 +75,7 @@ export async function inviteUser(
   if (!row?.token) {
     return { success: false, error: "L'invitation n'a pas pu être créée." };
   }
-  return { success: true, invitationId: row.id, link: buildInvitationLink(row.token) };
+  return { success: true, invitationId: row.id, link: buildInvitationLink(row.token, email) };
 }
 
 /** Liste les invitations de la société (RLS : réservé aux admins de la société). */
