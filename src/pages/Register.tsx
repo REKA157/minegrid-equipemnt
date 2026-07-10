@@ -408,9 +408,29 @@ export default function Register({ initialType }: RegisterProps) {
           {inviteMode ? 'Rejoindre votre équipe' : 'Créer votre compte'}
         </h2>
         {inviteMode ? (
-          <p className="mb-8 text-center text-sm text-gray-600 max-w-lg mx-auto">
-            Créez simplement votre accès personnel. Aucun abonnement à choisir : vous héritez de celui de votre société.
-          </p>
+          <div className="mb-8 max-w-lg mx-auto text-center">
+            <p className="text-sm text-gray-600">
+              Créez simplement votre accès personnel. Aucun abonnement à choisir : vous héritez de celui de votre société.
+            </p>
+            <p className="mt-2 text-xs text-gray-400">
+              Vous n'avez pas d'invitation ?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem('pendingInvitationToken');
+                    localStorage.removeItem('pendingInvitationEmail');
+                  } catch {
+                    /* stockage indisponible */
+                  }
+                  window.location.reload();
+                }}
+                className="underline hover:text-gray-600"
+              >
+                Faire une inscription normale
+              </button>
+            </p>
+          </div>
         ) : (
           <div className="mb-6" />
         )}
@@ -464,12 +484,11 @@ export default function Register({ initialType }: RegisterProps) {
                   type="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  readOnly={inviteMode}
-                  className={`w-full border rounded px-3 py-2 ${inviteMode ? 'bg-gray-100 text-gray-600' : ''}`}
+                  className="w-full border rounded px-3 py-2"
                   required
                 />
                 {inviteMode && (
-                  <p className="mt-1 text-xs text-gray-500">C'est l'adresse de votre invitation — elle ne peut pas être modifiée.</p>
+                  <p className="mt-1 text-xs text-gray-500">Utilisez bien l'adresse de votre invitation, sinon l'invitation sera refusée.</p>
                 )}
               </div>
 
