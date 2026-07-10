@@ -167,8 +167,9 @@ const COMMERCIAL_SCOPE_PAGES = new Set([
 ]);
 const TENDERS_SCOPE_PAGES = new Set(['appels-offres']);
 // Pages réservées au PROPRIÉTAIRE du compte (pas aux membres invités) :
-// l'espace vendeur personnel et la gestion d'équipe.
-const OWNER_ONLY_PAGES = new Set(['dashboard', 'multi-user-management']);
+// espace vendeur personnel, gestion d'équipe, et publication d'annonces
+// (le contenu/les annonces de la société sont gérés par le titulaire).
+const OWNER_ONLY_PAGES = new Set(['dashboard', 'multi-user-management', 'publication']);
 
 /** Redirige en douceur vers l'espace autorisé quand l'affectation ne couvre pas la page. */
 const ScopeRedirect: React.FC<{ to: string; message: string }> = ({ to, message }) => {

@@ -1258,7 +1258,7 @@ export default function PublicationRapide() {
                     <button
                       type="button"
                       disabled={aiWriting}
-                      className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300"
+                      className="px-3 py-1 text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded hover:from-violet-700 hover:to-fuchsia-700 disabled:opacity-50"
                       onClick={async () => {
                         if (!formData.brand || !formData.model) { toast('Renseignez la marque et le modèle'); return; }
                         setAiWriting(true);
