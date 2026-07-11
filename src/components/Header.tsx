@@ -5,6 +5,7 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useMemberScope } from '../hooks/useMemberScope';
 import { isInvitedMember } from '../utils/api/memberScope';
 import { hasEnterprise } from '../utils/api/subscription';
+import { recordSessionLogout } from '../utils/api/sessions';
 import { trackEvent } from '../utils/analytics';
 import {
   Search,
@@ -502,6 +503,7 @@ const Header = () => {
                     )}
                     <button
                       onClick={async () => {
+                        await recordSessionLogout();
                         await supabaseClient.auth.signOut();
                         window.location.hash = '#';
                       }}
@@ -681,6 +683,7 @@ const Header = () => {
                 <button
                   type="button"
                   onClick={async () => {
+                    await recordSessionLogout();
                     await supabaseClient.auth.signOut();
                     closeMobileMenu();
                     window.location.hash = '#';

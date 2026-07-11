@@ -46,6 +46,7 @@ import {
   addPendingMemberScope, getPendingMemberScope, removePendingMemberScope,
 } from '../utils/pendingTenderRoles';
 import { setMemberScope, type MemberScope } from '../utils/api/memberScope';
+import { getMemberSessions, getOrgSessionStats, type MemberSession } from '../utils/api/sessions';
 import supabaseClient from '../utils/supabaseClient';
 import InfoTooltip, { type WidgetExplanation } from '../components/common/InfoTooltip';
 
@@ -116,6 +117,45 @@ function orgMemberToTeamMember(m: OrgMember): TeamMember {
   };
 }
 
+/** Format court « 09/07/2026 14:32 ». */
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/** Durée lisible entre connexion et déconnexion (session fermée uniquement). */
+function fmtDuration(login: string, logout: string): string {
+  const ms = new Date(logout).getTime() - new Date(login).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "moins d'une minute";
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+/** Appareil/navigateur résumé depuis le user-agent (best-effort, lisible). */
+function shortDevice(ua: string | null): string {
+  if (!ua) return 'Appareil inconnu';
+  let os = '';
+  if (/Windows/i.test(ua)) os = 'Windows';
+  else if (/Mac OS X|Macintosh/i.test(ua)) os = 'Mac';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/iPhone|iPad|iOS/i.test(ua)) os = 'iOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+  let br = '';
+  if (/Edg\//i.test(ua)) br = 'Edge';
+  else if (/OPR\/|Opera/i.test(ua)) br = 'Opera';
+  else if (/Chrome\//i.test(ua)) br = 'Chrome';
+  else if (/Firefox\//i.test(ua)) br = 'Firefox';
+  else if (/Safari\//i.test(ua)) br = 'Safari';
+  const label = [br, os].filter(Boolean).join(' · ');
+  return label || 'Appareil inconnu';
+}
+
 const MultiUserManagement: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -151,6 +191,13 @@ const MultiUserManagement: React.FC = () => {
   // Membres réels de la société (chargés depuis get_org_members).
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
+
+  // Historique des sessions (connexion/déconnexion) par membre — chargé à la demande.
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [sessionsByMember, setSessionsByMember] = useState<Record<string, MemberSession[]>>({});
+  const [sessionsLoading, setSessionsLoading] = useState<Record<string, boolean>>({});
+  // Nombre de membres connectés aujourd'hui (carte statistique) — null tant que non chargé.
+  const [connectedToday, setConnectedToday] = useState<number | null>(null);
 
   const roles = [
     { id: 'owner', name: 'Propriétaire', color: 'bg-orange-100 text-orange-800', icon: <Crown className="h-4 w-4" /> },
@@ -238,6 +285,35 @@ const MultiUserManagement: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  // Statistique « connectés aujourd'hui » (serveur, réservé aux admins/owner).
+  useEffect(() => {
+    let cancelled = false;
+    getOrgSessionStats().then((n) => {
+      if (!cancelled) setConnectedToday(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Déplie/replie l'historique des sessions d'un membre (chargé à la première ouverture).
+  const toggleMemberHistory = async (memberId: string) => {
+    if (expandedMemberId === memberId) {
+      setExpandedMemberId(null);
+      return;
+    }
+    setExpandedMemberId(memberId);
+    if (!sessionsByMember[memberId]) {
+      setSessionsLoading((s) => ({ ...s, [memberId]: true }));
+      try {
+        const rows = await getMemberSessions(memberId, 50);
+        setSessionsByMember((s) => ({ ...s, [memberId]: rows }));
+      } finally {
+        setSessionsLoading((s) => ({ ...s, [memberId]: false }));
+      }
+    }
+  };
 
   const getRoleInfo = (roleId: string) => {
     return roles.find(role => role.id === roleId) || roles[3];
@@ -507,7 +583,9 @@ const MultiUserManagement: React.FC = () => {
               <Activity className="h-8 w-8 text-orange-600 mr-3" />
               <div>
                 <p className="text-sm text-gray-600">Connectés aujourd'hui</p>
-                <p className="text-2xl font-bold text-gray-900">3</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {connectedToday ?? '—'}
+                </p>
               </div>
             </div>
           </div>
@@ -617,6 +695,18 @@ const MultiUserManagement: React.FC = () => {
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
+                          onClick={() => toggleMemberHistory(member.id)}
+                          className={`p-2 transition-colors ${
+                            expandedMemberId === member.id
+                              ? 'text-orange-600'
+                              : 'text-gray-400 hover:text-orange-600'
+                          }`}
+                          title="Voir l'historique des connexions"
+                          aria-label="Voir l'historique des connexions"
+                        >
+                          <Clock className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => {
                             setSelectedMember(member);
                             setShowEditModal(true);
@@ -636,6 +726,64 @@ const MultiUserManagement: React.FC = () => {
                     <div className="mt-3 text-sm text-gray-600">
                       <span>Dernière connexion : {member.lastLogin}</span>
                     </div>
+                    {expandedMemberId === member.id && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700">
+                          <Clock className="h-4 w-4 text-orange-600" />
+                          Historique des connexions
+                        </div>
+                        {sessionsLoading[member.id] ? (
+                          <p className="text-sm text-gray-500">Chargement de l'historique…</p>
+                        ) : (sessionsByMember[member.id]?.length ?? 0) === 0 ? (
+                          <p className="text-sm text-gray-500">
+                            Aucune session enregistrée pour le moment. L'historique se
+                            remplit à partir des prochaines connexions.
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead>
+                                <tr className="text-left text-xs uppercase text-gray-400">
+                                  <th className="py-1 pr-4 font-medium">Connexion</th>
+                                  <th className="py-1 pr-4 font-medium">Déconnexion</th>
+                                  <th className="py-1 pr-4 font-medium">Durée</th>
+                                  <th className="py-1 font-medium">Appareil</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-gray-700">
+                                {sessionsByMember[member.id]!.map((s) => (
+                                  <tr key={s.id} className="border-t border-gray-50">
+                                    <td className="py-1.5 pr-4 whitespace-nowrap">
+                                      {fmtDateTime(s.login_at)}
+                                    </td>
+                                    <td className="py-1.5 pr-4 whitespace-nowrap">
+                                      {s.logout_at ? (
+                                        fmtDateTime(s.logout_at)
+                                      ) : (
+                                        <span className="text-gray-400">—</span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 pr-4 whitespace-nowrap">
+                                      {s.logout_at ? (
+                                        fmtDuration(s.login_at, s.logout_at)
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 text-green-600">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                          en cours
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 text-gray-500">
+                                      {shortDevice(s.user_agent)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

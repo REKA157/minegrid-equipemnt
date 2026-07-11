@@ -1,5 +1,6 @@
 import type { RegisterData } from './types';
 import supabase from '../supabaseClient';
+import { recordSessionLogout } from './sessions';
 
 // -------------------- AUTH --------------------
 
@@ -37,6 +38,8 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function logoutUser() {
+  // Enregistre la déconnexion AVANT signOut (après, auth.uid() est null).
+  await recordSessionLogout();
   await supabase.auth.signOut();
 }
 

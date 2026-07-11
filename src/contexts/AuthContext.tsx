@@ -8,6 +8,7 @@ import React, {
 import type { AuthChangeEvent, Session, User } from '@supabase/auth-js';
 import supabaseClient from '../utils/supabaseClient';
 import { migrateLegacyKeysForUser } from '../utils/accountLocalStorage';
+import { recordSessionLogin } from '../utils/api/sessions';
 
 /**
  * Contexte d'authentification global.
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
     const { data: listener } = supabaseClient.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
+      (event: AuthChangeEvent, session: Session | null) => {
         if (mountedRef.current) {
           const u = session?.user ?? null;
           if (u?.id) {
@@ -74,6 +75,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
           setUser(u);
+        }
+        // Historique des sessions : n'enregistrer la connexion que sur un VRAI
+        // SIGNED_IN — surtout pas sur TOKEN_REFRESHED / INITIAL_SESSION, sinon
+        // une « connexion » fantôme serait créée à chaque refresh de token.
+        // Best-effort : n'interrompt jamais le flux d'auth.
+        if (event === 'SIGNED_IN' && session?.user?.id) {
+          void recordSessionLogin(session.user.id);
         }
       },
     );
