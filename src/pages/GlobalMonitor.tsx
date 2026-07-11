@@ -15,6 +15,7 @@ import {
   fetchProjects,
   fetchProjectDetail,
   fetchProjectAnalysisCompare,
+  ADMIN_SOURCES_ENABLED,
   type ProjectAnalysisCompare,
 } from '../services/monitorApi';
 import { normalizeBudget as normalizeBudgetUtil } from '../utils/globalMonitorCoverage';
@@ -418,9 +419,11 @@ export default function GlobalMonitor() {
             <button onClick={handleRefresh} disabled={refreshing} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
-            <a href="#admin-sources" className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500" title="Catalogue de sources">
-              <Settings2 className="h-4 w-4" />
-            </a>
+            {ADMIN_SOURCES_ENABLED && (
+              <a href="#admin-sources" className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500" title="Catalogue de sources (admin interne)">
+                <Settings2 className="h-4 w-4" />
+              </a>
+            )}
           </div>
         </div>
       </div>

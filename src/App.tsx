@@ -29,6 +29,7 @@ import FinancingRequest from './pages/FinancingRequest';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireSubscription from './components/RequireSubscription';
 import type { SubscriptionType } from './utils/api/subscription';
+import { ADMIN_SOURCES_ENABLED } from './services/monitorApi';
 
 const PageLoader = () => (
   <div className="flex flex-col items-center justify-center min-h-[45vh] gap-3 text-gray-600">
@@ -439,7 +440,17 @@ function AppContent() {
           </ProtectedRoute>
         );
 
+      // Outil INTERNE : disponible seulement dans un build interne (jeton admin
+      // configuré). Dans le build public, la route est inaccessible.
       case 'admin-sources':
+        if (!ADMIN_SOURCES_ENABLED) {
+          return (
+            <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 p-8 text-center text-gray-500">
+              <p>Cet outil est réservé à l'administration interne.</p>
+              <a href="#" className="text-orange-600 hover:underline">Retour à l'accueil</a>
+            </div>
+          );
+        }
         return (
           <ProtectedRoute>
             <SourcesAdmin />

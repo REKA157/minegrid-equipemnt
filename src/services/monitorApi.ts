@@ -12,6 +12,15 @@ const BASE_URL = import.meta.env.VITE_MONITOR_API_URL || 'http://localhost:8000'
 const ADMIN_TOKEN = String(import.meta.env.VITE_MONITOR_ADMIN_TOKEN ?? '').trim();
 const hasConfiguredAdminToken = ADMIN_TOKEN.length > 0;
 
+/**
+ * Outil INTERNE #admin-sources (catalogue de sources + robots d'import) : disponible
+ * UNIQUEMENT si un jeton admin est configuré au build. Le build public garde
+ * `VITE_MONITOR_ADMIN_TOKEN` vide (.env.production) -> l'outil et son lien sont
+ * masqués et la route est inaccessible. Un build interne (jeton défini, servi sur
+ * un hôte non public) le réactive.
+ */
+export const ADMIN_SOURCES_ENABLED = hasConfiguredAdminToken;
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data } = await supabaseClient.auth.getSession();
   const token = data.session?.access_token;
