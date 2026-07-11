@@ -16,10 +16,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data } = await supabaseClient.auth.getSession();
   const token = data.session?.access_token;
 
+  // Le jeton admin n'est PAS diffusé sur toutes les requêtes : il n'est ajouté
+  // qu'aux appels /admin/* (via adminHeaders()). Les lectures publiques du monitor
+  // (/projects…) n'exigent que le JWT Supabase de l'utilisateur.
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(hasConfiguredAdminToken ? { 'X-Admin-Token': ADMIN_TOKEN } : {}),
   };
   return headers;
 }

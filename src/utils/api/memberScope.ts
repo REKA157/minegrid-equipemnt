@@ -16,10 +16,15 @@ export interface MemberScope {
    *  Optionnel : les affectations d'AUTRES membres (MultiUserManagement) n'ont
    *  pas ce champ. */
   role?: string | null;
+  /** true si l'affectation ET le rôle ont été CONFIRMÉS par le serveur (et non un
+   *  défaut de chargement/erreur réseau). Un résultat non confirmé n'est PAS mis
+   *  en cache : on retente à la navigation suivante, pour ne pas figer un
+   *  fail-open (ex. un invité dont get_org_members a échoué une fois). */
+  roleKnown?: boolean;
 }
 
 /** Défaut « accès à tout » : aucun blocage (membre sans affectation explicite, hors ligne, ou erreur). */
-export const FULL_SCOPE: MemberScope = { commercial: true, tenders: true, role: null };
+export const FULL_SCOPE: MemberScope = { commercial: true, tenders: true, role: null, roleKnown: false };
 
 /** true = membre INVITÉ (dans une société, mais pas le propriétaire). */
 export function isInvitedMember(scope: MemberScope): boolean {
@@ -35,41 +40,64 @@ export function invalidateMemberScopeCache(): void {
   scopeCache = null;
 }
 
-async function fetchScope(): Promise<{ commercial: boolean; tenders: boolean }> {
+async function fetchScope(): Promise<{ commercial: boolean; tenders: boolean; known: boolean }> {
   try {
     const { data, error } = await supabase.rpc('get_my_member_scope');
-    if (error) return { commercial: true, tenders: true };
+    if (error) return { commercial: true, tenders: true, known: false };
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row) return { commercial: true, tenders: true };
+    if (!row) return { commercial: true, tenders: true, known: true };
     // On ne restreint QUE sur un `false` explicite ; tout le reste = accès.
-    return { commercial: row.commercial !== false, tenders: row.tenders !== false };
+    return { commercial: row.commercial !== false, tenders: row.tenders !== false, known: true };
   } catch {
-    return { commercial: true, tenders: true };
+    return { commercial: true, tenders: true, known: false };
   }
 }
 
-/** Rôle société de l'appelant, déduit de get_org_members (déjà déployée). */
-async function fetchMyRole(): Promise<string | null> {
+/**
+ * Rôle société de l'appelant, déduit de get_org_members (déjà déployée).
+ * `known=false` = la détection a ÉCHOUÉ (réseau/RPC) — à distinguer de `role=null`
+ * confirmé (compte sans société). On ne veut PAS traiter une erreur comme
+ * « owner/compte perso » ni la mémoriser.
+ */
+async function fetchMyRole(): Promise<{ role: string | null; known: boolean }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) return { role: null, known: true }; // pas de session = pas de rôle, confirmé
     const { data, error } = await supabase.rpc('get_org_members');
-    if (error) return null;
+    if (error) return { role: null, known: false };
     const rows = (data as Array<{ user_id: string; role: string }>) || [];
-    return rows.find((r) => r.user_id === user.id)?.role ?? null;
+    return { role: rows.find((r) => r.user_id === user.id)?.role ?? null, known: true };
   } catch {
-    return null;
+    return { role: null, known: false };
   }
 }
 
 async function fetchMyMemberScope(): Promise<MemberScope> {
-  const [scope, role] = await Promise.all([fetchScope(), fetchMyRole()]);
-  return { ...scope, role };
+  const [scope, roleRes] = await Promise.all([fetchScope(), fetchMyRole()]);
+  return {
+    commercial: scope.commercial,
+    tenders: scope.tenders,
+    role: roleRes.role,
+    roleKnown: scope.known && roleRes.known,
+  };
 }
 
-/** Affectation de l'utilisateur connecté (défaut : accès aux deux). Mise en cache. */
+/** Affectation de l'utilisateur connecté (défaut : accès aux deux). Mise en cache
+ *  UNIQUEMENT si le résultat est confirmé — un échec réseau/RPC n'est pas mémorisé. */
 export async function getMyMemberScope(): Promise<MemberScope> {
-  if (!scopeCache) scopeCache = fetchMyMemberScope();
+  if (!scopeCache) {
+    const pending = fetchMyMemberScope();
+    scopeCache = pending;
+    // Ne pas figer un résultat NON confirmé (erreur) : on autorise un nouvel essai
+    // à la navigation suivante au lieu de bloquer sur un fail-open toute la session.
+    pending
+      .then((s) => {
+        if (!s.roleKnown) scopeCache = null;
+      })
+      .catch(() => {
+        scopeCache = null;
+      });
+  }
   return scopeCache;
 }
 

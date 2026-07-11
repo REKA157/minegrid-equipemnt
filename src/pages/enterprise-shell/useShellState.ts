@@ -212,8 +212,13 @@ export function useShellState(options: UseShellStateOptions) {
   const catalogKey = widgetsCatalogKey(widgetsSource);
 
   const persistLocalAndCloud = useCallback((r: string, cfg: ShellDashboardConfig) => {
+    // Horodate à CHAQUE persistance (y compris auto-save drag/ajout/suppression),
+    // pas seulement au bouton « Enregistrer » : sinon pickNewerDashboardConfig
+    // compare des timestamps périmés et une édition auto-sauvegardée peut PERDRE
+    // face à un ancien Enregistrer explicite (perte silencieuse en multi-appareils).
+    const stamped: ShellDashboardConfig = { ...cfg, lastSaved: new Date().toISOString() };
     try {
-      localStorage.setItem(cfgStorageKey(storageUserId, r), JSON.stringify(cfg));
+      localStorage.setItem(cfgStorageKey(storageUserId, r), JSON.stringify(stamped));
     } catch {
       /* storage indisponible */
     }
@@ -225,7 +230,7 @@ export function useShellState(options: UseShellStateOptions) {
           const { data: sessionData } = await supabase.auth.getSession();
           const uid = sessionData?.session?.user?.id;
           if (!uid) return;
-          const res = await upsertEnterpriseDashboardConfig(uid, r, cfg);
+          const res = await upsertEnterpriseDashboardConfig(uid, r, stamped);
           if (!res.ok && res.error) {
             logger.warn(`[enterpriseDashboard:${r}] synchro nuage`, res.error);
           }

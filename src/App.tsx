@@ -203,35 +203,51 @@ function AppContent() {
 
     // Garde d'AFFECTATION : un membre est redirigé hors des espaces auxquels il
     // n'est pas affecté (Commercial vs Appels d'offres). Défaut = accès à tout,
-    // donc aucun impact tant que l'admin n'a rien restreint. On ne redirige
-    // jamais pendant le chargement de l'affectation.
-    if (!scopeLoading) {
+    // donc aucun impact tant que l'admin n'a rien restreint.
+    {
       const p = pathParts[0] ?? '';
-      if (COMMERCIAL_SCOPE_PAGES.has(p) && !scope.commercial) {
+      const isScopeGated =
+        COMMERCIAL_SCOPE_PAGES.has(p) || TENDERS_SCOPE_PAGES.has(p) || OWNER_ONLY_PAGES.has(p);
+
+      // Tant que l'affectation charge, on NE REND PAS une page scope-gardée : on
+      // affiche un loader au lieu de rendre l'espace réservé puis de rediriger
+      // (sinon « flash » de contenu réservé au cold-load). Les pages publiques
+      // ne sont pas concernées et restent instantanées.
+      if (scopeLoading && isScopeGated) {
         return (
-          <ScopeRedirect
-            to="appels-offres"
-            message="Votre affectation ne couvre pas l'espace commercial — redirection vers les Appels d'offres…"
-          />
+          <div className="min-h-[60vh] flex items-center justify-center text-gray-500">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-orange-500" />
+          </div>
         );
       }
-      if (TENDERS_SCOPE_PAGES.has(p) && !scope.tenders) {
-        return (
-          <ScopeRedirect
-            to="dashboard"
-            message="Votre affectation ne couvre pas les Appels d'offres — redirection vers votre espace…"
-          />
-        );
-      }
-      // Pages du propriétaire (espace vendeur perso, gestion d'équipe) : un
-      // membre invité y est redirigé vers son espace de travail.
-      if (OWNER_ONLY_PAGES.has(p) && isInvitedMember(scope)) {
-        return (
-          <ScopeRedirect
-            to={scope.commercial ? 'dashboard-entreprise-display' : 'appels-offres'}
-            message="Cette page est réservée au propriétaire du compte — redirection vers votre espace…"
-          />
-        );
+
+      if (!scopeLoading) {
+        if (COMMERCIAL_SCOPE_PAGES.has(p) && !scope.commercial) {
+          return (
+            <ScopeRedirect
+              to="appels-offres"
+              message="Votre affectation ne couvre pas l'espace commercial — redirection vers les Appels d'offres…"
+            />
+          );
+        }
+        if (TENDERS_SCOPE_PAGES.has(p) && !scope.tenders) {
+          return (
+            <ScopeRedirect
+              to="dashboard"
+              message="Votre affectation ne couvre pas les Appels d'offres — redirection vers votre espace…"
+            />
+          );
+        }
+        // Pages du propriétaire (espace vendeur perso, gestion d'équipe) : un
+        // membre invité y est redirigé vers son espace de travail.
+        if (OWNER_ONLY_PAGES.has(p) && isInvitedMember(scope)) {
+          return (
+            <ScopeRedirect
+              to={scope.commercial ? 'dashboard-entreprise-display' : 'appels-offres'}
+              message="Cette page est réservée au propriétaire du compte — redirection vers votre espace…"
+            />
+          );
+        }
       }
     }
 
@@ -364,16 +380,32 @@ function AppContent() {
         return <PublicationRapide />;
 
       case 'devis':
-        return <DevisGenerator />;
+        return (
+          <ProtectedRoute>
+            <DevisGenerator />
+          </ProtectedRoute>
+        );
 
       case 'documents':
-        return <DocumentsEspace />;
+        return (
+          <ProtectedRoute>
+            <DocumentsEspace />
+          </ProtectedRoute>
+        );
 
       case 'messages':
-        return <MessagesBoite />;
+        return (
+          <ProtectedRoute>
+            <MessagesBoite />
+          </ProtectedRoute>
+        );
 
       case 'planning':
-        return <PlanningPro />;
+        return (
+          <ProtectedRoute>
+            <PlanningPro />
+          </ProtectedRoute>
+        );
 
       case 'api-docs':
         return paidRoute('pro', <ApiDocs />);
