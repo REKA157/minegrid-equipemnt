@@ -1,19 +1,35 @@
 -- =====================================================================
--- Phase G — RLS `documents` : documents PRIVÉS (chacun les siens)
+-- Phase G — Table `documents` (si absente) + RLS : documents PRIVÉS
 -- =====================================================================
--- La table `documents` (espace documents perso, DocumentsEspace) était lue avec
--- .eq('user_id',…) mais SUPPRIMÉE par id seul : sans RLS, un utilisateur pouvait
--- LIRE et SUPPRIMER les documents d'un AUTRE via l'API directe.
+-- La table `documents` (espace documents perso, DocumentsEspace) n'existait pas
+-- sur la base. On la CRÉE (colonnes alignées sur DocumentsEspace) et on pose une
+-- RLS PRIVÉE (chacun ne voit/écrit QUE les siens).
 --
--- APRÈS (documents = PRIVÉS, pas de lecture publique) :
 --   - SELECT / UPDATE / DELETE réservés au propriétaire (user_id = auth.uid()) ;
 --   - INSERT authentifié + trigger FORCE user_id = auth.uid().
--- NB : DocumentsTab (Espace Pro) utilise le BUCKET Storage `documents`, pas la
---      table `public.documents` — non impacté.
---
--- DÉFENSIF : si la table `public.documents` n'existe pas, la migration ne fait
--- RIEN (au lieu de planter). Idempotent.
+-- NB : DocumentsTab (Espace Pro) utilise le BUCKET Storage `documents`, pas cette
+--      table — non impacté.
+-- Idempotent.
 -- =====================================================================
+
+create table if not exists public.documents (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid,
+  name        text,
+  type        text,
+  category    text,
+  file_url    text,
+  file_size   bigint,
+  uploaded_at timestamptz not null default now(),
+  uploaded_by text,
+  description text,
+  tags        text[] default '{}',
+  status      text default 'active'
+);
+
+create index if not exists documents_user_id_idx on public.documents (user_id);
+
+grant select, insert, update, delete on public.documents to authenticated;
 
 create or replace function public.documents_force_owner_fn()
 returns trigger
@@ -27,35 +43,36 @@ begin
 end;
 $$;
 
+alter table public.documents enable row level security;
+
 do $$
 declare pol record;
 begin
-  if to_regclass('public.documents') is null then
-    raise notice 'Table public.documents absente — RLS documents ignorée (rien à sécuriser).';
-    return;
-  end if;
-
-  execute 'alter table public.documents enable row level security';
-
   for pol in
-    select policyname from pg_policies
-    where schemaname = 'public' and tablename = 'documents'
+    select policyname from pg_policies where schemaname = 'public' and tablename = 'documents'
   loop
     execute format('drop policy if exists %I on public.documents', pol.policyname);
   end loop;
-
-  execute 'drop trigger if exists trg_documents_force_owner on public.documents';
-  execute 'create trigger trg_documents_force_owner before insert on public.documents '
-       || 'for each row execute function public.documents_force_owner_fn()';
-
-  execute 'create policy documents_select_own on public.documents for select to authenticated '
-       || 'using (user_id = auth.uid())';
-  execute 'create policy documents_insert_own on public.documents for insert to authenticated '
-       || 'with check (auth.uid() is not null and user_id = auth.uid())';
-  execute 'create policy documents_update_own on public.documents for update to authenticated '
-       || 'using (user_id = auth.uid()) with check (user_id = auth.uid())';
-  execute 'create policy documents_delete_own on public.documents for delete to authenticated '
-       || 'using (user_id = auth.uid())';
-
-  raise notice 'RLS documents appliquée (documents privés).';
 end $$;
+
+drop trigger if exists trg_documents_force_owner on public.documents;
+create trigger trg_documents_force_owner
+  before insert on public.documents
+  for each row execute function public.documents_force_owner_fn();
+
+create policy documents_select_own on public.documents
+  for select to authenticated
+  using (user_id = auth.uid());
+
+create policy documents_insert_own on public.documents
+  for insert to authenticated
+  with check (auth.uid() is not null and user_id = auth.uid());
+
+create policy documents_update_own on public.documents
+  for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create policy documents_delete_own on public.documents
+  for delete to authenticated
+  using (user_id = auth.uid());

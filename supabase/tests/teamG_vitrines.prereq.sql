@@ -1,5 +1,7 @@
 -- =====================================================================
--- PREREQ pour prouver la RLS `vitrines` sur une base jetable.
+-- PREREQ pour prouver la migration `vitrines` (création + RLS) sur base jetable.
+-- La migration crée la table + les grants + la RLS ; ici on ne pose QUE le
+-- minimum Supabase (rôles + stub auth.uid()).
 --
 -- EXÉCUTION (Docker Postgres) :
 --   docker run -d --rm --name pgvit -e POSTGRES_PASSWORD=x -e POSTGRES_DB=test postgres:16-alpine
@@ -7,7 +9,6 @@
 --       supabase/migrations/20260711120000_teamG_vitrines_rls.sql \
 --       supabase/tests/teamG_vitrines.countercases.sql \
 --     | docker exec -i pgvit psql -U postgres -d test -v ON_ERROR_STOP=1
---   docker stop pgvit
 -- Attendu : « TOUS LES CONTRE-CAS PASSES », exit 0.
 -- =====================================================================
 
@@ -24,17 +25,6 @@ create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('test.uid', true), '')::uuid
 $$;
 
--- Table vitrines minimale (colonnes utiles au test ; user_id = propriétaire).
-create table if not exists public.vitrines (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid,
-  company_name text,
-  updated_at   timestamptz not null default now()
-);
-
 grant usage on schema public, auth to authenticated, anon, service_role;
 grant execute on function auth.uid() to authenticated, anon, service_role;
--- Grants « façon Supabase » : les rôles ont les privilèges table, la RLS est le
--- VRAI garde (on prouve donc bien la RLS, pas un simple GRANT).
-grant select, insert, update, delete on public.vitrines to authenticated;
-grant select on public.vitrines to anon;
+-- La table `vitrines` et ses grants sont créés par la MIGRATION.
