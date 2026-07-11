@@ -8,6 +8,8 @@ import { apiCall, showNotification, sendMessage, exportData } from '../../../ser
 import { RealStockService, RealEquipment, RealPromotion, StockInsight } from '../../../services/realStockService';
 import { supabaseClient } from '../../../utils/supabaseClient';
 import { MACHINE_LIST_COLUMNS, SELLER_MACHINES_MAX_ROWS } from '../../../constants/machineQueryFields';
+import { useMemberScope } from '../../../hooks/useMemberScope';
+import { isInvitedMember } from '../../../utils/api/memberScope';
 import { logger } from '../../../utils/logger';
 import {
   buildLeadStockSuggestions,
@@ -306,6 +308,9 @@ const StockStatusWidget = () => {
   // aucune machine de démonstration. Liste vide -> état vide honnête.
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  // Affectation : les actions d'écriture (photo, offre flash, promo) sont
+  // réservées au propriétaire ; un membre invité est en consultation.
+  const { scope: memberScope } = useMemberScope();
   const [selectedCategory, setSelectedCategory] = useState('Toutes');
   const [selectedAnciennete, setSelectedAnciennete] = useState('Toutes');
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -772,6 +777,12 @@ const StockStatusWidget = () => {
     equipment?: Equipment,
     e?: React.MouseEvent<HTMLButtonElement>
   ) => {
+    // Actions d'écriture de contenu société réservées au propriétaire.
+    const WRITE_ACTIONS = new Set(['add-equipment', 'create-flash-offer', 'add-photo', 'send-promotion']);
+    if (WRITE_ACTIONS.has(action) && isInvitedMember(memberScope)) {
+      showNotification('info', 'Action réservée au propriétaire du compte.');
+      return;
+    }
     // Feedback visuel immédiat
     const button = e?.currentTarget;
     if (button) {
