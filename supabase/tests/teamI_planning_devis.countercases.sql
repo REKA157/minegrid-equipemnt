@@ -96,8 +96,8 @@ end $$;
 set role authenticated;
 set test.uid = '00000000-0000-0000-0000-0000000000a1';
 do $$ declare n int; begin
-  insert into public.devis (id, user_id, client, total)
-  values ('d1000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a1', 'Client A', 1000);
+  insert into public.devis (id, user_id, notes, total)
+  values ('d1000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a1', 'Devis A', 1000);
   select count(*) into n from public.devis where id = 'd1000000-0000-0000-0000-0000000000a1';
   if n <> 1 then raise exception 'DV1 ECHEC: A ne voit pas son propre devis (n=%)', n; end if;
   raise notice 'OK DV1: A cree et voit son devis';
@@ -109,7 +109,7 @@ set role authenticated;
 set test.uid = '00000000-0000-0000-0000-0000000000a1';
 do $$ begin
   begin
-    insert into public.devis (user_id, client, total)
+    insert into public.devis (user_id, notes, total)
     values ('00000000-0000-0000-0000-0000000000b1', 'usurpation', 1);
     raise exception 'DV2 ECHEC: A a pu inserer un devis au nom de B';
   exception when others then
@@ -133,15 +133,15 @@ reset role;
 set role authenticated;
 set test.uid = '00000000-0000-0000-0000-0000000000b1';
 do $$ declare n int; begin
-  update public.devis set client = 'PIRATE' where id = 'd1000000-0000-0000-0000-0000000000a1';
+  update public.devis set notes = 'PIRATE' where id = 'd1000000-0000-0000-0000-0000000000a1';
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'DV4 FUITE: B a modifie % devis de A par id', n; end if;
   raise notice 'OK DV4: B ne peut pas modifier le devis de A par id';
 end $$;
 reset role;
-do $$ declare v_client text; begin
-  select client into v_client from public.devis where id = 'd1000000-0000-0000-0000-0000000000a1';
-  if v_client = 'PIRATE' then raise exception 'DV4 FUITE: le devis de A a ete altere'; end if;
+do $$ declare v_notes text; begin
+  select notes into v_notes from public.devis where id = 'd1000000-0000-0000-0000-0000000000a1';
+  if v_notes = 'PIRATE' then raise exception 'DV4 FUITE: le devis de A a ete altere'; end if;
 end $$;
 
 -- CONTRE-CAS 5 (LA FAILLE) : B ne peut PAS supprimer le devis de A par id seul.

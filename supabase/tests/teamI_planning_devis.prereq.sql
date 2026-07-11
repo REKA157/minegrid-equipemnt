@@ -1,7 +1,7 @@
 -- =====================================================================
--- PREREQ pour prouver la RLS planning_events + devis sur base jetable.
--- Crée le minimum Supabase (rôles + auth.uid() stub) et des tables minimales
--- (colonne propriétaire user_id). Les grants + RLS sont posés par la MIGRATION.
+-- PREREQ pour prouver la migration planning_events + devis (création + RLS) sur
+-- base jetable. La migration CRÉE les tables + grants + RLS ; ici, minimum
+-- Supabase seulement (rôles + stub auth.uid()).
 --
 -- EXÉCUTION (Docker Postgres) :
 --   docker run -d --rm --name pgpd -e POSTGRES_PASSWORD=x -e POSTGRES_DB=test postgres:16-alpine
@@ -26,23 +26,6 @@ create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('test.uid', true), '')::uuid
 $$;
 
--- Tables minimales (colonnes réellement écrites par l'app + user_id).
-create table if not exists public.planning_events (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid,
-  title       text,
-  "startDate" text,
-  status      text,
-  created_at  timestamptz not null default now()
-);
-create table if not exists public.devis (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid,
-  client      text,
-  total       numeric,
-  created_at  timestamptz not null default now()
-);
-
 grant usage on schema public, auth to authenticated, anon, service_role;
 grant execute on function auth.uid() to authenticated, anon, service_role;
--- Grants de table + RLS : posés par la MIGRATION.
+-- Les tables planning_events / devis + leurs grants sont créés par la MIGRATION.
