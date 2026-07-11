@@ -13,8 +13,15 @@ import { logger } from '../logger';
 
 /** Clé locale : mémorise la session serveur en cours pour pouvoir la fermer. */
 const LS_KEY = 'mg_session';
-/** Fenêtre anti-doublon côté client (ms) : deux SIGNED_IN rapprochés = 1 session. */
-const DEDUP_WINDOW_MS = 120_000;
+/**
+ * Fenêtre anti-doublon côté client (ms). SIGNED_IN se redéclenche au
+ * rechargement de page / retour d'onglet, pas seulement à une vraie connexion :
+ * tant qu'une session récente du même utilisateur est mémorisée (et non fermée),
+ * on ne recrée pas de « connexion ». 12 h couvre une journée de travail sans
+ * multiplier les entrées fantômes. Une déconnexion explicite efface la clé, donc
+ * un logout suivi d'un login est bien recompté.
+ */
+const DEDUP_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 interface StoredSession {
   id: string;
