@@ -73,6 +73,32 @@ P0 : 1 (corrigé) · P1 : 4 · P2 : 3 · P3 : 1
   (protocole : pas de MAJ deps en masse pendant l'audit).
 - STATUT : OUVERT (P2, non runtime-prod).
 
+## F-015 — Parité Edge Functions repo ↔ prod : code non versionné + webhooks absents [P1, gouvernance]
+- CONSTAT (capture dashboard prod 2026-07-11) : prod déploie 4 fonctions —
+  `ai-proxy`, `hyper-service`, `send-contact-email`, `tenders-ai`.
+- **`hyper-service` tourne en PROD mais N'EXISTE PAS dans le repo** → code serveur non versionné,
+  non auditable, non reproductible (risque de gouvernance / supply-chain interne). À récupérer + versionner.
+- `stripe-webhook` et `escrow-webhook` (durcies dans le repo) **ne sont PAS déployées** → les flux
+  paiement/escrow ne sont pas armés. QUESTION OUVERTE : comment les abonnements payants sont-ils activés
+  aujourd'hui sans stripe-webhook ? (via hyper-service ? écriture manuelle ?) — à clarifier.
+- Autres fonctions du repo non déployées : create-payment, send-email, exchange-rates, recompute-trust-score.
+- IMPACT : divergence repo↔prod (un déploiement « propre » depuis le repo ne reproduit pas la prod, et
+  inversement). Aligne le finding F-002 (versionnement) au niveau Edge.
+- CORRECTION : (1) exporter le code de `hyper-service` depuis la prod et le committer ; (2) documenter
+  quelles fonctions sont censées être live ; (3) le jour de l'armement paiement/escrow, déployer les
+  versions DURCIES du repo (elles incluent déjà les correctifs F-010/F-012/F-013/F-014).
+- STATUT : OUVERT (nécessite ton input sur hyper-service + l'activation abonnement).
+- MAJ : le frontend n'appelle PAS hyper-service. Il invoque create-payment (StripePaymentForm.tsx:47),
+  create-escrow (escrowService.ts:60), send-contact-email, ai-proxy, tenders-ai. Or create-payment
+  (présent repo) et create-escrow (ABSENT repo ET prod) NE sont PAS déployées → boutons paiement Stripe
+  et « ouvrir séquestre » NON FONCTIONNELS en prod. hyper-service = orphelin (aucun appelant connu).
+- RÉSOLU (code hyper-service fourni par l'utilisateur) : c'est un BROUILLON d'envoi d'e-mail jamais
+  terminé (`// TODO: branche ici ton provider email`) qui ne fait qu'ÉCHO ({ok:true,received}). AUCUN
+  accès base/secret/service_role -> INOFFENSIF, juste du code mort. Reco : SUPPRIMER (nettoyage), non urgent.
+- SOUS-FINDING RÉEL (F-016) : create-payment / create-escrow appelées par le front mais non déployées
+  -> parcours PAIEMENT et SÉQUESTRE non fonctionnels en prod aujourd'hui (à traiter quand ces flux sont armés ;
+  create-escrow est même absente du repo -> à écrire).
+
 ## F-009 — Actions GitHub non épinglées sur SHA [P3, chaîne d'appro]
 - FAIT : `actions/checkout@v4`, `actions/setup-node@v4` épinglées sur tag majeur, pas sur commit SHA.
 - CORRECTION : épingler sur SHA complet. STATUT : OUVERT (P3).
