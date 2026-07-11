@@ -71,12 +71,29 @@ Deno.serve(async (req) => {
     return json({ error: `Transition ${tx.status} -> ${target} interdite` }, 409);
   }
 
-  const { error: uErr } = await supabase
+  // Transition ATOMIQUE et CONDITIONNELLE (verrou optimiste) : on n'applique le
+  // changement QUE si le statut source est TOUJOURS celui qu'on a lu. Les PSP
+  // livrent en at-least-once : sans cette garde, deux livraisons concurrentes
+  // liraient le même statut, passeraient la garde de transition, et écriraient
+  // toutes deux (TOCTOU) -> double-fire d'events, voire remboursement + libération
+  // simultanés. `.eq('status', tx.status)` + `.select()` = seule la 1re livraison
+  // qui fait AVANCER l'état gagne ; les autres ne modifient 0 ligne.
+  const { data: updated, error: uErr } = await supabase
     .from('escrow_transactions')
     .update({ status: target, provider_ref: evt.provider_ref ?? null, updated_at: new Date().toISOString() })
-    .eq('id', evt.escrow_id);
+    .eq('id', evt.escrow_id)
+    .eq('status', tx.status)
+    .select('id');
   if (uErr) return json({ error: uErr.message }, 500);
 
+  // 0 ligne affectée = une autre livraison a déjà fait avancer l'état entre notre
+  // lecture et notre écriture. On ne rejoue PAS (pas de 2e event, pas de double effet).
+  if (!updated || updated.length === 0) {
+    return json({ received: true, idempotent: true, note: 'statut déjà avancé (course évitée)' });
+  }
+
+  // Journal append-only : n'est écrit QUE pour la livraison qui a réellement
+  // appliqué la transition (donc pas de doublon d'event sous rejeu concurrent).
   await supabase.from('escrow_events').insert({
     escrow_id: evt.escrow_id, event_type: evt.event_type, payload: evt.payload ?? {},
   });
