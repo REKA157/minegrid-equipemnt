@@ -7,6 +7,7 @@ import type { MonitorProjectDetail, EquipmentNeed, ProjectContact } from '../../
 import { PROJECT_TYPE_LABELS, PROJECT_PHASE_LABELS, PROJECT_TYPE_COLORS } from '../../types/monitor';
 import { enrichEquipmentNeed, machinesCatalogHref } from '../../utils/monitorEquipmentMapping';
 import { matchNeedsToStock, loadSellerStockCategories } from '../../utils/monitorProspectMatch';
+import { useMemberScope } from '../../hooks/useMemberScope';
 import type { ProjectAnalysisCompare } from '../../services/monitorApi';
 
 interface ProjectDetailsProps {
@@ -299,6 +300,9 @@ export default function ProjectDetails({
   createLeadsFromProjectLoading = false,
   onCreateTenderFromProject,
 }: ProjectDetailsProps) {
+  // Affectation : les actions d'écriture croisées sont masquées hors périmètre
+  // (créer un prospect = commercial ; répondre à un AO = tenders).
+  const { scope: memberScope } = useMemberScope();
   // Stock du vendeur (pour le croiser avec les besoins de l'AO à la sélection).
   // Hook AVANT les retours conditionnels ci-dessous (règle des hooks React).
   const [stock, setStock] = useState<string[]>([]);
@@ -439,7 +443,7 @@ export default function ProjectDetails({
           </div>
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {onCreateTenderFromProject && (
+            {onCreateTenderFromProject && memberScope.tenders && (
               <button
                 type="button"
                 onClick={onCreateTenderFromProject}
@@ -450,7 +454,7 @@ export default function ProjectDetails({
                 Répondre à cet AO
               </button>
             )}
-            {onCreateLeadsFromProject && (
+            {onCreateLeadsFromProject && memberScope.commercial && (
               <button
                 type="button"
                 onClick={onCreateLeadsFromProject}
@@ -721,7 +725,7 @@ export default function ProjectDetails({
                         {roleLabel(displayRole)} · confiance {Math.round((contact.confidence ?? 0.6) * 100)}%
                       </p>
                     </div>
-                    {onCreateLeadFromContact && (
+                    {onCreateLeadFromContact && memberScope.commercial && (
                       <button
                         type="button"
                         onClick={() => onCreateLeadFromContact(contact)}

@@ -10,6 +10,8 @@ import {
 } from '../utils/api/aiCredentials';
 import { testAiConnection, askAssistant, type ChatMessage } from '../utils/api/aiAssistant';
 import { toast } from '../utils/toast';
+import { useMemberScope } from '../hooks/useMemberScope';
+import { isInvitedMember } from '../utils/api/memberScope';
 
 interface ModelOption {
   id: string;
@@ -97,6 +99,10 @@ const AiSettings: React.FC = () => {
 
   const meta = PROVIDERS.find((p) => p.id === provider)!;
   const configured = !!status?.configured;
+  // Configuration de l'IA (fournisseur, clé) réservée au propriétaire/admin ;
+  // un membre invité voit seulement le chat (ou un message si non configuré).
+  const { scope: memberScope } = useMemberScope();
+  const canConfigureAi = !isInvitedMember(memberScope);
   // Modèle réellement envoyé au serveur ('' => le serveur choisit un défaut).
   const effectiveModel = modelSel === '__custom__' ? customModel.trim() : modelSel;
 
@@ -220,7 +226,7 @@ const AiSettings: React.FC = () => {
                 <Sparkles className="h-6 w-6 text-orange-600 shrink-0" /> Assistant IA
               </h1>
             </div>
-            {configured && (
+            {configured && canConfigureAi && (
               <button
                 onClick={() => setShowSettings((v) => !v)}
                 className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-orange-300 hover:text-orange-700 transition-colors"
@@ -237,7 +243,11 @@ const AiSettings: React.FC = () => {
           <div className="flex items-center gap-2 text-gray-500">
             <Loader2 className="h-5 w-5 animate-spin" /> Chargement…
           </div>
-        ) : showSettings || !configured ? (
+        ) : !configured && !canConfigureAi ? (
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
+            L’assistant IA n’est pas encore configuré. Demandez à un administrateur de votre société de le connecter.
+          </div>
+        ) : canConfigureAi && (showSettings || !configured) ? (
           /* ---------------- RÉGLAGES / CONNEXION ---------------- */
           <div className="space-y-6">
             <p className="text-gray-600">
