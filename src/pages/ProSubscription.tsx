@@ -73,8 +73,8 @@ const plans: Plan[] = [
   }
 ];
 
-const PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
-const PROMO_ENABLED = PROMO_CODE.length > 0;
+// Codes promo : validés + activés CÔTÉ SERVEUR (RPC redeem_promo_code, migration p15).
+// Aucun code n'est présent dans le bundle. Voir activateSubscriptionWithPromo.
 
 export default function ProSubscription() {
   const [selectedPlan, setSelectedPlan] = useState<string>('premium');
@@ -486,17 +486,7 @@ export default function ProSubscription() {
                       <button
                         onClick={() => {
                           const code = (document.getElementById('promoCode') as HTMLInputElement).value;
-                          if (!PROMO_ENABLED) {
-                            toast('Les codes promo sont désactivés sur cet environnement.');
-                            return;
-                          }
-                          if (code === PROMO_CODE) {
-                            toast('✅ Code promo valide ! Accès temporaire de 30 jours.');
-                            // Activer l'abonnement avec code promo
-                            activateSubscriptionWithPromo();
-                          } else {
-                            toast('❌ Code promo invalide');
-                          }
+                          activateSubscriptionWithPromo(code);
                         }}
                         className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
                       >
@@ -544,15 +534,7 @@ export default function ProSubscription() {
                   const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked') as HTMLInputElement;
                   if (paymentMethod?.value === 'promo') {
                     const code = (document.getElementById('promoCode') as HTMLInputElement).value;
-                    if (!PROMO_ENABLED) {
-                      toast('Les codes promo sont désactivés sur cet environnement.');
-                      return;
-                    }
-                    if (code === PROMO_CODE) {
-                      activateSubscriptionWithPromo();
-                    } else {
-                      toast('Veuillez entrer un code promo valide');
-                    }
+                    activateSubscriptionWithPromo(code);
                   } else {
                     // SÉCURITÉ : plus de « simulation » de paiement carte (qui activait
                     // l'abonnement sans débit). Le paiement carte passe par le formulaire
@@ -579,7 +561,17 @@ export default function ProSubscription() {
   // SÉCURITÉ : l'activation d'abonnement par code promo côté client est supprimée
   // (la valeur du code est dans le bundle JS, donc contournable). La validation et
   // l'activation doivent passer par une Edge Function serveur. No-op informatif.
-  const activateSubscriptionWithPromo = async () => {
-    toast("La validation des codes promo est en cours de sécurisation côté serveur et n'active plus l'abonnement directement.");
+  const activateSubscriptionWithPromo = async (code: string) => {
+    const trimmed = (code || '').trim();
+    if (!trimmed) { toast('Entrez un code promo.'); return; }
+    try {
+      const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: trimmed });
+      if (error) { toast('Impossible de valider le code pour le moment. Réessayez.'); return; }
+      if (!data?.ok) { toast(`❌ ${data?.error || 'Code promo invalide'}`); return; }
+      toast(`✅ Abonnement ${data.subscription_type} activé grâce au code promo !`);
+      window.location.hash = data.subscription_type === 'enterprise' ? '#dashboard-entreprise' : '#dashboard';
+    } catch {
+      toast("Erreur lors de l'activation de l'abonnement.");
+    }
   };
 } 

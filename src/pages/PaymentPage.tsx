@@ -29,34 +29,15 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
   const [promoError, setPromoError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const VALID_PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
-  const promoEnabled = VALID_PROMO_CODE.length > 0;
-
   const handlePromoCodeValidation = async () => {
-    if (!promoEnabled) {
-      setPromoError('Les codes promo sont désactivés sur cet environnement');
-      setPromoValid(false);
-      return;
-    }
     if (!promoCode.trim()) {
       setPromoError('Veuillez saisir un code promo');
       return;
     }
-
-    setIsValidatingPromo(true);
+    // La VRAIE validation se fait côté serveur à l'activation (RPC redeem_promo_code).
+    // Ici on active juste le bouton ; aucun code n'est comparé dans le navigateur.
     setPromoError('');
-
-    // Simuler une validation
-    setTimeout(() => {
-      if (promoCode.trim() === VALID_PROMO_CODE) {
-        setPromoValid(true);
-        setPromoError('');
-      } else {
-        setPromoValid(false);
-        setPromoError('Code promo invalide');
-      }
-      setIsValidatingPromo(false);
-    }, 1000);
+    setPromoValid(true);
   };
 
   const handlePayment = async () => {
@@ -80,12 +61,21 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
     }
   };
 
-  // SÉCURITÉ : suppression de l'activation d'abonnement par code promo côté client.
-  // Le code promo est inliné dans le bundle (VITE_PROMO_CODE) donc trivialement
-  // extractible ; l'écriture directe dans `pro_clients` contournait le paiement.
-  // La validation/activation doit être réalisée par une Edge Function serveur.
+  // Validation + activation CÔTÉ SERVEUR via la RPC redeem_promo_code (migration p15) :
+  // aucun code dans le bundle, activation non falsifiable (pro_clients verrouillée par p14),
+  // code limité (usages / durée / 1 par compte). Le serveur décide du plan accordé.
   const activateSubscriptionWithPromo = async () => {
-    toast("La validation des codes promo est en cours de sécurisation côté serveur et n'active plus l'abonnement directement.");
+    const code = promoCode.trim();
+    if (!code) { toast('Entrez un code promo.'); return; }
+    try {
+      const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });
+      if (error) { toast('Impossible de valider le code pour le moment. Réessayez.'); return; }
+      if (!data?.ok) { toast(`❌ ${data?.error || 'Code promo invalide'}`); return; }
+      toast(`✅ Abonnement ${data.subscription_type} activé grâce au code promo !`);
+      window.location.hash = data.subscription_type === 'enterprise' ? '#dashboard-entreprise' : '#dashboard';
+    } catch {
+      toast("Erreur lors de l'activation de l'abonnement.");
+    }
   };
 
   const stripePlanType: 'premium' | 'pro' | 'enterprise' =

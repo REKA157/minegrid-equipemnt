@@ -15,7 +15,8 @@ import {
     SUBSCRIPTION_KEYS,
     isWatchedAccountKey,
 } from '../utils/accountLocalStorage';
-const PROMO_CODE = (import.meta.env.VITE_PROMO_CODE || '').trim();
+// Codes promo : plus AUCUN code dans le bundle. La validation + l'activation se font
+// côté serveur via la RPC redeem_promo_code (migration p15). Voir activateSubscriptionWithPromo.
 // Fonction utilitaire pour vérifier si une configuration valide existe (clés par compte)
 const hasValidConfiguration = (userId) => {
     if (!userId) {
@@ -660,79 +661,39 @@ export default function Dashboard({ section = 'overview' }) {
         setPaymentMethod(method);
     };
 
-    const handlePromoCodeValidation = () => {
-        if (!PROMO_CODE) {
-            toast('Les codes promo sont désactivés sur cet environnement.');
+    const handlePromoCodeValidation = async () => {
+        const code = (promoCode || '').trim();
+        if (!code) {
+            toast('Entrez un code promo.');
             return;
         }
-        if (promoCode === PROMO_CODE) {
-            toast('✅ Code promo valide ! Accès temporaire de 30 jours.');
-            activateSubscriptionWithPromo();
-        } else {
-            toast('❌ Code promo invalide');
-        }
+        await activateSubscriptionWithPromo(code);
     };
 
-    const activateSubscriptionWithPromo = async () => {
+    // Validation + activation 100% CÔTÉ SERVEUR via la RPC SECURITY DEFINER
+    // redeem_promo_code (migration p15). Le code n'est jamais dans le bundle
+    // (table promo_codes non lisible par le client), l'activation ne peut pas être
+    // falsifiée (pro_clients est verrouillée côté client par p14), et le code est
+    // limité (usages / durée / 1 par compte). Le serveur décide du plan accordé.
+    const activateSubscriptionWithPromo = async (code) => {
         try {
             const { data: { user }, error: userError } = await supabase.auth.getUser();
             if (userError || !user) {
                 throw new Error('Utilisateur non connecté');
             }
 
-            const plan = selectedPlanForPayment;
-            if (!plan) {
-                throw new Error('Aucun plan sélectionné');
+            const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });
+            if (error) {
+                logger.error('redeem_promo_code:', error);
+                toast('Impossible de valider le code pour le moment. Réessayez.');
+                return;
             }
-
-            // Aligné sur PaymentPage / ProSubscription : persistance pro_clients (portail + widgets qui résolvent le client)
-            const maxUsersByPlan = { pro: 5, premium: 15, enterprise: 50 };
-            const subscriptionEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            const companyName =
-                user.user_metadata?.full_name ||
-                user.user_metadata?.company ||
-                (user.email ? user.email.split('@')[0] : '') ||
-                'Entreprise';
-
-            const proRow = {
-                user_id: user.id,
-                company_name: companyName,
-                subscription_type: plan,
-                subscription_status: 'active',
-                subscription_start: new Date().toISOString().split('T')[0],
-                subscription_end: subscriptionEnd,
-                max_users: maxUsersByPlan[plan] ?? 5,
-                payment_method: 'promo_code',
-                promo_code_used: PROMO_CODE,
-            };
-
-            const { data: existingPro } = await supabase
-                .from('pro_clients')
-                .select('id')
-                .eq('user_id', user.id)
-                .maybeSingle();
-
-            const { user_id, ...updatePayload } = proRow;
-            void user_id; // exclu volontairement du payload d'update (clé de filtre)
-            let upsertError;
-
-            if (existingPro?.id) {
-                const { error } = await supabase
-                    .from('pro_clients')
-                    .update(updatePayload)
-                    .eq('user_id', user.id);
-                upsertError = error;
-            } else {
-                const { error } = await supabase.from('pro_clients').insert(proRow);
-                upsertError = error;
-            }
-
-            if (upsertError) {
-                logger.error('Erreur upsert pro_clients (code promo):', upsertError);
-                toast('Impossible d\'enregistrer l\'abonnement en base. Réessayez ou contactez le support.');
+            if (!data?.ok) {
+                toast(`❌ ${data?.error || 'Code promo invalide'}`);
                 return;
             }
 
+            const plan = data.subscription_type;
             setHasActiveSubscription(true);
             setSubscriptionType(normalizeSubscriptionType(plan));
             setAccountItem(accountId, 'userSubscription', plan);
@@ -753,7 +714,7 @@ export default function Dashboard({ section = 'overview' }) {
             }
 
             setShowPaymentPage(false);
-            toast(`✅ Abonnement ${plan} activé avec succès grâce au code promo ! Accès temporaire de 30 jours.`);
+            toast(`✅ Abonnement ${plan} activé grâce au code promo !`);
 
             if (plan === 'enterprise') {
                 window.location.hash = '#dashboard-entreprise';
