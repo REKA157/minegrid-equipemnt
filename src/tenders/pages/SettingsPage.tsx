@@ -22,6 +22,8 @@ import {
 } from '../components/ui';
 import type { UserRole } from '../types';
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '../types';
+import { useMemberScope } from '../../hooks/useMemberScope';
+import { isInvitedMember } from '../../utils/api/memberScope';
 import { toast } from '../../utils/toast';
 
 /**
@@ -43,6 +45,9 @@ export default function SettingsPage() {
   const settings = useTendersStore((s) => s.settings);
   const updateSettings = useTendersStore((s) => s.updateSettings);
   const resetDemoData = useTendersStore((s) => s.resetDemoData);
+  // Actions destructrices (reset des données AO) : propriétaire uniquement.
+  const { scope: memberScope } = useMemberScope();
+  const canManage = !isInvitedMember(memberScope);
   const tenders = useTendersStore((s) => s.tenders);
   const documents = useTendersStore((s) => s.documents);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -80,17 +85,10 @@ export default function SettingsPage() {
               />
             </Field>
             <Field label="Votre rôle">
-              <Select
-                value={settings.currentUserRole}
-                onChange={(e) => {
-                  updateSettings({ currentUserRole: e.target.value as UserRole });
-                  toast.success(`Rôle changé : ${ROLE_LABELS[e.target.value as UserRole]}.`);
-                }}
-              >
-                {Object.entries(ROLE_LABELS).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </Select>
+              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <span className="font-medium">{ROLE_LABELS[settings.currentUserRole]}</span>
+                <span className="text-xs text-gray-400">— défini par le propriétaire (Gestion d'équipe)</span>
+              </div>
             </Field>
           </div>
           <div className="mt-3 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
@@ -240,16 +238,24 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-600">
             {tenders.length} appel(s) d'offres · {documents.length} document(s) généré(s).
           </p>
-          <div className="mt-3">
-            <SecondaryButton onClick={() => setConfirmReset(true)}>
-              <RefreshCcw className="h-4 w-4" /> Restaurer les données de démonstration
-            </SecondaryButton>
-          </div>
-          <GuideBanner>
-            La restauration remplace <strong>tous</strong> les dossiers, documents, la
-            bibliothèque et la Base entreprise par le jeu de démonstration (3 AO : BTP,
-            télésurveillance, informatique).
-          </GuideBanner>
+          {canManage ? (
+            <>
+              <div className="mt-3">
+                <SecondaryButton onClick={() => setConfirmReset(true)}>
+                  <RefreshCcw className="h-4 w-4" /> Restaurer les données de démonstration
+                </SecondaryButton>
+              </div>
+              <GuideBanner>
+                La restauration remplace <strong>tous</strong> les dossiers, documents, la
+                bibliothèque et la Base entreprise par le jeu de démonstration (3 AO : BTP,
+                télésurveillance, informatique).
+              </GuideBanner>
+            </>
+          ) : (
+            <p className="mt-3 text-xs italic text-gray-400">
+              Seul le propriétaire du compte peut réinitialiser les données.
+            </p>
+          )}
         </SectionCard>
       </div>
 

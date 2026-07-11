@@ -95,7 +95,9 @@ export const useTendersStore = create<TendersState>()(
       company: DEMO_COMPANY,
       settings: {
         currentUserName: 'Utilisateur',
-        currentUserRole: 'admin',
+        // MOINDRE PRIVILÈGE : par défaut lecteur ; le vrai rôle est dérivé du
+        // rôle société (propriétaire/admin) ou attribué par l'admin en mode partagé.
+        currentUserRole: 'lecteur',
         aiApiConfigured: false,
       },
       roleAssignments: [],

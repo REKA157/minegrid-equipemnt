@@ -29,6 +29,7 @@ import type {
   CompanyProfile,
   RoleAssignment,
 } from '../types';
+import { defaultTenderRole } from '../types';
 import { useTendersStore } from './tendersStore';
 import {
   getCurrentUserId,
@@ -36,6 +37,7 @@ import {
   loadWorkspace,
   saveWorkspace,
 } from '../../utils/api/tendersWorkspace';
+import { getMyMemberScope } from '../../utils/api/memberScope';
 
 export type SyncStatus = 'local' | 'chargement' | 'partage' | 'erreur';
 
@@ -61,10 +63,14 @@ export function useTendersSync(): SyncStatus {
         const ws = res.data;
         // Renseigne l'identité de compte (pour « Mes affectations »).
         const userId = await getCurrentUserId();
+        // Rôle SOCIÉTÉ réel (owner/admin/manager/viewer) pour dériver le rôle AO
+        // par défaut — jamais « admin » auto-déclaré.
+        const societeRole = (await getMyMemberScope()).role ?? null;
         const roleAssignments = (ws.roleAssignments as RoleAssignment[] | undefined) ?? [];
         // HÉRITAGE DU RÔLE : si l'admin a attribué un rôle à mon compte, je
-        // l'applique automatiquement (mes droits reflètent ce que l'admin a
-        // décidé). Sinon, on garde le rôle courant (défaut admin en local).
+        // l'applique ; SINON je dérive du rôle société (moindre privilège :
+        // manager→rédacteur, viewer→lecteur, owner/admin→admin). Plus jamais
+        // « admin » par défaut pour un membre non désigné.
         const mine = userId
           ? roleAssignments.find((a) => a.memberId === userId)
           : undefined;
@@ -79,7 +85,7 @@ export function useTendersSync(): SyncStatus {
           settings: {
             ...s.settings,
             ...(userId ? { currentUserId: userId } : {}),
-            ...(mine ? { currentUserRole: mine.role } : {}),
+            currentUserRole: mine?.role ?? defaultTenderRole(societeRole),
           },
         }));
         hydrating.current = false;
