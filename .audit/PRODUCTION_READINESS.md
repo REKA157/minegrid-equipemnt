@@ -2,6 +2,15 @@
 
 **DÉCISION : GO SOUS CONDITIONS** (au 2026-07-11).
 
+## MISE À JOUR — bundle APPLY_IN_PROD.sql APPLIQUÉ en prod (2026-07-11, confirmé « sql ok »)
+- **Aucun P0 ouvert en prod.** Verrous argent (commission_records, payment_records, transaction_cases) +
+  anti-fraude (inspection_reports) + audit_logs : tous fermés. RLS active sur 34 tables (vérifié).
+- **GO pour l'exploitation ACTUELLE** (volume d'utilisateurs actuel, paiement/escrow NON vendus/armés).
+- **NON encore GO PLEIN** (centaines d'utilisateurs + monétisation) : conditions restantes =
+  (1) charge 100→500 prouvée sur staging ; (2) parcours paiement/escrow E2E + PSP armé (staging) ;
+  (3) baseline versionnée (F-002) avant tout nouvel environnement.
+- Recommandé : relancer `evidence/prod_rls_verification.sql` pour archiver la preuve « ecritures_client=NULL ».
+
 ## Ce qui est fait (prouvé + committé)
 - Phases 0,1,2,4 + chaîne d'appro exécutées. Pipeline vert (tsc/lint/vitest 381/build).
 - **11/11 harnais RLS versionnés** rejoués (Docker).
