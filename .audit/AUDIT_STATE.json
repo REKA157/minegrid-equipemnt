@@ -1,0 +1,73 @@
+{
+  "project": "MineGrid",
+  "audit_status": "in_progress",
+  "current_phase": "phase_4_integrite_argent_partial",
+  "verified_branch": "fix/audit-remediation",
+  "verified_commit": "949d585c",
+  "working_tree_clean": false,
+  "completed_phases": ["phase_0_baseline", "phase_1_quality", "phase_2_rls_versionnee", "supply_chain_npm_audit", "phase_4_money_integrity"],
+  "completed_modules": [],
+  "remaining_modules": [
+    "annonces", "quote_requests", "leads", "transaction_cases", "transaction_participants",
+    "inspections", "financement", "transport", "customs", "escrow", "trust_score",
+    "global_monitor", "dashboards_metiers", "notifications", "documents", "vitrines",
+    "planning", "devis", "org_team", "invitations", "subscriptions", "ai_assistant", "sessions"
+  ],
+  "findings": { "P0": 2, "P1": 5, "P2": 5, "P3": 3 },
+  "findings_corriges_prouves": [
+    "F-001 commission_records (P0) — appliqué prod",
+    "payment_records p11 (P0) — appliqué prod",
+    "F-003 inspection_reports (P1 fraude) — appliqué prod",
+    "F-010 escrow-webhook atomique (P1) — code, deploy Edge",
+    "F-011 finance_applications scoring (P1) — latent (table absente)",
+    "transaction_cases p3_restrict (P1) — À APPLIQUER (dans le bundle)",
+    "F-006 audit_logs p12 (P2) — À APPLIQUER (dans le bundle)",
+    "F-014 stripe idempotence+réconciliation p13 (P2) — code+table, deploy Edge"
+  ],
+  "livrable_prod": ".audit/APPLY_IN_PROD.sql (bundle idempotent/gardé, validé prod-like) + redéploiement Edge stripe-webhook & escrow-webhook",
+  "findings_ouverts_decision_staging": [
+    "F-002 versionnement baseline sql/ -> 0000_baseline (chantier)",
+    "F-004 collisions inspection_requests/customs_cases/transport_requests (décision schéma canonique)",
+    "F-012 escrow réconciliation montant PSP (contrat webhook + staging)",
+    "F-013 escrow release_conditions serveur (design + staging)",
+    "F-005 PII trust_profiles/inspectors anon (latent, tables absentes)",
+    "F-006b inserts anon quote_requests/contact_messages/machine_views (rate-limit, pas RLS)",
+    "F-007 bundle>600kB / 887 warnings ; F-008 npm vulns dev ; F-009 CI SHA-pin"
+  ],
+  "open_findings": [
+    "F-001 commission_records writable [P0] — CORRIGÉ (migration p8, à appliquer en prod)",
+    "F-002 socle RLS ~30 tables non versionné [P1] — vérif prod requise (prod_rls_verification.sql)",
+    "F-003 inspection_reports écrit par le vendeur [P1 fraude] — bloqué par collision de schéma",
+    "F-004 collisions inspection_requests/customs_cases/transport_requests [P1]",
+    "F-005 trust_profiles/inspectors PII exposées à anon [P2]",
+    "F-006 inserts anon with check(true) spam + audit_logs actor_id null [P2]",
+    "F-007 bundle >600kB + 887 warnings [P2/P3]",
+    "F-008 14 vulns npm (dev/build, hors bundle prod) [P2]",
+    "F-009 actions CI non SHA-pinned [P3]"
+  ],
+  "verified_capabilities": [],
+  "unverified_capabilities": [
+    "isolation multi-tenant en PRODUCTION (aucun accès prod)",
+    "parite RLS depot vs prod (RLS massive vit surtout dans sql/ manuel non versionne)",
+    "montee en charge 100/300/500 utilisateurs",
+    "resilience pannes externes (Stripe, email, monitor)",
+    "parcours E2E paiement/escrow reels",
+    "tests multi-appareils / accessibilite"
+  ],
+  "evidence_files": [
+    ".audit/evidence/phase0_baseline.md"
+  ],
+  "limitations": [
+    "Aucun acces a la base Supabase de PRODUCTION ni a un staging : la RLS et l'isolation ne peuvent etre prouvees qu'en local (Docker Postgres jetable) sur le SQL du depot, pas sur l'etat reel deploye.",
+    "Le remote GitHub est PUBLIC : aucun push autorise (contrainte LOCAL ONLY).",
+    "298 policies RLS + 95 'enable RLS' vivent dans sql/ (scripts manuels 'a executer a la main'), hors migrations versionnees : leur application reelle en prod n'est pas verifiable ici.",
+    "Tests de charge, E2E navigateur et multi-appareils non executables dans cet environnement.",
+    "Secrets (cles Stripe/Supabase/monitor) non fournis : les parcours reels de paiement/escrow ne peuvent etre executes de bout en bout."
+  ],
+  "next_mission": "Execute phase 1 — qualite et architecture du code",
+  "next_action": "Lancer npm ci puis npx tsc --noEmit, npm run lint, npm test, npm run build ; recenser fichiers critiques, code mort, donnees simulees, mocks actifs, any, erreurs ignorees ; enregistrer sorties dans .audit/evidence/phase1_*.",
+  "last_completed_action": "Phase 0 — baseline Git + cartographie depot (routes, tables, RLS, edge functions, tests, CI, services externes, variables d'env) ; creation du dossier .audit.",
+  "resume_required": false,
+  "continuation_mode": "checkpoint_after_phase0",
+  "last_updated": "2026-07-11"
+}
