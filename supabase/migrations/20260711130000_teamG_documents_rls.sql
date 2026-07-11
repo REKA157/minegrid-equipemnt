@@ -1,32 +1,19 @@
 -- =====================================================================
 -- Phase G — RLS `documents` : documents PRIVÉS (chacun les siens)
 -- =====================================================================
--- La table `documents` (espace documents personnel, cf. DocumentsEspace) est
--- interrogée avec `.eq('user_id', …)` mais la SUPPRESSION filtre juste par `id`
--- (DocumentsEspace: .delete().eq('id', …)) : sans RLS, un utilisateur pouvait
+-- La table `documents` (espace documents perso, DocumentsEspace) était lue avec
+-- .eq('user_id',…) mais SUPPRIMÉE par id seul : sans RLS, un utilisateur pouvait
 -- LIRE et SUPPRIMER les documents d'un AUTRE via l'API directe.
 --
 -- APRÈS (documents = PRIVÉS, pas de lecture publique) :
 --   - SELECT / UPDATE / DELETE réservés au propriétaire (user_id = auth.uid()) ;
---   - INSERT réservé aux authentifiés ; trigger FORCE user_id = auth.uid().
--- NB : la table `public.documents` n'est utilisée que par DocumentsEspace ;
---      DocumentsTab (Espace Pro) utilise le BUCKET Storage `documents`, pas la
---      table — donc non impacté ici.
--- Idempotent.
+--   - INSERT authentifié + trigger FORCE user_id = auth.uid().
+-- NB : DocumentsTab (Espace Pro) utilise le BUCKET Storage `documents`, pas la
+--      table `public.documents` — non impacté.
+--
+-- DÉFENSIF : si la table `public.documents` n'existe pas, la migration ne fait
+-- RIEN (au lieu de planter). Idempotent.
 -- =====================================================================
-
-alter table public.documents enable row level security;
-
-do $$
-declare pol record;
-begin
-  for pol in
-    select policyname from pg_policies
-    where schemaname = 'public' and tablename = 'documents'
-  loop
-    execute format('drop policy if exists %I on public.documents', pol.policyname);
-  end loop;
-end $$;
 
 create or replace function public.documents_force_owner_fn()
 returns trigger
@@ -40,24 +27,35 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_documents_force_owner on public.documents;
-create trigger trg_documents_force_owner
-  before insert on public.documents
-  for each row execute function public.documents_force_owner_fn();
+do $$
+declare pol record;
+begin
+  if to_regclass('public.documents') is null then
+    raise notice 'Table public.documents absente — RLS documents ignorée (rien à sécuriser).';
+    return;
+  end if;
 
-create policy documents_select_own on public.documents
-  for select to authenticated
-  using (user_id = auth.uid());
+  execute 'alter table public.documents enable row level security';
 
-create policy documents_insert_own on public.documents
-  for insert to authenticated
-  with check (auth.uid() is not null and user_id = auth.uid());
+  for pol in
+    select policyname from pg_policies
+    where schemaname = 'public' and tablename = 'documents'
+  loop
+    execute format('drop policy if exists %I on public.documents', pol.policyname);
+  end loop;
 
-create policy documents_update_own on public.documents
-  for update to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  execute 'drop trigger if exists trg_documents_force_owner on public.documents';
+  execute 'create trigger trg_documents_force_owner before insert on public.documents '
+       || 'for each row execute function public.documents_force_owner_fn()';
 
-create policy documents_delete_own on public.documents
-  for delete to authenticated
-  using (user_id = auth.uid());
+  execute 'create policy documents_select_own on public.documents for select to authenticated '
+       || 'using (user_id = auth.uid())';
+  execute 'create policy documents_insert_own on public.documents for insert to authenticated '
+       || 'with check (auth.uid() is not null and user_id = auth.uid())';
+  execute 'create policy documents_update_own on public.documents for update to authenticated '
+       || 'using (user_id = auth.uid()) with check (user_id = auth.uid())';
+  execute 'create policy documents_delete_own on public.documents for delete to authenticated '
+       || 'using (user_id = auth.uid())';
+
+  raise notice 'RLS documents appliquée (documents privés).';
+end $$;
