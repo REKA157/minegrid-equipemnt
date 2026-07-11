@@ -31,29 +31,26 @@ create index if not exists documents_user_id_idx on public.documents (user_id);
 
 grant select, insert, update, delete on public.documents to authenticated;
 
+-- Délimiteur nommé $fn$ (et non $$) : l'éditeur SQL de Supabase gère mal les $$ multiples.
 create or replace function public.documents_force_owner_fn()
 returns trigger
 language plpgsql security invoker set search_path = public
-as $$
+as $fn$
 begin
   if auth.uid() is not null then
     new.user_id := auth.uid();
   end if;
   return new;
 end;
-$$;
+$fn$;
 
 alter table public.documents enable row level security;
 
-do $$
-declare pol record;
-begin
-  for pol in
-    select policyname from pg_policies where schemaname = 'public' and tablename = 'documents'
-  loop
-    execute format('drop policy if exists %I on public.documents', pol.policyname);
-  end loop;
-end $$;
+-- Suppression explicite (idempotent) : pas de bloc do $$ (délimiteur ambigu dans Supabase).
+drop policy if exists documents_select_own on public.documents;
+drop policy if exists documents_insert_own on public.documents;
+drop policy if exists documents_update_own on public.documents;
+drop policy if exists documents_delete_own on public.documents;
 
 drop trigger if exists trg_documents_force_owner on public.documents;
 create trigger trg_documents_force_owner

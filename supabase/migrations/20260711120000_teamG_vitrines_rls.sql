@@ -53,29 +53,26 @@ grant select on public.vitrines to anon, authenticated;
 grant insert, update, delete on public.vitrines to authenticated;
 
 -- Trigger anti-usurpation : propriété TOUJOURS forcée à auth.uid() (client menteur impossible).
+-- Délimiteur nommé $fn$ (et non $$) : l'éditeur SQL de Supabase gère mal les $$ multiples.
 create or replace function public.vitrines_force_owner_fn()
 returns trigger
 language plpgsql security invoker set search_path = public
-as $$
+as $fn$
 begin
   if auth.uid() is not null then
     new.user_id := auth.uid();
   end if;
   return new;
 end;
-$$;
+$fn$;
 
 alter table public.vitrines enable row level security;
 
-do $$
-declare pol record;
-begin
-  for pol in
-    select policyname from pg_policies where schemaname = 'public' and tablename = 'vitrines'
-  loop
-    execute format('drop policy if exists %I on public.vitrines', pol.policyname);
-  end loop;
-end $$;
+-- Suppression explicite (idempotent) : pas de bloc do $$ (délimiteur ambigu dans Supabase).
+drop policy if exists vitrines_select_public on public.vitrines;
+drop policy if exists vitrines_insert_own    on public.vitrines;
+drop policy if exists vitrines_update_own    on public.vitrines;
+drop policy if exists vitrines_delete_own    on public.vitrines;
 
 drop trigger if exists trg_vitrines_force_owner on public.vitrines;
 create trigger trg_vitrines_force_owner
