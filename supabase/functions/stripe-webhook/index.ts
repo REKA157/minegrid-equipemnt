@@ -24,6 +24,18 @@ const supabaseAdmin = createClient(
 
 const PLAN_DURATION_DAYS = 30;
 
+// Grille de prix SERVEUR (miroir de create-payment). Sert à réconcilier le montant
+// réellement encaissé avec le plan accordé (empêche « payer basic, obtenir premium »).
+const PLAN_PRICES_EUR_CENTS: Record<string, number> = {
+  basic: 2900, pro: 7000, premium: 14900, enterprise: 29900,
+};
+function amountMatchesPlan(planId: string, amount: number | null, currency?: string | null): boolean {
+  const expected = PLAN_PRICES_EUR_CENTS[planId];
+  if (typeof expected !== 'number' || amount !== expected) return false;
+  if (currency && currency.toLowerCase() !== 'eur') return false;
+  return true;
+}
+
 function planDates(): { start: string; end: string } {
   const now = new Date();
   const end = new Date(now.getTime() + PLAN_DURATION_DAYS * 24 * 60 * 60 * 1000);
@@ -74,33 +86,55 @@ Deno.serve(async (req) => {
     return new Response(`Webhook signature invalide: ${message}`, { status: 400 });
   }
 
+  // IDEMPOTENCE : Stripe livre at-least-once (retries jusqu'à 3 j). On « claim »
+  // l'event.id UNE fois (clé primaire) AVANT d'activer. Un rejeu du même event est
+  // ignoré -> plus de prolongation/résurrection d'abonnement par simple retry.
+  const { error: claimErr } = await supabaseAdmin
+    .from('processed_stripe_events')
+    .insert({ event_id: event.id, event_type: event.type });
+  if (claimErr) {
+    // 23505 = déjà traité -> idempotent (on accuse réception sans rejouer).
+    if ((claimErr as { code?: string }).code === '23505') {
+      return new Response(JSON.stringify({ received: true, idempotent: true }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(`Erreur idempotence: ${claimErr.message}`, { status: 500 });
+  }
+
   try {
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object as Stripe.PaymentIntent;
       const userId = pi.metadata?.userId;
       const planId = pi.metadata?.planId;
+      const amount = typeof pi.amount === 'number' ? pi.amount : null;
       if (userId && planId) {
-        await activateSubscription({
-          userId,
-          planId,
-          amount: typeof pi.amount === 'number' ? pi.amount : null,
-          paymentIntentId: pi.id,
-        });
+        // Réconciliation : le montant réellement encaissé doit correspondre au plan.
+        if (!amountMatchesPlan(planId, amount, pi.currency)) {
+          console.error(`[stripe-webhook] montant/devise (${amount}/${pi.currency}) != plan ${planId} — activation ignorée`);
+        } else {
+          await activateSubscription({ userId, planId, amount, paymentIntentId: pi.id });
+        }
       }
     } else if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.userId || (session.client_reference_id ?? undefined);
       const planId = session.metadata?.planId;
+      const amount = typeof session.amount_total === 'number' ? session.amount_total : null;
       if (userId && planId) {
-        await activateSubscription({
-          userId,
-          planId,
-          amount: typeof session.amount_total === 'number' ? session.amount_total : null,
-          paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,
-        });
+        if (!amountMatchesPlan(planId, amount, session.currency)) {
+          console.error(`[stripe-webhook] montant/devise (${amount}/${session.currency}) != plan ${planId} — activation ignorée`);
+        } else {
+          await activateSubscription({
+            userId, planId, amount,
+            paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+          });
+        }
       }
     }
   } catch (err) {
+    // Échec de traitement : on RETIRE le claim pour que Stripe puisse retenter.
+    await supabaseAdmin.from('processed_stripe_events').delete().eq('event_id', event.id);
     const message = err instanceof Error ? err.message : 'erreur activation';
     return new Response(`Erreur d'activation: ${message}`, { status: 500 });
   }
