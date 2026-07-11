@@ -17,8 +17,14 @@
 --    adhésion la plus ancienne — même règle que get_my_member_scope / leads) ;
 --  - anti-doublon : deux « SIGNED_IN » rapprochés (multi-onglets) ne créent
 --    qu'UNE session (fenêtre 2 minutes) ;
---  - search_path=public verrouillé sur toutes les fonctions ;
---  - délimiteur $fn$ (jamais $$) : l'éditeur SQL Supabase gère mal les $$ multiples.
+--  - search_path=public verrouillé sur toutes les fonctions.
+--
+-- COMPAT ÉDITEUR SUPABASE :
+--  - délimiteur nommé et UNIQUE par fonction ($login$/$logout$/$memsess$/$stats$),
+--    jamais $$ (l'éditeur SQL gère mal les $$ multiples) ;
+--  - AUCUN « SELECT ... INTO » (l'éditeur le confond avec le SELECT INTO qui crée
+--    une table -> « relation v_org does not exist ») : on utilise des affectations
+--    par sous-requête et un CTE data-modifying pour l'insert.
 -- Idempotente.
 -- =====================================================================
 
@@ -65,7 +71,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $fn$
+as $login$
 declare
   v_uid uuid := auth.uid();
   v_org uuid;
@@ -76,12 +82,13 @@ begin
   end if;
 
   -- Org du membre (multi-org : propriétaire d'abord, puis la plus ancienne).
-  select organization_id
-    into v_org
-  from public.organization_members
-  where user_id = v_uid
-  order by (role = 'owner') desc, created_at
-  limit 1;
+  v_org := (
+    select organization_id
+    from public.organization_members
+    where user_id = v_uid
+    order by (role = 'owner') desc, created_at
+    limit 1
+  );
 
   if v_org is null then
     return null; -- pas d'organisation -> pas de suivi de session
@@ -89,25 +96,29 @@ begin
 
   -- Anti-doublon : réutilise une session très récente (multi-onglets / re-fire
   -- de SIGNED_IN) au lieu d'en créer une seconde.
-  select id
-    into v_id
-  from public.member_sessions
-  where user_id = v_uid
-    and login_at > now() - interval '2 minutes'
-  order by login_at desc
-  limit 1;
+  v_id := (
+    select id
+    from public.member_sessions
+    where user_id = v_uid
+      and login_at > now() - interval '2 minutes'
+    order by login_at desc
+    limit 1
+  );
 
   if v_id is not null then
     return v_id;
   end if;
 
+  -- Création. « RETURNING id INTO » (plpgsql) n'est PAS ambigu avec le
+  -- « SELECT ... INTO » qui crée une table — c'est ce dernier, seul, qui trompait
+  -- l'éditeur Supabase, et on l'a supprimé partout au profit d'affectations (:=).
   insert into public.member_sessions (organization_id, user_id, login_at, user_agent)
   values (v_org, v_uid, now(), left(p_user_agent, 400))
   returning id into v_id;
 
   return v_id;
 end;
-$fn$;
+$login$;
 
 grant execute on function public.record_session_login(text) to authenticated;
 
@@ -121,7 +132,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $fn$
+as $logout$
 declare
   v_uid uuid := auth.uid();
 begin
@@ -135,7 +146,7 @@ begin
      and user_id = v_uid       -- on ne ferme QUE sa propre session
      and logout_at is null;    -- idempotent : ne réécrit pas une session déjà fermée
 end;
-$fn$;
+$logout$;
 
 grant execute on function public.record_session_logout(uuid) to authenticated;
 
@@ -156,7 +167,7 @@ language sql
 security definer
 set search_path = public
 stable
-as $fn$
+as $memsess$
   select s.id, s.user_id, s.login_at, s.logout_at, s.user_agent
   from public.member_sessions s
   where s.user_id = p_user_id
@@ -166,7 +177,7 @@ as $fn$
     )
   order by s.login_at desc
   limit greatest(1, least(coalesce(p_limit, 50), 200));
-$fn$;
+$memsess$;
 
 grant execute on function public.get_member_sessions(uuid, int) to authenticated;
 
@@ -181,7 +192,7 @@ language sql
 security definer
 set search_path = public
 stable
-as $fn$
+as $stats$
   select coalesce(count(distinct s.user_id), 0)::int
   from public.member_sessions s
   join public.organization_members me
@@ -189,6 +200,6 @@ as $fn$
    and me.user_id = auth.uid()
    and me.role in ('owner', 'admin')
   where s.login_at::date = current_date;
-$fn$;
+$stats$;
 
 grant execute on function public.get_org_session_stats() to authenticated;
