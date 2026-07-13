@@ -379,10 +379,14 @@ export default function VitrinePersonnalisee() {
             ...machine,
             images: machineImages,
             type: machine.type || 'both', // S'assurer que le type est bien défini
-            is_available: Math.random() > 0.3, // 70% de disponibilité
-            rental_price_daily: machine.price ? Math.round(machine.price * 0.02) : 500,
-            rental_price_weekly: machine.price ? Math.round(machine.price * 0.12) : 2800,
-            rental_price_monthly: machine.price ? Math.round(machine.price * 0.35) : 8000,
+            // Anti-façade : NE PAS inventer la disponibilité ni les prix de location.
+            // On reflète les vraies valeurs de la machine si elles existent, sinon
+            // disponible par défaut (l'annonce est publiée) et prix de location null
+            // (affiché « sur demande » plutôt qu'un montant fabriqué).
+            is_available: machine.is_available ?? true,
+            rental_price_daily: machine.rental_price_daily ?? null,
+            rental_price_weekly: machine.rental_price_weekly ?? null,
+            rental_price_monthly: machine.rental_price_monthly ?? null,
             min_rental_days: 1,
             max_rental_days: 365,
             fuel_consumption: '15-25 L/h',
@@ -1041,27 +1045,10 @@ export default function VitrinePersonnalisee() {
               </div>
 
               {/* Évaluations Clients */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Évaluations Clients</h3>
-                <div className="flex items-center justify-start">
-                  <div className="text-left">
-                    <div className="flex items-center mb-4">
-                      <div className="flex text-yellow-400 mr-3">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="h-6 w-6 fill-current" />
-                        ))}
-                      </div>
-                      <div className="text-2xl font-bold text-gray-900">5.0</div>
-                    </div>
-                    <div className="text-lg text-gray-600 mb-2">
-                      <span className="font-semibold text-orange-600">247</span> avis clients
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Basé sur les évaluations récentes
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* Bloc « Évaluations Clients » retiré : il affichait une note 5.0 et
+                  « 247 avis clients » codés en dur, identiques pour toutes les
+                  vitrines (fausse preuve sociale). À rebrancher sur une vraie table
+                  d'avis le jour où elle existera. */}
             </div>
           </div>
 
@@ -1194,15 +1181,21 @@ export default function VitrinePersonnalisee() {
                                             <div className="text-sm text-gray-600">
                                               <span className="font-semibold">Location :</span>
                                             </div>
-                                            <div className="flex items-baseline space-x-4">
-                                              <div>
-                                                <span className="text-2xl font-bold text-orange-600">{machine.rental_price_daily}€</span>
-                                                <span className="text-sm text-gray-500 ml-1">/jour</span>
+                                            {machine.rental_price_daily ? (
+                                              <div className="flex items-baseline space-x-4">
+                                                <div>
+                                                  <span className="text-2xl font-bold text-orange-600">{machine.rental_price_daily}€</span>
+                                                  <span className="text-sm text-gray-500 ml-1">/jour</span>
+                                                </div>
+                                                {machine.rental_price_weekly ? (
+                                                  <div className="text-sm text-gray-500">
+                                                    {machine.rental_price_weekly}€/semaine
+                                                  </div>
+                                                ) : null}
                                               </div>
-                                              <div className="text-sm text-gray-500">
-                                                {machine.rental_price_weekly}€/semaine
-                                              </div>
-                                            </div>
+                                            ) : (
+                                              <div className="text-lg font-semibold text-orange-600">Prix sur demande</div>
+                                            )}
                                           </div>
                                         ) : (
                                           <div className="text-2xl font-bold text-orange-600">

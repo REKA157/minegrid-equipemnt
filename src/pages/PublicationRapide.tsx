@@ -474,6 +474,9 @@ export default function PublicationRapide() {
         location: formData.location,
         specifications: formData.specifications,
         total_hours: formData.total_hours,
+        // La vitrine publique lit `sellerid` ; on pose les deux colonnes pour que
+        // l'annonce soit visible partout (vitrine, « Mes annonces », messages).
+        sellerid: user.id,
         seller_id: user.id
       };
 

@@ -178,9 +178,49 @@ export default function DevisGenerator() {
   };
 
   const generatePDF = () => {
-    // Simulation de génération PDF
-    toast('Génération du PDF en cours...');
-    // Ici on pourrait intégrer une vraie librairie PDF comme jsPDF
+    // Vrai export sans dépendance : on ouvre une fenêtre d'impression ne contenant
+    // QUE le devis. Le navigateur propose « Enregistrer en PDF » (ou impression).
+    const esc = (s: unknown) =>
+      String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = devis.items.map((it) => `
+      <tr>
+        <td style="padding:6px 8px;border:1px solid #ddd">${esc(it.description)}</td>
+        <td style="padding:6px 8px;border:1px solid #ddd;text-align:right">${esc(it.quantity)}</td>
+        <td style="padding:6px 8px;border:1px solid #ddd;text-align:right">${esc(it.unitPrice)}</td>
+        <td style="padding:6px 8px;border:1px solid #ddd;text-align:right">${esc(it.total)}</td>
+      </tr>`).join('');
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+      <title>Devis ${esc(devis.devisNumber)}</title></head>
+      <body style="font-family:Arial,sans-serif;color:#111;padding:24px;max-width:800px;margin:auto">
+        <h1 style="color:#ea580c;margin:0 0 4px">Devis ${esc(devis.devisNumber)}</h1>
+        <div style="color:#666;margin-bottom:16px">Date : ${esc(devis.date)} · Valable jusqu'au ${esc(devis.validUntil)}</div>
+        <div style="margin-bottom:16px">
+          <strong>Client :</strong> ${esc(devis.clientName)} ${esc(devis.clientCompany)}<br>
+          ${esc(devis.clientEmail)} ${esc(devis.clientPhone)}<br>${esc(devis.clientAddress)}
+        </div>
+        <table style="border-collapse:collapse;width:100%;margin-bottom:16px">
+          <thead><tr style="background:#f3f4f6">
+            <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Description</th>
+            <th style="padding:6px 8px;border:1px solid #ddd;text-align:right">Qté</th>
+            <th style="padding:6px 8px;border:1px solid #ddd;text-align:right">P.U.</th>
+            <th style="padding:6px 8px;border:1px solid #ddd;text-align:right">Total</th>
+          </tr></thead><tbody>${rows}</tbody>
+        </table>
+        <div style="text-align:right;line-height:1.6">
+          Sous-total : ${esc(devis.subtotal)}<br>
+          TVA (${esc(devis.taxRate)}%) : ${esc(devis.taxAmount)}<br>
+          <strong style="font-size:18px">Total : ${esc(devis.total)}</strong>
+        </div>
+        ${devis.notes ? `<div style="margin-top:16px"><strong>Notes :</strong><br>${esc(devis.notes)}</div>` : ''}
+        <script>window.onload=function(){window.print();}</script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) {
+      toast("Autorisez les fenêtres pop-up pour exporter le devis en PDF.");
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
   };
 
   const DevisPreview = () => (

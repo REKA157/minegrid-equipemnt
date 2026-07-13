@@ -116,9 +116,11 @@ export default function DocumentsEspace() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Upload du fichier
+      // Upload du fichier. NB : ne PAS déstructurer `data` ici en `uploadData` —
+      // cela masquerait l'état de formulaire `uploadData` (nom/type/catégorie/tags)
+      // utilisé plus bas pour construire les métadonnées.
       const fileName = `documents/${user.id}/${Date.now()}_${selectedFile.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(fileName, selectedFile);
 

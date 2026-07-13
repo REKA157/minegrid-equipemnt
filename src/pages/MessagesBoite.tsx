@@ -147,40 +147,47 @@ export default function MessagesBoite() {
 
   const sendReply = async () => {
     if (!selectedMessage || !replyContent.trim()) return;
-    
+    if (!selectedMessage.sender_email) {
+      toast("Ce message n'a pas d'adresse e-mail d'expéditeur : impossible de répondre.");
+      return;
+    }
+
     setSending(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Sauvegarder la réponse
-      const replyData = {
-        sender_name: 'Réponse automatique',
-        sender_email: user.email || 'system@minegrid.com',
-        message: replyContent,
-        sellerid: selectedMessage.sellerid,
-        status: 'new',
-        created_at: new Date().toISOString()
-      };
+      // Envoi RÉEL au client via l'Edge Function send-contact-email (chemin
+      // « réponse vérifiée » : le serveur contrôle que `to` = sender_email du
+      // message d'origine). AVANT, la réponse était insérée avec le sellerid du
+      // vendeur -> elle retombait dans SA propre boîte et n'atteignait jamais le
+      // client, alors que le toast annonçait « envoyée ».
+      const html = replyContent
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      const { data, error } = await supabase.functions.invoke('send-contact-email', {
+        body: {
+          to: selectedMessage.sender_email,
+          from: user.email || 'contact@minegrid-equipement.com',
+          subject: 'Réponse à votre message — MineGrid Équipement',
+          html,
+          verifiedReplyToOriginalMessageId: selectedMessage.id,
+        },
+      });
 
-      const { error: replyError } = await supabase
-        .from('messages')
-        .insert(replyData);
-
-      if (replyError) {
-        console.error('Erreur envoi réponse:', replyError);
-        toast('Erreur lors de l\'envoi');
+      if (error || (data && data.success === false)) {
+        console.error('Erreur envoi réponse:', error || data?.error);
+        toast("La réponse n'a pas pu être envoyée (service e-mail indisponible). Réessayez plus tard.");
         return;
       }
 
-      // Marquer le message original comme répondu
+      // Marquer le message original comme répondu.
       await updateMessageStatus(selectedMessage.id, 'repondu');
 
       setReplyContent('');
-      toast('Réponse envoyée avec succès !');
+      toast('✅ Réponse envoyée au client par e-mail.');
     } catch (error) {
       console.error('Erreur:', error);
-      toast('Erreur lors de l\'envoi');
+      toast("Erreur lors de l'envoi de la réponse.");
     } finally {
       setSending(false);
     }
