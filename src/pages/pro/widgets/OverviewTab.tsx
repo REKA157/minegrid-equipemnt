@@ -5,7 +5,6 @@ import {
   FileText,
   Package,
   Wrench,
-  XCircle,
 } from 'lucide-react';
 import React from 'react';
 import type { PortalStats } from '../types';
@@ -19,7 +18,7 @@ export function OverviewTab({ stats }: { stats: PortalStats | null }) {
       value: stats.totalEquipment,
       icon: Package,
       color: 'bg-orange-500',
-      change: '+2 ce mois'
+      change: 'Parc total'
     },
     {
       title: 'Équipements Actifs',
@@ -76,46 +75,37 @@ export function OverviewTab({ stats }: { stats: PortalStats | null }) {
         })}
       </div>
 
-      {/* Graphiques et tableaux de bord */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Activité Récente</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Maintenance préventive</span>
-              <span className="text-sm text-orange-600">Terminée</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Nouvelle commande</span>
-              <span className="text-sm text-orange-500">En attente</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Diagnostic équipement</span>
-              <span className="text-sm text-orange-700">En cours</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Alertes</h3>
-          <div className="space-y-3">
+      {/* Alertes dérivées des VRAIES stats (fin des « Équipement #123/#456 » fictifs
+          et de l'« Activité Récente » codée en dur). */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Alertes</h3>
+        <div className="space-y-3">
+          {stats.pendingOrders > 0 && (
             <div className="flex items-center">
               <AlertTriangle className="h-4 w-4 text-orange-500 mr-2" />
-              <span className="text-sm text-gray-600">Maintenance due dans 3 jours</span>
+              <span className="text-sm text-gray-600">{stats.pendingOrders} commande(s) en attente de traitement</span>
             </div>
+          )}
+          {stats.upcomingInterventions > 0 && (
             <div className="flex items-center">
-              <XCircle className="h-4 w-4 text-orange-700 mr-2" />
-              <span className="text-sm text-gray-600">Garantie expirée - Équipement #123</span>
+              <Wrench className="h-4 w-4 text-orange-700 mr-2" />
+              <span className="text-sm text-gray-600">{stats.upcomingInterventions} intervention(s) à venir cette semaine</span>
             </div>
+          )}
+          {stats.unreadNotifications > 0 && (
+            <div className="flex items-center">
+              <Bell className="h-4 w-4 text-orange-800 mr-2" />
+              <span className="text-sm text-gray-600">{stats.unreadNotifications} notification(s) non lue(s)</span>
+            </div>
+          )}
+          {stats.pendingOrders === 0 && stats.upcomingInterventions === 0 && stats.unreadNotifications === 0 && (
             <div className="flex items-center">
               <CheckCircle className="h-4 w-4 text-orange-600 mr-2" />
-              <span className="text-sm text-gray-600">Diagnostic OK - Équipement #456</span>
+              <span className="text-sm text-gray-600">Aucune alerte pour le moment.</span>
             </div>
-          </div>
+          )}
         </div>
       </div>
-
-
     </div>
   );
 }

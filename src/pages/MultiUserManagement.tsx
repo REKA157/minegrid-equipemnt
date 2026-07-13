@@ -883,18 +883,10 @@ const MultiUserManagement: React.FC = () => {
                   <Shield className="h-4 w-4 mr-2" />
                   Rôles Appels d’offres (vue détaillée)
                 </a>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg transition-colors">
-                  <Mail className="h-4 w-4 inline mr-2" />
-                  Envoyer un message à l'équipe
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg transition-colors">
-                  <BarChart3 className="h-4 w-4 inline mr-2" />
-                  Voir les statistiques d'usage
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg transition-colors">
-                  <Key className="h-4 w-4 inline mr-2" />
-                  Gérer les clés API
-                </button>
+                {/* Boutons décoratifs retirés (« Envoyer un message à l'équipe »,
+                    « Voir les statistiques d'usage », « Gérer les clés API ») : ils
+                    n'avaient aucun handler ni fonctionnalité derrière. À réintroduire
+                    seulement quand la vraie action existera. */}
               </div>
             </div>
           </div>

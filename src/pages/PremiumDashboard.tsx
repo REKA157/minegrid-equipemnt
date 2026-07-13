@@ -503,19 +503,19 @@ const PremiumDashboard: React.FC = () => {
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <button className="flex items-center justify-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
+              <button onClick={() => { window.location.hash = '#publication'; }} className="flex items-center justify-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
                 <FileText className="h-6 w-6 text-orange-600 mr-2" />
                 <span className="text-sm font-medium text-orange-900">Nouvelle annonce</span>
               </button>
-              <button className="flex items-center justify-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+              <button onClick={() => { window.location.hash = '#pro'; }} className="flex items-center justify-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                 <BarChart3 className="h-6 w-6 text-blue-600 mr-2" />
                 <span className="text-sm font-medium text-blue-900">Voir les statistiques</span>
               </button>
-              <button className="flex items-center justify-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+              <button onClick={() => { window.location.hash = '#messages'; }} className="flex items-center justify-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
                 <Users className="h-6 w-6 text-green-600 mr-2" />
                 <span className="text-sm font-medium text-green-900">Gérer les messages</span>
               </button>
-              <button className="flex items-center justify-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+              <button onClick={() => { window.location.hash = '#priority-support'; }} className="flex items-center justify-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
                 <HeadphonesIcon className="h-6 w-6 text-purple-600 mr-2" />
                 <span className="text-sm font-medium text-purple-900">Support</span>
               </button>

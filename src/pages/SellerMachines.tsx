@@ -47,11 +47,13 @@ export default function SellerMachines({ sellerId }: SellerMachinesProps) {
             location: (sellerData as { location?: string }).location || 'Localisation non spécifiée'
           });
 
-          // Récupérer les machines du vendeur avec la même logique que getSellerMachines
+          // Récupérer les machines du vendeur. La colonne réelle est 'sellerid'
+          // (et/ou 'seller_id') — PAS 'sellerId' (PostgREST est sensible à la casse,
+          // l'ancien filtre visait une colonne inexistante -> 0 machine).
           const { data: machinesData, error: machinesError } = await supabase
             .from('machines')
             .select(MACHINE_LIST_COLUMNS)
-            .eq('sellerId', sellerId)
+            .or(`sellerid.eq.${sellerId},seller_id.eq.${sellerId}`)
             .order('created_at', { ascending: false })
             .limit(SELLER_MACHINES_MAX_ROWS);
 
@@ -113,10 +115,9 @@ export default function SellerMachines({ sellerId }: SellerMachinesProps) {
               <MapPin className="h-4 w-4 mr-1" />
               <span>{sellerInfo.location}</span>
             </div>
-            <div className="flex items-center mt-2">
-              <Star className="h-5 w-5 text-yellow-400" />
-              <span className="ml-1 text-gray-600">{sellerInfo.rating}/5</span>
-            </div>
+            {/* Bloc « note X/5 » retiré : la valeur était codée en dur (4,5) pour
+                TOUS les vendeurs (fausse note). À rebrancher sur une vraie source
+                (avis / trust_score) le jour où elle existera. */}
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-primary-600">
