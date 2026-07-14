@@ -103,53 +103,25 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const twoMonthsAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-  // Vues totales
-  const { count: totalViews } = await supabase
-    .from('machine_views')
-    .select('id', { count: 'exact', head: true })
-    .in('machine_id', machineIds);
-
-  // Vues cette semaine
-  const { count: weeklyViews } = await supabase
-    .from('machine_views')
-    .select('id', { count: 'exact', head: true })
-    .in('machine_id', machineIds)
-    .gte('created_at', weekAgo.toISOString());
-
-  // Vues ce mois
-  const { count: monthlyViews } = await supabase
-    .from('machine_views')
-    .select('id', { count: 'exact', head: true })
-    .in('machine_id', machineIds)
-    .gte('created_at', monthAgo.toISOString());
-
-  // Vues semaine précédente (pour calculer la croissance)
-  const { count: previousWeekViews } = await supabase
-    .from('machine_views')
-    .select('id', { count: 'exact', head: true })
-    .in('machine_id', machineIds)
-    .gte('created_at', twoWeeksAgo.toISOString())
-    .lt('created_at', weekAgo.toISOString());
-
-  // Vues mois précédent
-  const { count: previousMonthViews } = await supabase
-    .from('machine_views')
-    .select('id', { count: 'exact', head: true })
-    .in('machine_id', machineIds)
-    .gte('created_at', twoMonthsAgo.toISOString())
-    .lt('created_at', monthAgo.toISOString());
-
-  // Messages reçus
-  const { count: totalMessages } = await supabase
-    .from('messages')
-    .select('id', { count: 'exact', head: true })
-    .or(`receiver_id.eq.${user.id},seller_id.eq.${user.id}`);
-
-  // Offres reçues
-  const { count: totalOffers } = await supabase
-    .from('offers')
-    .select('id', { count: 'exact', head: true })
-    .eq('seller_id', user.id);
+  // Les 7 comptes sont indépendants -> exécutés EN PARALLÈLE (avant : 7 await en
+  // série, ~7x plus lent). Mêmes requêtes, mêmes variables ensuite.
+  const [
+    { count: totalViews },
+    { count: weeklyViews },
+    { count: monthlyViews },
+    { count: previousWeekViews },
+    { count: previousMonthViews },
+    { count: totalMessages },
+    { count: totalOffers },
+  ] = await Promise.all([
+    supabase.from('machine_views').select('id', { count: 'exact', head: true }).in('machine_id', machineIds),
+    supabase.from('machine_views').select('id', { count: 'exact', head: true }).in('machine_id', machineIds).gte('created_at', weekAgo.toISOString()),
+    supabase.from('machine_views').select('id', { count: 'exact', head: true }).in('machine_id', machineIds).gte('created_at', monthAgo.toISOString()),
+    supabase.from('machine_views').select('id', { count: 'exact', head: true }).in('machine_id', machineIds).gte('created_at', twoWeeksAgo.toISOString()).lt('created_at', weekAgo.toISOString()),
+    supabase.from('machine_views').select('id', { count: 'exact', head: true }).in('machine_id', machineIds).gte('created_at', twoMonthsAgo.toISOString()).lt('created_at', monthAgo.toISOString()),
+    supabase.from('messages').select('id', { count: 'exact', head: true }).or(`receiver_id.eq.${user.id},seller_id.eq.${user.id}`),
+    supabase.from('offers').select('id', { count: 'exact', head: true }).eq('seller_id', user.id),
+  ]);
 
   // Calculer les pourcentages de croissance
   const weeklyGrowth = previousWeekViews && previousWeekViews > 0 
