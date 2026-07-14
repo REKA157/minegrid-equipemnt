@@ -4,28 +4,10 @@ type MessageType = 'SMS' | 'EMAIL' | 'TEAM' | 'NOTIFICATION';
 
 export function useCommunicationService() {
   const sendMessage = useCallback(async (type: MessageType, recipient: string, content: string) => {
+    void type; void recipient; void content; // ne JAMAIS logger destinataire/contenu (PII)
     try {
-      console.log(`Sending ${type} message to ${recipient}:`, content);
-      
-      // Simulation d'envoi de message
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Simuler différents types de messages
-      switch (type) {
-        case 'SMS':
-          console.log(`SMS sent to ${recipient}: ${content}`);
-          break;
-        case 'EMAIL':
-          console.log(`Email sent to ${recipient}: ${content}`);
-          break;
-        case 'TEAM':
-          console.log(`Team notification sent to ${recipient}: ${content}`);
-          break;
-        case 'NOTIFICATION':
-          console.log(`In-app notification sent to ${recipient}: ${content}`);
-          break;
-      }
-      
+      // Simulation d'envoi (aucun canal réel branché en prod).
+      await new Promise(resolve => setTimeout(resolve, 300));
       return { success: true, messageId: Date.now().toString() };
     } catch (error) {
       console.error('Communication error:', error);

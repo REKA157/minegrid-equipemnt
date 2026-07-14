@@ -36,3 +36,17 @@ export async function getOrgMembers(): Promise<OrgMember[]> {
     { label: 'getOrgMembers', fallback: [] },
   );
 }
+
+/** Retire RÉELLEMENT un membre de la société (RPC admin, coupe son accès). */
+export async function removeOrgMember(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('remove_org_member', { p_user_id: userId });
+  if (error) return { ok: false, error: error.message };
+  return (data as { ok: boolean; error?: string }) ?? { ok: false, error: 'Erreur inconnue' };
+}
+
+/** Change le rôle société d'un membre (RPC admin). */
+export async function setOrgMemberRole(userId: string, role: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('set_org_member_role', { p_user_id: userId, p_role: role });
+  if (error) return { ok: false, error: error.message };
+  return (data as { ok: boolean; error?: string }) ?? { ok: false, error: 'Erreur inconnue' };
+}

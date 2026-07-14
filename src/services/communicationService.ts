@@ -24,16 +24,11 @@ export interface ContactData {
 class CommunicationService {
   // Envoyer un email
   async sendEmail(emailData: EmailData) {
+    void emailData;
     try {
-      // Simulation d'envoi d'email (à remplacer par une vraie API)
-      console.log('📧 Envoi email:', {
-        to: emailData.to,
-        subject: emailData.subject,
-        body: emailData.body.substring(0, 100) + '...'
-      });
-
-      // Simuler un délai d'envoi
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Simulation d'envoi (aucun canal réel branché). On ne logge JAMAIS le
+      // destinataire/sujet/corps (PII).
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       return {
         success: true,

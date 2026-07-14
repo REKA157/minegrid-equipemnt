@@ -35,7 +35,7 @@ import {
   type UserInvitation,
 } from '../utils/userManagement';
 import { setupUserInvitationsTable } from '../utils/setupUserInvitations';
-import { getOrgMembers, type OrgMember, type OrgRole } from '../utils/api/organization';
+import { getOrgMembers, removeOrgMember, type OrgMember, type OrgRole } from '../utils/api/organization';
 import { useSubscription } from '../hooks/useSubscription';
 import { hasEnterprise } from '../utils/api/subscription';
 import { toast } from '../utils/toast';
@@ -481,10 +481,16 @@ const MultiUserManagement: React.FC = () => {
     setSelectedMember(null);
   };
 
-  const handleDeleteMember = (memberId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-      setTeamMembers(teamMembers.filter(member => member.id !== memberId));
+  const handleDeleteMember = async (memberId: string) => {
+    if (!confirm('Retirer ce membre de votre société ? Son accès sera coupé côté serveur.')) return;
+    // Retrait RÉEL côté serveur (RPC admin p19) — plus seulement en local.
+    const res = await removeOrgMember(memberId);
+    if (!res.ok) {
+      toast(res.error || "Impossible de retirer ce membre.");
+      return;
     }
+    setTeamMembers(teamMembers.filter(member => member.id !== memberId));
+    toast('Membre retiré. Son accès est coupé.');
   };
 
 
