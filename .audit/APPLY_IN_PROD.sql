@@ -773,3 +773,51 @@ as $fn$
 $fn$;
 
 grant execute on function public.machine_engagement_counts(uuid[]) to authenticated;
+
+-- >>>>>>>>>>>>>>>>>>>> 20260714120000_p22_optimize_rls_initplan.sql <<<<<<<<<<<<<<<<<<<<
+-- =====================================================================
+-- P22 — Optimisation de l'évaluation RLS (« auth_rls_initplan ») — perf
+-- =====================================================================
+-- Un appel NU à auth.uid() dans une policy est ré-évalué PAR LIGNE. Enveloppé en
+-- sous-requête scalaire (select auth.uid()), Postgres l'évalue UNE fois par requête
+-- (InitPlan). SÛR : même valeur exacte ; on repart de l'expression ACTUELLE de chaque
+-- policy et on n'y substitue que le texte « auth.uid() » (aucune reformulation).
+-- IDEMPOTENT : ne touche que les policies contenant auth.uid() SANS « select auth.uid() ».
+-- >>> À EXÉCUTER EN DERNIER (optimise toutes les policies déjà présentes). <<<
+do $mig$
+declare
+  r record;
+  new_qual  text;
+  new_check text;
+begin
+  for r in
+    select schemaname, tablename, policyname, qual, with_check
+    from pg_policies
+    where schemaname = 'public'
+      and (
+        (qual       is not null and qual       ~* 'auth\.uid\(\)' and qual       !~* 'select\s+auth\.uid\(\)')
+        or
+        (with_check is not null and with_check ~* 'auth\.uid\(\)' and with_check !~* 'select\s+auth\.uid\(\)')
+      )
+  loop
+    new_qual := null;
+    new_check := null;
+    if r.qual is not null and r.qual ~* 'auth\.uid\(\)' and r.qual !~* 'select\s+auth\.uid\(\)' then
+      new_qual := regexp_replace(r.qual, 'auth\.uid\(\)', '(select auth.uid())', 'g');
+    end if;
+    if r.with_check is not null and r.with_check ~* 'auth\.uid\(\)' and r.with_check !~* 'select\s+auth\.uid\(\)' then
+      new_check := regexp_replace(r.with_check, 'auth\.uid\(\)', '(select auth.uid())', 'g');
+    end if;
+    if new_qual is not null and new_check is not null then
+      execute format('alter policy %I on %I.%I using (%s) with check (%s)',
+                     r.policyname, r.schemaname, r.tablename, new_qual, new_check);
+    elsif new_qual is not null then
+      execute format('alter policy %I on %I.%I using (%s)',
+                     r.policyname, r.schemaname, r.tablename, new_qual);
+    elsif new_check is not null then
+      execute format('alter policy %I on %I.%I with check (%s)',
+                     r.policyname, r.schemaname, r.tablename, new_check);
+    end if;
+  end loop;
+end
+$mig$;
