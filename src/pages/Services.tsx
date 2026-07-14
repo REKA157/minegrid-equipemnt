@@ -190,31 +190,27 @@ export default function Services({ service }: ServicesProps) {
             >
               Nous Contacter
             </a>
-            <a
-              href="tel:+212XXXXXXXX"
-              className="inline-block bg-gray-100 px-8 py-3 rounded-md hover:bg-gray-200 transition-colors"
-            >
-              Appeler Maintenant
-            </a>
+            {/* Bouton « Appeler Maintenant » retiré : il pointait vers un numéro
+                factice (tel:+212XXXXXXXX). À rétablir avec un vrai numéro. */}
           </div>
         </div>
       </div>
 
-      <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h3 className="text-xl font-semibold mb-4">Pourquoi Nous Choisir ?</h3>
           <ul className="space-y-3">
             <li className="flex items-center">
               <Shield className="h-5 w-5 mr-2" />
-              Service garanti 100%
+              Réseau de partenaires vérifiés
             </li>
             <li className="flex items-center">
               <Clock className="h-5 w-5 mr-2" />
-              Disponibilité 24/7
+              Réponse sous 24h ouvrées
             </li>
             <li className="flex items-center">
               <Tools className="h-5 w-5 mr-2" />
-              Experts certifiés
+              Accompagnement dédié
             </li>
           </ul>
         </div>
@@ -237,23 +233,9 @@ export default function Services({ service }: ServicesProps) {
           </ul>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold mb-4">Certifications</h3>
-          <ul className="space-y-3">
-            <li className="flex items-center">
-              <Shield className="h-5 w-5 mr-2" />
-              ISO 9001:2015
-            </li>
-            <li className="flex items-center">
-              <Shield className="h-5 w-5 mr-2" />
-              ISO 14001:2015
-            </li>
-            <li className="flex items-center">
-              <Shield className="h-5 w-5 mr-2" />
-              OHSAS 18001
-            </li>
-          </ul>
-        </div>
+        {/* Carte « Certifications » retirée : elle affichait ISO 9001/14001 et
+            OHSAS 18001 (obsolète) codés en dur, non vérifiables. À rétablir
+            uniquement avec des certifications réellement détenues. */}
       </div>
     </div>
   );
