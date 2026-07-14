@@ -179,11 +179,14 @@ export class RealPipelineService {
       // qui scope (société via can_access_lead ; ou seller_id tant que non migré).
       // Un membre voit donc TOUT le pipeline de sa société. Le filtre « mes leads »
       // est appliqué côté widget sur assigned_to_user_id.
+      // Borné à 500 (le pipeline affiché n'a pas besoin de tout charger, et c'est
+      // rejoué à chaque poll). L'index idx_leads_created_at (p16) rend le tri rapide.
       const runSelect = (columns: string) =>
         supabaseClient
           .from('leads')
           .select(columns)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(500);
 
       // Colonnes OPTIONNELLES (déployées par migration) : on les lit si présentes,
       // sinon on relit sans elles (tolérant à la migration non encore appliquée).
