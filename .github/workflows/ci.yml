@@ -54,3 +54,36 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           du -sh dist/assets/*.js 2>/dev/null | sort -hr | head -20 >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  rls-proofs:
+    name: RLS / RPC proofs (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # Rejoue TOUS les harnais RLS/RPC (prereq + migration + contre-cas). Un échec
+      # (fuite de données, écriture non autorisée, garde manquante) bloque le merge.
+      - name: Run RLS/RPC proof harnesses
+        env:
+          PGPASSWORD: postgres
+          PSQL: "psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d test"
+        run: bash supabase/tests/run_all_proofs.sh
