@@ -177,7 +177,9 @@ function TempAccessBlock() {
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
 
-  if (!TEMP_ACCESS_CODE) {
+  // Backdoor démo : UNIQUEMENT en développement. Même si VITE_MONITOR_TEMP_ACCESS_CODE
+  // était renseigné par erreur dans un build public, le bloc ne s'affiche pas en prod.
+  if (!import.meta.env.DEV || !TEMP_ACCESS_CODE) {
     return null;
   }
 

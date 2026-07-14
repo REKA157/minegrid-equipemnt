@@ -139,6 +139,7 @@ export default function Register({ initialType }: RegisterProps) {
 
   const [loading, setLoading] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [consent, setConsent] = useState(false); // CGU + confidentialité (obligatoire)
 
   const getErrorMessage = (err: unknown): string => {
     if (err instanceof Error && err.message) return err.message;
@@ -235,6 +236,10 @@ export default function Register({ initialType }: RegisterProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!consent) {
+      toast('Vous devez accepter les conditions générales et la politique de confidentialité.');
+      return;
+    }
     if (!validateBeforePayment()) return;
 
     if (formData.subscription === 'gratuit') {
@@ -688,12 +693,25 @@ export default function Register({ initialType }: RegisterProps) {
             </>
             )}
 
+            <label className="flex items-start gap-2 mt-4 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                J'accepte les{' '}
+                <a href="#conditions-generales" className="text-primary-600 hover:underline">conditions générales</a>{' '}
+                et la{' '}
+                <a href="#politique-confidentialite" className="text-primary-600 hover:underline">politique de confidentialité</a>.
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !consent}
               onClick={(e) => {
-                console.log('🔘 Bouton cliqué');
-                console.log('📊 Abonnement actuel:', formData.subscription);
                 void handleSubmit(e);
               }}
               className="w-full mt-6 bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 font-semibold"

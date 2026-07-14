@@ -1832,41 +1832,10 @@ export default function VitrinePersonnalisee() {
                   </div>
                 </div>
 
-                {/* Carte des projets réalisés */}
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                    <span className="text-orange-600 mr-2">📍</span>
-                    Projets réalisés à proximité
-                  </h3>
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <div className="space-y-3">
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-orange-500 rounded-full mr-3"></div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">Construction Route A1</div>
-                          <div className="text-xs text-gray-600">Rabat - 15km • 2023</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-orange-500 rounded-full mr-3"></div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">Mine de Phosphate</div>
-                          <div className="text-xs text-gray-600">Khouribga - 45km • 2023</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-orange-500 rounded-full mr-3"></div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">Port de Casablanca</div>
-                          <div className="text-xs text-gray-600">Casablanca - 80km • 2022</div>
-                        </div>
-                      </div>
-                    </div>
-                    <button className="w-full mt-3 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm">
-                      Voir tous les projets
-                    </button>
-                  </div>
-                </div>
+                {/* Bloc « Projets réalisés à proximité » retiré : les projets (Route A1
+                    Rabat, Mine de Khouribga, Port de Casablanca) étaient codés en dur,
+                    identiques pour toutes les vitrines (faux portfolio). À rebrancher sur
+                    une vraie table de réalisations le jour où elle existera. */}
               </div>
             </div>
 

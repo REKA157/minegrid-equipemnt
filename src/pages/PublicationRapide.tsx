@@ -974,7 +974,7 @@ export default function PublicationRapide() {
                 }`}
               >
                 <Upload className="h-5 w-5 inline mr-2" />
-                Import Excel/CSV avec OCR
+                Import Excel/CSV (bientôt)
               </button>
               <button
                 onClick={() => setActiveTab('analytics')}

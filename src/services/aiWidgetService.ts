@@ -92,12 +92,22 @@ class AIWidgetService {
       const cached = monitorCacheGet<any[] | null>(ck);
       if (cached !== undefined) return cached;
 
-      const res = await fetch(`${this.monitorBaseUrl}${path}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      // Timeout : sans borne, un service monitor qui pend fige le widget (spinner
+      // infini). On abandonne au bout de 15 s -> le catch renvoie null (fallback vide).
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      let res: Response;
+      try {
+        res = await fetch(`${this.monitorBaseUrl}${path}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!res.ok) {
         // 401/403 = pas d'acces live payant, on laisse le fallback local.
@@ -125,12 +135,22 @@ class AIWidgetService {
       const cached = monitorCacheGet<Record<string, unknown> | null>(ck);
       if (cached !== undefined) return cached;
 
-      const res = await fetch(`${this.monitorBaseUrl}${path}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      // Timeout : sans borne, un service monitor qui pend fige le widget (spinner
+      // infini). On abandonne au bout de 15 s -> le catch renvoie null (fallback vide).
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      let res: Response;
+      try {
+        res = await fetch(`${this.monitorBaseUrl}${path}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!res.ok) return null;
 

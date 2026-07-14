@@ -24,38 +24,6 @@ interface AlertEvent {
   created_at: string;
 }
 
-// Fallback demo data
-const DEMO_RULES: AlertRule[] = [
-  {
-    id: 'r1',
-    rule: { country: ['Senegal', 'Ghana'], type: ['mine'], budget_min: 100_000_000, phase: ['tender', 'construction'] },
-    created_at: '2026-03-01T10:00:00Z',
-  },
-  {
-    id: 'r2',
-    rule: { type: ['road', 'rail'], budget_min: 500_000_000 },
-    created_at: '2026-03-05T14:30:00Z',
-  },
-];
-
-const DEMO_EVENTS: AlertEvent[] = [
-  {
-    id: 'e1', event_type: 'rule_match',
-    payload: { project_title: "Mine d'or de Kédougou Phase 2", project_country: 'Senegal', project_type: 'mine', project_phase: 'construction', project_budget: 350_000_000 },
-    created_at: '2026-03-13T08:15:00Z',
-  },
-  {
-    id: 'e2', event_type: 'rule_match',
-    payload: { project_title: 'Autoroute Lagos-Ibadan', project_country: 'Nigeria', project_type: 'road', project_phase: 'construction', project_budget: 1_200_000_000 },
-    created_at: '2026-03-12T16:45:00Z',
-  },
-  {
-    id: 'e3', event_type: 'rule_match',
-    payload: { project_title: 'Ligne ferroviaire Tema-Akosombo', project_country: 'Ghana', project_type: 'rail', project_phase: 'tender', project_budget: 620_000_000 },
-    created_at: '2026-03-11T11:20:00Z',
-  },
-];
-
 const COUNTRIES = ['Senegal', 'Ghana', 'Cameroon', 'Nigeria', 'Morocco', "Côte d'Ivoire", 'Burkina Faso', 'Guinea', 'Niger'];
 
 function RuleTag({ label, value }: { label: string; value: string }) {
@@ -176,9 +144,11 @@ export default function AlertsPanel() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [rulesData, eventsData] = await Promise.all([
         fetchAlertRules(),
@@ -187,8 +157,10 @@ export default function AlertsPanel() {
       setRules(rulesData);
       setEvents(eventsData);
     } catch {
-      setRules(DEMO_RULES);
-      setEvents(DEMO_EVENTS);
+      // Anti-façade : PAS de fausses alertes de démo en cas d'erreur -> état d'erreur honnête.
+      setLoadError(true);
+      setRules([]);
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -249,7 +221,15 @@ export default function AlertsPanel() {
           </div>
         )}
 
-        {!loading && tab === 'events' && (
+        {!loading && loadError && (
+          <div className="text-center py-8">
+            <AlertCircle className="h-8 w-8 text-red-300 mx-auto mb-2" />
+            <p className="text-xs text-gray-500">Impossible de charger les alertes pour le moment.</p>
+            <button onClick={load} className="mt-2 text-xs text-primary-600 hover:underline">Réessayer</button>
+          </div>
+        )}
+
+        {!loading && !loadError && tab === 'events' && (
           <>
             {events.length === 0 && (
               <div className="text-center py-8">
@@ -291,7 +271,7 @@ export default function AlertsPanel() {
           </>
         )}
 
-        {!loading && tab === 'rules' && (
+        {!loading && !loadError && tab === 'rules' && (
           <>
             {rules.map((r) => (
               <div key={r.id} className="border border-gray-100 rounded-lg p-3">
