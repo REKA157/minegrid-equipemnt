@@ -6,11 +6,20 @@
 
 ---
 
-## 0. À FAIRE MAINTENANT (seul geste bloquant)
-- [ ] **Appliquer `.audit/APPLY_IN_PROD.sql`** (Supabase SQL Editor → Run). Ferme transaction_cases + audit_logs
-      et ré-affirme les verrous argent. Puis relancer `.audit/evidence/prod_rls_verification.sql` et vérifier
-      `ecritures_client = NULL` sur les tables argent.
-- [ ] Supprimer la fonction morte **`hyper-service`** (dashboard → Edge Functions → ⋯ → Delete). Inoffensive, mais propre.
+## 0. À FAIRE MAINTENANT
+- [ ] **Appliquer `.audit/APPLY_IN_PROD.sql`** (Supabase SQL Editor → Run). Contient p3-restrict + p8→p18 :
+      verrous argent/fraude/revenus + index perf (p16) + quota IA (p17) + RPC suppression compte RGPD (p18).
+      Idempotent. Puis relancer `.audit/evidence/prod_rls_verification.sql`.
+- [ ] **Déployer 2 Edge Functions** (quota IA + RGPD, code prêt+revu) :
+      `supabase functions deploy ai-proxy` et `supabase functions deploy delete-account`
+      (via CLI + jeton, cf. plus haut ; à TESTER en staging).
+- [ ] **Créer un code promo** (jamais dans le front) : `insert into public.promo_codes (...)` (cf. p15).
+- [ ] Supprimer la fonction morte **`hyper-service`** (dashboard → Edge Functions → ⋯ → Delete).
+
+## 0bis. DÉJÀ CORRIGÉ + PROUVÉ cette session (rappel)
+2 P0 argent (commission/payment), P1 fraude inspection, revenus (p14 + code promo p15), quota IA (p17),
+RGPD suppression compte (p18), perf index (p16) ; ~15 façades UI (vitrine, messages, publication, documents,
+devis, page vendeur, Pro/Premium, Services). Détail : FINDINGS.md + git log branche fix/audit-remediation.
 
 ---
 
