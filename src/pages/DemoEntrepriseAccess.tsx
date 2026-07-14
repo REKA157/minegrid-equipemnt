@@ -16,6 +16,16 @@ export default function DemoEntrepriseAccess() {
   const [error, setError] = useState(false);
   const [granted, setGranted] = useState(false);
 
+  // Sécurité : cette page pose des drapeaux d'abonnement « entreprise » CÔTÉ
+  // NAVIGATEUR. En PRODUCTION elle n'existe QUE si un code démo est explicitement
+  // configuré (sinon on ne l'affiche pas du tout, pour ne pas exposer la porte
+  // dérobée) ; l'octroi reste par ailleurs protégé par ce code. Pour un vrai accès
+  // entreprise, préférer un CODE PROMO (compte réel, traçable, révocable — cf. p15).
+  // (garde-fou APRÈS les hooks — règle des Hooks React ; condition constante au build)
+  if (!import.meta.env.DEV && !DEMO_ACCESS_CODE) {
+    return null;
+  }
+
   const grantAccess = () => {
     localStorage.setItem('userSubscription', 'entreprise');
     localStorage.setItem('enterpriseService', 'true');

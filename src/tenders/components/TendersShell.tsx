@@ -6,11 +6,12 @@
  * horizontale scrollable en haut.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Building2,
   FileText,
   FolderOpen,
+  Info,
   LayoutDashboard,
   Library,
   ScrollText,
@@ -20,6 +21,7 @@ import {
 import { useRouteParams } from '../../router';
 import { useTendersStore } from '../store/tendersStore';
 import { ROLE_LABELS } from '../types';
+import { isTendersSharedConfigured } from '../../utils/api/tendersWorkspace';
 
 interface NavItem {
   /** Segment après appels-offres ('' = dashboard). */
@@ -45,7 +47,17 @@ const NAV: NavItem[] = [
 export function TendersShell({ children }: { children: React.ReactNode }) {
   const { segments } = useRouteParams();
   const settings = useTendersStore((s) => s.settings);
+  const tenders = useTendersStore((s) => s.tenders);
+  const [demoBannerHidden, setDemoBannerHidden] = useState(false);
   const sub = segments[1] ?? '';
+
+  // Bannière d'honnêteté : au premier lancement (hors mode partagé), le module
+  // affiche des appels d'offres/documents d'EXEMPLE (ids « demo_… »). On le signale
+  // clairement pour ne pas les faire passer pour de vrais dossiers.
+  const showDemoBanner =
+    !demoBannerHidden &&
+    !isTendersSharedConfigured() &&
+    tenders.some((t) => typeof t.id === 'string' && t.id.startsWith('demo_'));
 
   const isActive = (item: NavItem) =>
     item.segment === sub || (item.match ?? []).includes(sub);
@@ -110,7 +122,31 @@ export function TendersShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Contenu */}
-      <main className="min-w-0 flex-1 bg-gray-50 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <main className="min-w-0 flex-1 bg-gray-50 px-4 py-6 sm:px-6 lg:px-8">
+        {showDemoBanner && (
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="flex-1">
+              <span className="font-semibold">Données de démonstration.</span>{' '}
+              Les appels d'offres et documents affichés sont des <strong>exemples</strong> pour
+              découvrir le module. Videz-les depuis{' '}
+              <a href="#appels-offres/parametres" className="font-medium underline">
+                Paramètres → Données
+              </a>{' '}
+              quand vous démarrez pour de vrai.
+            </div>
+            <button
+              type="button"
+              onClick={() => setDemoBannerHidden(true)}
+              className="shrink-0 text-amber-500 hover:text-amber-700"
+              aria-label="Masquer ce message"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
