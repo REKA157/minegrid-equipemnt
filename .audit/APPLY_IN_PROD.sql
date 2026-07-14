@@ -6,6 +6,7 @@
 -- + RPC de suppression de compte RGPD. Ensuite : déployer les Edge Functions
 --   supabase functions deploy ai-proxy
 --   supabase functions deploy delete-account
+--   supabase functions deploy tenders-ai   (quota IA par utilisateur — p24)
 -- Et créer un code promo (jamais dans le front) :
 --   insert into public.promo_codes (code, subscription_type, duration_days, max_uses, expires_at)
 --   values ('TON-CODE', 'enterprise', 30, 20, now() + interval '90 days');
@@ -773,6 +774,173 @@ as $fn$
 $fn$;
 
 grant execute on function public.machine_engagement_counts(uuid[]) to authenticated;
+
+-- >>>>>>>>>>>>>>>>>>>> 20260714130000_p23_antispam_public_inserts.sql <<<<<<<<<<<<<<<<<<<<
+-- =====================================================================
+-- P23 — Anti-spam des inserts PUBLICS (devis + contact) — abus / DoS
+-- =====================================================================
+-- FAILLE : quote_requests et contact_messages acceptent des INSERT `anon` avec
+-- `with check (true)` (formulaires publics). Un visiteur (ou un script) peut donc
+-- inonder la boîte des vendeurs de fausses demandes/contacts sans aucune limite.
+--
+-- CORRECTIF : un trigger BEFORE INSERT limite le débit par ADRESSE E-MAIL sur deux
+-- fenêtres — rafale (2 min) et soutenu (1 h). Au-delà, l'insert est refusé avec un
+-- message clair (le front l'affiche). Le compteur lit les lignes récentes ; comme
+-- `anon` n'a PAS de policy SELECT sur ces tables, la fonction est SECURITY DEFINER
+-- (elle lit hors RLS) — sinon le count vaudrait 0 et le throttle serait inopérant.
+--
+-- Remarque : l'e-mail est fourni par le client (falsifiable), mais le throttle relève
+-- nettement le coût du flood et couvre le cas réaliste (même formulaire ré-envoyé).
+-- to_regclass -> sûr si une table est absente. $fn$ / $do$ nommés. Idempotent.
+-- =====================================================================
+
+-- --- Devis (quote_requests, clé = buyer_email) --------------------------------
+create or replace function public.quote_requests_antispam_fn()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_email text := lower(trim(coalesce(new.buyer_email, '')));
+  v_burst int;
+  v_hour  int;
+begin
+  if v_email = '' then
+    return new;  -- pas d'e-mail : laissé aux autres contraintes
+  end if;
+
+  v_burst := (
+    select count(*) from public.quote_requests q
+    where lower(trim(q.buyer_email)) = v_email
+      and q.created_at > now() - interval '2 minutes'
+  );
+  if v_burst >= 3 then
+    raise exception 'Trop de demandes envoyees en peu de temps. Merci de patienter quelques minutes avant de renvoyer une demande.';
+  end if;
+
+  v_hour := (
+    select count(*) from public.quote_requests q
+    where lower(trim(q.buyer_email)) = v_email
+      and q.created_at > now() - interval '1 hour'
+  );
+  if v_hour >= 15 then
+    raise exception 'Limite horaire de demandes atteinte pour cette adresse e-mail. Merci de reessayer plus tard.';
+  end if;
+
+  return new;
+end
+$fn$;
+
+revoke execute on function public.quote_requests_antispam_fn() from public;
+
+-- --- Contact (contact_messages, clé = email) ----------------------------------
+create or replace function public.contact_messages_antispam_fn()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_email text := lower(trim(coalesce(new.email, '')));
+  v_burst int;
+  v_hour  int;
+begin
+  if v_email = '' then
+    return new;
+  end if;
+
+  v_burst := (
+    select count(*) from public.contact_messages c
+    where lower(trim(c.email)) = v_email
+      and c.created_at > now() - interval '2 minutes'
+  );
+  if v_burst >= 3 then
+    raise exception 'Trop de messages envoyes en peu de temps. Merci de patienter quelques minutes.';
+  end if;
+
+  v_hour := (
+    select count(*) from public.contact_messages c
+    where lower(trim(c.email)) = v_email
+      and c.created_at > now() - interval '1 hour'
+  );
+  if v_hour >= 10 then
+    raise exception 'Limite horaire de messages atteinte pour cette adresse e-mail. Merci de reessayer plus tard.';
+  end if;
+
+  return new;
+end
+$fn$;
+
+revoke execute on function public.contact_messages_antispam_fn() from public;
+
+-- --- Attache les triggers (gardé : seulement si la table existe) ---------------
+do $do$
+begin
+  if to_regclass('public.quote_requests') is not null then
+    execute 'drop trigger if exists quote_requests_antispam on public.quote_requests';
+    execute 'create trigger quote_requests_antispam before insert on public.quote_requests '
+         || 'for each row execute function public.quote_requests_antispam_fn()';
+  end if;
+
+  if to_regclass('public.contact_messages') is not null then
+    execute 'drop trigger if exists contact_messages_antispam on public.contact_messages';
+    execute 'create trigger contact_messages_antispam before insert on public.contact_messages '
+         || 'for each row execute function public.contact_messages_antispam_fn()';
+  end if;
+end
+$do$;
+
+-- >>>>>>>>>>>>>>>>>>>> 20260714140000_p24_tenders_ai_quota.sql <<<<<<<<<<<<<<<<<<<<
+-- =====================================================================
+-- P24 — Quota quotidien tenders-ai par utilisateur (anti-abus crédits API)
+-- =====================================================================
+-- FAILLE : l'Edge Function tenders-ai appelle l'API Claude (coûteuse) sans aucun
+-- quota. Un utilisateur (ou un JWT volé) peut boucler des analyses/génération de
+-- documents et brûler le crédit ANTHROPIC_API_KEY (abus financier + DoS budget).
+--
+-- CORRECTIF : compteur quotidien PAR UTILISATEUR + RPC atomique bump_tenders_usage()
+-- que tenders-ai (service_role) appelle AVANT chaque appel modèle. Au-delà du plafond,
+-- l'appel est refusé (429) et le front retombe sur son mode simulation. Table réservée
+-- au service_role (aucun accès client). Même patron que p17 (ai-proxy). $fn$. Idempotent.
+-- =====================================================================
+
+create table if not exists public.tenders_ai_usage_daily (
+  user_id       uuid not null,
+  usage_date    date not null default current_date,
+  request_count int  not null default 0,
+  primary key (user_id, usage_date)
+);
+
+alter table public.tenders_ai_usage_daily enable row level security;
+revoke all on public.tenders_ai_usage_daily from anon, authenticated;
+
+-- Incrémente le compteur du jour, renvoie true si SOUS le plafond, false sinon.
+create or replace function public.bump_tenders_usage(p_user uuid, p_daily_limit int)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_count int;
+begin
+  if p_user is null then
+    return false;
+  end if;
+
+  insert into public.tenders_ai_usage_daily (user_id, usage_date, request_count)
+  values (p_user, current_date, 1)
+  on conflict (user_id, usage_date)
+  do update set request_count = public.tenders_ai_usage_daily.request_count + 1
+  returning request_count into v_count;
+
+  return v_count <= greatest(1, p_daily_limit);
+end;
+$fn$;
+
+revoke execute on function public.bump_tenders_usage(uuid, int) from public;
+grant execute on function public.bump_tenders_usage(uuid, int) to service_role;
 
 -- >>>>>>>>>>>>>>>>>>>> 20260714120000_p22_optimize_rls_initplan.sql <<<<<<<<<<<<<<<<<<<<
 -- =====================================================================

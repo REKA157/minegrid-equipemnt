@@ -27,9 +27,18 @@ const MODEL = Deno.env.get('TENDERS_AI_MODEL') ?? 'claude-opus-4-8';
 const REQUIRE_AUTH = (Deno.env.get('TENDERS_AI_REQUIRE_AUTH') ?? '').toLowerCase() === 'true';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+// Plafond quotidien d'appels modèle PAR UTILISATEUR (anti-abus du crédit API).
+const TENDERS_AI_DAILY_LIMIT = Number(Deno.env.get('TENDERS_AI_DAILY_LIMIT') ?? '') || 100;
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Client service_role : sert UNIQUEMENT à incrémenter le compteur de quota (RPC
+// bump_tenders_usage réservée au service_role). Absent si le secret n'est pas posé
+// -> le quota est simplement ignoré (fail-open), le service continue de fonctionner.
+const admin = SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  : null;
 
 // --- CORS (même convention durcie que send-email) -------------------------
 
@@ -421,15 +430,17 @@ Deno.serve(async (req) => {
     return json(req, { error: 'ANTHROPIC_API_KEY non configurée sur le serveur.' }, 503);
   }
 
-  // Authentification renforcée optionnelle : exige un utilisateur connecté
-  // (recommandé en production pour protéger le crédit API).
-  if (REQUIRE_AUTH) {
-    const authHeader = req.headers.get('authorization') ?? '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data?.user) {
-      return json(req, { error: 'Authentification requise.' }, 401);
-    }
+  // Résolution best-effort de l'utilisateur (pour le quota) ; l'auth stricte reste
+  // optionnelle via TENDERS_AI_REQUIRE_AUTH.
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  let userId: string | null = null;
+  if (token) {
+    const { data } = await supabase.auth.getUser(token);
+    userId = data?.user?.id ?? null;
+  }
+  if (REQUIRE_AUTH && !userId) {
+    return json(req, { error: 'Authentification requise.' }, 401);
   }
 
   let body: { action?: string; payload?: unknown };
@@ -439,6 +450,27 @@ Deno.serve(async (req) => {
     return json(req, { error: 'Corps JSON invalide.' }, 400);
   }
   if (!body.action) return json(req, { error: 'Champ "action" manquant.' }, 400);
+
+  // Quota quotidien par utilisateur (hors ping) : incrémente un compteur côté DB et
+  // refuse au-delà du plafond. Fail-open : toute erreur d'infra quota laisse passer
+  // (on ne casse jamais la fonctionnalité pour un souci de comptage).
+  if (body.action !== 'ping' && userId && admin) {
+    try {
+      const { data: under, error } = await admin.rpc('bump_tenders_usage', {
+        p_user: userId,
+        p_daily_limit: TENDERS_AI_DAILY_LIMIT,
+      });
+      if (!error && under === false) {
+        return json(
+          req,
+          { error: 'Quota IA quotidien atteint pour votre compte — réessayez demain.' },
+          429,
+        );
+      }
+    } catch (_e) {
+      // fail-open
+    }
+  }
 
   try {
     const result = await handleAction(body.action, body.payload ?? {});

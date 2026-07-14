@@ -27,6 +27,8 @@ teamG_documents|20260711130000_teamG_documents_rls.sql
 teamH_sessions|20260711140000_teamH_member_sessions.sql
 teamI_planning_devis|20260711150000_teamI_planning_devis_rls.sql
 p22_initplan|20260714120000_p22_optimize_rls_initplan.sql,20260714120000_p22_optimize_rls_initplan.sql
+p23_antispam|20260714130000_p23_antispam_public_inserts.sql
+p24_tenders_quota|20260714140000_p24_tenders_ai_quota.sql
 EOF
 )
 
