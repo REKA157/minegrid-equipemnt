@@ -3545,4 +3545,18 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
   }
 };
 
-export default WidgetRenderer; 
+// Mémoïsation : WidgetRenderer est instancié par cellule de grille et ses données
+// sont INTERNES (fetchs propres), pas issues des props. On ne re-rend donc que si la
+// CONFIG change (widget id/type, taille, rôle) — les re-rendus de polling du parent
+// ne repropagent plus tout l'arbre. Sûr : jamais périmé (les données restent gérées
+// par l'état interne du composant).
+function widgetPropsEqual(prev: WidgetRendererProps, next: WidgetRendererProps): boolean {
+  return (
+    prev.widget?.id === next.widget?.id &&
+    prev.widget?.type === next.widget?.type &&
+    prev.widgetSize === next.widgetSize &&
+    prev.dashboardRole === next.dashboardRole
+  );
+}
+
+export default React.memo(WidgetRenderer, widgetPropsEqual); 
