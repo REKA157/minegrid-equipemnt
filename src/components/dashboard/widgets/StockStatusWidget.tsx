@@ -225,54 +225,24 @@ async function loadEngagementByMachine(
   if (!machineIds.length) return map;
   for (const id of machineIds) map.set(String(id), { views: 0, contacts: 0 });
 
+  // Agrégation CÔTÉ SQL (RPC machine_engagement_counts, p21) : une seule requête
+  // qui renvoie vues + contacts par machine, au lieu de rapatrier 3×50 000 lignes
+  // brutes et de compter en JS. offers/messages sont scopés à auth.uid() côté serveur.
+  void userId;
   try {
-    const { data, error } = await supabaseClient
-      .from('machine_views')
-      .select('machine_id')
-      .in('machine_id', machineIds)
-      .limit(50000);
+    const { data, error } = await supabaseClient.rpc('machine_engagement_counts', {
+      p_machine_ids: machineIds,
+    });
     if (!error && data) {
-      for (const row of data as { machine_id?: string }[]) {
-        const cur = map.get(String(row.machine_id ?? ''));
-        if (cur) cur.views += 1;
+      for (const row of data as { machine_id: string; views: number; contacts: number }[]) {
+        map.set(String(row.machine_id), {
+          views: Number(row.views) || 0,
+          contacts: Number(row.contacts) || 0,
+        });
       }
     }
   } catch (e) {
-    logger.info('machine_views indisponible (widget stock):', e);
-  }
-
-  try {
-    const { data, error } = await supabaseClient
-      .from('offers')
-      .select('machine_id')
-      .eq('seller_id', userId)
-      .limit(50000);
-    if (!error && data) {
-      for (const row of data as { machine_id?: string }[]) {
-        const cur = map.get(String(row.machine_id ?? ''));
-        if (cur) cur.contacts += 1;
-      }
-    }
-  } catch (e) {
-    logger.info('offers indisponible (widget stock):', e);
-  }
-
-  try {
-    const { data, error } = await supabaseClient
-      .from('messages')
-      .select('machine_id')
-      .or(`receiver_id.eq.${userId},seller_id.eq.${userId}`)
-      .limit(50000);
-    if (!error && data) {
-      for (const row of data as { machine_id?: string }[]) {
-        const key = String(row.machine_id ?? '');
-        if (!key) continue;
-        const cur = map.get(key);
-        if (cur) cur.contacts += 1;
-      }
-    }
-  } catch (e) {
-    logger.info('messages indisponible (widget stock):', e);
+    logger.info('engagement indisponible (widget stock):', e);
   }
 
   return map;
