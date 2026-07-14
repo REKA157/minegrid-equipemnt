@@ -1,9 +1,12 @@
 -- =====================================================================
--- MINEGRID — DURCISSEMENT SÉCURITÉ + PERF À APPLIQUER EN PROD (audit Fable 5)
+-- MINEGRID — DURCISSEMENT SÉCURITÉ + PERF + RGPD À APPLIQUER EN PROD (audit Fable 5)
 -- =====================================================================
 -- À exécuter UNE FOIS dans Supabase SQL Editor (coller tout -> Run), après backup.
--- 100% idempotent + gardé. Ferme les P0/P1 argent/fraude/revenus + ajoute les
--- index de perf. Puis créer un code promo (jamais dans le front) :
+-- 100% idempotent + gardé. Ferme P0/P1 argent/fraude/revenus + index perf + quota IA
+-- + RPC de suppression de compte RGPD. Ensuite : déployer les Edge Functions
+--   supabase functions deploy ai-proxy
+--   supabase functions deploy delete-account
+-- Et créer un code promo (jamais dans le front) :
 --   insert into public.promo_codes (code, subscription_type, duration_days, max_uses, expires_at)
 --   values ('TON-CODE', 'enterprise', 30, 20, now() + interval '90 days');
 -- =====================================================================
@@ -471,3 +474,126 @@ begin
   end loop;
 end;
 $idx$;
+
+-- >>>>>>>>>>>>>>>>>>>> 20260711260000_p17_ai_usage_quota.sql <<<<<<<<<<<<<<<<<<<<
+-- =====================================================================
+-- P17 — Quota IA par société (anti-abus des crédits, audit Fable 5)
+-- =====================================================================
+-- FAILLE : l'Edge Function ai-proxy appelle le fournisseur LLM avec la clé de la
+-- SOCIÉTÉ sans aucun quota -> un membre (ou un JWT volé) peut boucler des requêtes
+-- et brûler le budget/les crédits IA de l'organisation (abus financier + DoS budget).
+--
+-- CORRECTIF : compteur quotidien par org + RPC atomique bump_ai_usage() appelée
+-- par ai-proxy (service_role) AVANT chaque appel fournisseur. Au-delà du plafond,
+-- l'appel est refusé (429). Table réservée au service_role (aucun accès client).
+-- Statements directs + délimiteur $fn$. Idempotent.
+-- =====================================================================
+
+create table if not exists public.ai_usage_daily (
+  organization_id uuid not null,
+  usage_date      date not null default current_date,
+  request_count   int  not null default 0,
+  primary key (organization_id, usage_date)
+);
+
+alter table public.ai_usage_daily enable row level security;
+revoke all on public.ai_usage_daily from anon, authenticated;
+
+-- Incrémente le compteur du jour et renvoie true si SOUS le plafond, false sinon.
+-- Atomique (insert ... on conflict do update). SECURITY DEFINER : appelée par le
+-- service_role de l'Edge Function.
+create or replace function public.bump_ai_usage(p_org uuid, p_daily_limit int)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_count int;
+begin
+  if p_org is null then
+    return false;
+  end if;
+
+  insert into public.ai_usage_daily (organization_id, usage_date, request_count)
+  values (p_org, current_date, 1)
+  on conflict (organization_id, usage_date)
+  do update set request_count = public.ai_usage_daily.request_count + 1
+  returning request_count into v_count;
+
+  return v_count <= greatest(1, p_daily_limit);
+end;
+$fn$;
+
+-- Par défaut PostgreSQL accorde EXECUTE à PUBLIC : on le retire pour réserver la
+-- fonction au service_role (l'Edge Function ai-proxy). Aucun client ne peut la
+-- boucler pour gonfler le compteur d'une autre société.
+revoke execute on function public.bump_ai_usage(uuid, int) from public;
+grant execute on function public.bump_ai_usage(uuid, int) to service_role;
+
+-- >>>>>>>>>>>>>>>>>>>> 20260711270000_p18_delete_my_account.sql <<<<<<<<<<<<<<<<<<<<
+-- =====================================================================
+-- P18 — Suppression de compte RGPD (droit à l'effacement) — partie données
+-- =====================================================================
+-- FAILLE : les deux deleteUserAccount() côté client appelaient auth.admin.deleteUser
+-- avec la clé ANON (403, inopérant) et n'étaient même pas câblés -> AUCUN parcours
+-- de suppression de compte ne fonctionnait, et aucune donnée liée n'était purgée.
+--
+-- CORRECTIF (partie SQL) : RPC delete_my_account() SECURITY DEFINER qui efface les
+-- lignes appartenant à l'APPELANT (auth.uid()) dans toutes les tables user-scopées
+-- (boucle GARDÉE : ne touche une table/colonne que si elle existe). L'Edge Function
+-- delete-account appelle cette RPC (avec le JWT du user), puis supprime l'utilisateur
+-- auth via service_role (ce qui cascade les tables FK-liées).
+-- Délimiteur $fn$, idempotent.
+-- =====================================================================
+
+create or replace function public.delete_my_account()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_uid     uuid := auth.uid();
+  r         record;
+  v_n       int;
+  v_deleted int := 0;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'Non authentifié');
+  end if;
+
+  for r in
+    select * from (values
+      ('machines', 'sellerid'), ('machines', 'seller_id'),
+      ('leads', 'seller_id'), ('leads', 'assigned_to_user_id'),
+      ('messages', 'sellerid'), ('messages', 'seller_id'),
+      ('documents', 'user_id'),
+      ('planning_events', 'user_id'),
+      ('devis', 'user_id'),
+      ('vitrines', 'user_id'),
+      ('pro_clients', 'user_id'),
+      ('promo_redemptions', 'user_id'),
+      ('member_sessions', 'user_id'),
+      ('organization_member_scopes', 'user_id'),
+      ('organization_members', 'user_id'),
+      ('enterprise_dashboard_configs', 'user_id'),
+      ('quote_requests', 'buyer_user_id'), ('quote_requests', 'seller_id')
+    ) as t(tbl, col)
+  loop
+    if to_regclass('public.' || r.tbl) is not null
+       and exists (
+         select 1 from information_schema.columns
+         where table_schema = 'public' and table_name = r.tbl and column_name = r.col
+       ) then
+      execute format('delete from public.%I where %I = $1', r.tbl, r.col) using v_uid;
+      get diagnostics v_n = row_count;
+      v_deleted := v_deleted + v_n;
+    end if;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'rows_deleted', v_deleted);
+end;
+$fn$;
+
+grant execute on function public.delete_my_account() to authenticated;

@@ -23,6 +23,7 @@ import {
 import { usePermissions } from '../utils/permissions';
 import { getProClientProfile, upsertProClientProfile } from '../utils/proApi';
 import supabase from '../utils/supabaseClient';
+import { toast } from '../utils/toast';
 
 interface ConfigurationProProps {
   onClose?: () => void;
@@ -520,10 +521,35 @@ export default function ConfigurationPro({ onClose }: ConfigurationProProps) {
                         </div>
                       </div>
                       <div className="mt-4 space-y-2">
-                        <button className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm('Supprimer DÉFINITIVEMENT votre compte et toutes vos données ? Cette action est irréversible.')) return;
+                            if (!window.confirm('Dernière confirmation : la suppression ne peut pas être annulée. Continuer ?')) return;
+                            const { data, error } = await supabase.functions.invoke('delete-account');
+                            if (error || (data && data.ok === false)) {
+                              toast('La suppression du compte a échoué. Réessayez ou contactez le support.');
+                              return;
+                            }
+                            await supabase.auth.signOut();
+                            window.location.href = '/';
+                          }}
+                          className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                        >
                           Supprimer le compte
                         </button>
-                        <button className="w-full px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors">
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm('Effacer TOUTES vos données (annonces, devis, documents, planning…) en gardant votre compte ? Irréversible.')) return;
+                            const { data, error } = await supabase.rpc('delete_my_account');
+                            if (error || (data && data.ok === false)) {
+                              toast('La suppression des données a échoué.');
+                              return;
+                            }
+                            toast('Vos données ont été supprimées.');
+                            window.location.reload();
+                          }}
+                          className="w-full px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors"
+                        >
                           Supprimer toutes les données
                         </button>
                       </div>

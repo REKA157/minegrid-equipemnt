@@ -142,6 +142,18 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: "Aucune IA connectée. Configurez-la dans « Assistant IA ».", code: 'no_ai' }, 400);
     }
 
+    // 2bis) QUOTA par société (anti-abus : un membre ne peut pas brûler les crédits
+    //       IA de sa société). Compteur quotidien atomique (RPC bump_ai_usage, p17).
+    //       Fail-open si la RPC n'est pas encore déployée (le quota est additif).
+    const DAILY_AI_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') || 200);
+    const { data: allowed, error: quotaErr } = await admin.rpc('bump_ai_usage', {
+      p_org: mem.organization_id,
+      p_daily_limit: DAILY_AI_LIMIT,
+    });
+    if (!quotaErr && allowed === false) {
+      return json(req, { error: 'Quota IA quotidien de votre société atteint. Réessayez demain.', code: 'quota' }, 429);
+    }
+
     // 3) Agir.
     const body = await req.json().catch(() => ({}));
     const action = body.action === 'ping' ? 'ping' : 'chat';
@@ -156,7 +168,13 @@ Deno.serve(async (req: Request) => {
     const hasSystem = userMessages.some((m) => m.role === 'system');
     const messages = hasSystem ? userMessages : [{ role: 'system' as const, content: SYSTEM_PROMPT }, ...userMessages];
 
-    const reply = await callProvider(cred as Cred, messages, Number(body.maxTokens) || 1024);
+    // Bornes serveur : longueur totale + maxTokens plafonnés (le client ne décide
+    // pas seul du coût par requête).
+    const totalLen = messages.reduce((n, m) => n + (m.content?.length || 0), 0);
+    if (totalLen > 24000) return json(req, { error: 'Message trop long.' }, 400);
+    const maxTokens = Math.min(Math.max(1, Number(body.maxTokens) || 1024), 2048);
+
+    const reply = await callProvider(cred as Cred, messages, maxTokens);
     return json(req, { reply, provider: cred.provider });
   } catch (e) {
     return json(req, { error: (e as Error)?.message || String(e) }, 502);
