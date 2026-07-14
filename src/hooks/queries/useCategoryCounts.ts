@@ -6,17 +6,13 @@ import { queryKeys } from './queryKeys';
 export type CategoryCounts = Record<string, number>;
 
 /**
- * Charge un minimum de colonnes (category, type, specifications) depuis la
- * table `machines` et agrège les compteurs par secteur métier.
- *
- * Protection perf : limite à 5000 lignes. Au-delà, mieux vaut créer une vue
- * SQL côté Supabase (GROUP BY secteur) plutôt que comptage côté client.
+ * Compteurs d'annonces par secteur métier. L'agrégation se fait CÔTÉ SQL
+ * (RPC machine_category_counts, migration p20) : on ne rapatrie plus 5000 lignes
+ * + leur JSON, mais quelques dizaines de groupes (category, category_name). Le
+ * mapping secteur (logique métier) reste en JS sur ce petit ensemble.
  */
 async function fetchCategoryCounts(): Promise<CategoryCounts> {
-  const { data, error } = await supabase
-    .from('machines')
-    .select('category, specifications')
-    .limit(5000);
+  const { data, error } = await supabase.rpc('machine_category_counts');
 
   if (error) {
     console.warn('[useCategoryCounts] fetch error:', error);
@@ -25,13 +21,13 @@ async function fetchCategoryCounts(): Promise<CategoryCounts> {
   if (!data) return {};
 
   const counts: CategoryCounts = {};
-  for (const row of data as Array<Record<string, unknown>>) {
+  for (const row of data as Array<{ category: string | null; category_name: string | null; n: number }>) {
     const sector = resolveMachineSector({
-      category: row.category as string | null,
+      category: row.category,
       type: null,
-      specifications: (row.specifications as { category_name?: string | null } | null) ?? null,
+      specifications: row.category_name ? { category_name: row.category_name } : null,
     });
-    counts[sector] = (counts[sector] || 0) + 1;
+    counts[sector] = (counts[sector] || 0) + Number(row.n);
   }
   return counts;
 }
