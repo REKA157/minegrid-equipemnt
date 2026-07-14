@@ -3,7 +3,7 @@
   "audit_status": "constat_et_correctifs_livres",
   "current_phase": "phase_4_integrite_argent_partial",
   "verified_branch": "fix/audit-remediation",
-  "verified_commit": "949d585c",
+  "verified_commit": "983a0f17",
   "working_tree_clean": false,
   "completed_phases": [
     "phase_0_baseline",
@@ -70,7 +70,7 @@
     "F-003 inspection_reports écrit par le vendeur [P1 fraude] — bloqué par collision de schéma",
     "F-004 collisions inspection_requests/customs_cases/transport_requests [P1]",
     "F-005 trust_profiles/inspectors PII exposées à anon [P2]",
-    "F-006 inserts anon with check(true) spam + audit_logs actor_id null [P2]",
+    "F-006 inserts anon with check(true) spam [P2] — CORRIGÉ (trigger throttle p23, prouvé) ; audit_logs actor_id null (p12)",
     "F-007 bundle >600kB + 887 warnings [P2/P3]",
     "F-008 14 vulns npm (dev/build, hors bundle prod) [P2]",
     "F-009 actions CI non SHA-pinned [P3]"
@@ -94,10 +94,18 @@
     "Tests de charge, E2E navigateur et multi-appareils non executables dans cet environnement.",
     "Secrets (cles Stripe/Supabase/monitor) non fournis : les parcours reels de paiement/escrow ne peuvent etre executes de bout en bout."
   ],
-  "next_mission": "Utilisateur : appliquer APPLY_IN_PROD.sql + suivre .audit/REMAINING_WORK.md",
+  "refontes_orange_livrees": [
+    "1/6 accueil RPC machine_category_counts (p20)",
+    "2/6 widget Stock RPC machine_engagement_counts (p21)",
+    "3/6 WidgetRenderer React.memo (comparateur config)",
+    "4/6 RLS auth.uid()->(select auth.uid()) initplan (p22, prouvé identique+idempotent)",
+    "5/6 anti-spam devis/contact (p23) + quota tenders-ai (p24), 16/16 CI",
+    "6/6 vérité cosmétique : faux rang mort supprimé, #demo-entreprise non exposé sans code, bandeau démo AO (prouvé live)"
+  ],
+  "next_mission": "Utilisateur : appliquer APPLY_IN_PROD.sql (p3-restrict + p8->p24) + déployer ai-proxy/delete-account/tenders-ai + suivre .audit/REMAINING_WORK.md",
   "next_action": "cf .audit/REMAINING_WORK.md (baseline pg_dump, collisions, escrow/staging, PII latent, npm, CI)",
-  "last_completed_action": "Phase 0 — baseline Git + cartographie depot (routes, tables, RLS, edge functions, tests, CI, services externes, variables d'env) ; creation du dossier .audit.",
+  "last_completed_action": "6 refontes 🟠 (perf accueil/stock, mémoïsation, RLS initplan p22, anti-spam p23 + quota tenders-ai p24, vérité cosmétique) — chacune prouvée (Docker 16/16 + live) et committée.",
   "resume_required": false,
-  "continuation_mode": "checkpoint_after_phase0",
-  "last_updated": "2026-07-11"
+  "continuation_mode": "refontes_orange_terminees",
+  "last_updated": "2026-07-14"
 }

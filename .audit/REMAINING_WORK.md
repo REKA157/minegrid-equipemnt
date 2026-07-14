@@ -7,12 +7,14 @@
 ---
 
 ## 0. À FAIRE MAINTENANT
-- [ ] **Appliquer `.audit/APPLY_IN_PROD.sql`** (Supabase SQL Editor → Run). Contient p3-restrict + p8→p18 :
-      verrous argent/fraude/revenus + index perf (p16) + quota IA (p17) + RPC suppression compte RGPD (p18).
+- [ ] **Appliquer `.audit/APPLY_IN_PROD.sql`** (Supabase SQL Editor → Run). Contient p3-restrict + p8→p24 :
+      verrous argent/fraude/revenus + index perf (p16) + quota IA (p17) + RPC suppression compte RGPD (p18)
+      + admin membres (p19) + RPC d'agrégation perf accueil/stock (p20/p21) + optimisation RLS initplan (p22,
+      exécutée EN DERNIER) + anti-spam devis/contact (p23) + quota tenders-ai (p24).
       Idempotent. Puis relancer `.audit/evidence/prod_rls_verification.sql`.
-- [ ] **Déployer 2 Edge Functions** (quota IA + RGPD, code prêt+revu) :
-      `supabase functions deploy ai-proxy` et `supabase functions deploy delete-account`
-      (via CLI + jeton, cf. plus haut ; à TESTER en staging).
+- [ ] **Déployer 3 Edge Functions** (quota IA + RGPD + quota AO, code prêt+revu) :
+      `supabase functions deploy ai-proxy`, `supabase functions deploy delete-account`,
+      `supabase functions deploy tenders-ai` (via CLI + jeton, cf. plus haut ; à TESTER en staging).
 - [ ] **Créer un code promo** (jamais dans le front) : `insert into public.promo_codes (...)` (cf. p15).
 - [ ] Supprimer la fonction morte **`hyper-service`** (dashboard → Edge Functions → ⋯ → Delete).
 
@@ -20,6 +22,17 @@
 2 P0 argent (commission/payment), P1 fraude inspection, revenus (p14 + code promo p15), quota IA (p17),
 RGPD suppression compte (p18), perf index (p16) ; ~15 façades UI (vitrine, messages, publication, documents,
 devis, page vendeur, Pro/Premium, Services). Détail : FINDINGS.md + git log branche fix/audit-remediation.
+
+**6 refontes 🟠 (par ordre, chacune prouvée + committée) :**
+1. Accueil — RPC d'agrégation `machine_category_counts` (p20) au lieu de 5000 lignes rapatriées.
+2. Widget Stock — RPC `machine_engagement_counts` (p21) au lieu de 3×50 000 lignes.
+3. `WidgetRenderer` — `React.memo` + comparateur config (plus de re-rendu de tout l'arbre au polling).
+4. RLS — `auth.uid()` → `(select auth.uid())` sur toutes les policies (p22, initplan Supabase), prouvé
+   à comportement identique + idempotent.
+5. Anti-spam — trigger throttle par e-mail sur `quote_requests`/`contact_messages` (p23) + quota
+   quotidien tenders-ai par utilisateur (p24). 16/16 harnais CI verts.
+6. Vérité cosmétique — suppression du faux rang mort (3/12), `#demo-entreprise` non exposé en prod
+   sans code, bandeau « données de démonstration » sur les appels d'offres (prouvé en live).
 
 ---
 
