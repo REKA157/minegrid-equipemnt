@@ -36,6 +36,7 @@ cache/
 .env
 .env.local
 .env.*.local
+.env.staging
 services/monitor-service/.env
 
 # Node
