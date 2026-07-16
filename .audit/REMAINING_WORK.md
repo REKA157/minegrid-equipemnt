@@ -7,11 +7,11 @@
 ---
 
 ## 0. À FAIRE MAINTENANT
-- [ ] **Appliquer `.audit/APPLY_IN_PROD.sql`** (Supabase SQL Editor → Run). Contient p3-restrict + p8→p24 :
-      verrous argent/fraude/revenus + index perf (p16) + quota IA (p17) + RPC suppression compte RGPD (p18)
-      + admin membres (p19) + RPC d'agrégation perf accueil/stock (p20/p21) + optimisation RLS initplan (p22,
-      exécutée EN DERNIER) + anti-spam devis/contact (p23) + quota tenders-ai (p24).
-      Idempotent. Puis relancer `.audit/evidence/prod_rls_verification.sql`.
+- [x] **Appliquer `.audit/APPLY_IN_PROD.sql`** (Supabase SQL Editor → Run) — **FAIT le 2026-07-16 ✅**.
+      Contenait p3-restrict + p8→p24 : verrous argent/fraude/revenus + index perf (p16) + quota IA (p17)
+      + RPC suppression compte RGPD (p18) + admin membres (p19) + RPC d'agrégation perf accueil/stock (p20/p21)
+      + optimisation RLS initplan (p22) + anti-spam devis/contact (p23) + quota tenders-ai (p24).
+      Recommandé : relancer `.audit/evidence/prod_rls_verification.sql` pour re-constater l'état durci.
 - [ ] **Déployer 3 Edge Functions** (quota IA + RGPD + quota AO, code prêt+revu) :
       `supabase functions deploy ai-proxy`, `supabase functions deploy delete-account`,
       `supabase functions deploy tenders-ai` (via CLI + jeton, cf. plus haut ; à TESTER en staging).

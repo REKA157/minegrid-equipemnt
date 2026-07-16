@@ -1,6 +1,7 @@
 {
   "project": "MineGrid",
-  "audit_status": "constat_et_correctifs_livres",
+  "audit_status": "bundle_applique_en_prod_2026-07-16",
+  "bundle_prod": "APPLY_IN_PROD.sql (p3-restrict + p8->p24) applique avec succes le 2026-07-16 ; reste: deployer 3 Edge Functions (ai-proxy, delete-account, tenders-ai) + creer un code promo + supprimer hyper-service",
   "current_phase": "phase_4_integrite_argent_partial",
   "verified_branch": "fix/audit-remediation",
   "verified_commit": "983a0f17",
