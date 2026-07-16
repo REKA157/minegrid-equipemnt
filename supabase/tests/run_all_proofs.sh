@@ -31,6 +31,7 @@ p23_antispam|20260714130000_p23_antispam_public_inserts.sql
 p24_tenders_quota|20260714140000_p24_tenders_ai_quota.sql
 p21_engagement|20260711300000_p21_machine_engagement_counts.sql
 p21_engagement_missing|20260711300000_p21_machine_engagement_counts.sql
+p19_org_admin|20260711280000_p19_org_member_admin.sql
 EOF
 )
 

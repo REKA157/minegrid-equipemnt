@@ -379,38 +379,55 @@ security definer
 set search_path = public
 as $fn$
 declare
-  v_uid   uuid := auth.uid();
-  v_promo public.promo_codes%rowtype;
-  v_end   date;
+  v_uid  uuid := auth.uid();
+  v_id   uuid;
+  v_days int;
+  v_type text;
+  v_end  date;
 begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'Non authentifié');
   end if;
 
-  -- Code valide ? (verrou de ligne pour éviter la course sur uses_count)
-  select * into v_promo from public.promo_codes
-  where lower(code) = lower(btrim(p_code))
-    and active = true
-    and (expires_at is null or expires_at > now())
-    and uses_count < max_uses
-  for update;
-
-  if not found then
-    return jsonb_build_object('ok', false, 'error', 'Code promo invalide, expiré ou épuisé');
+  -- IMPORTANT : aucun « SELECT ... INTO » — l'éditeur SQL Supabase le confond avec un
+  -- SELECT INTO <table> (« relation v_promo does not exist »). On n'utilise que des
+  -- affectations par sous-requête scalaire (:=) et RETURNING ... INTO.
+  -- 1) Résoudre le code (actif + non expiré).
+  v_id := (
+    select id from public.promo_codes
+    where lower(code) = lower(btrim(p_code))
+      and active = true
+      and (expires_at is null or expires_at > now())
+    limit 1
+  );
+  if v_id is null then
+    return jsonb_build_object('ok', false, 'error', 'Code promo invalide ou expiré');
   end if;
 
-  if exists (select 1 from public.promo_redemptions r
-             where r.promo_code_id = v_promo.id and r.user_id = v_uid) then
+  -- 2) Réserver la rédemption D'ABORD : la contrainte unique (promo_code_id,user_id)
+  --    garantit « un usage par compte » SANS toucher au compteur en cas de refus.
+  begin
+    insert into public.promo_redemptions (promo_code_id, user_id) values (v_id, v_uid);
+  exception when unique_violation then
     return jsonb_build_object('ok', false, 'error', 'Code déjà utilisé sur ce compte');
+  end;
+
+  -- 3) Consommer 1 usage de façon ATOMIQUE (échoue si quota atteint) + lire durée/type.
+  update public.promo_codes
+     set uses_count = uses_count + 1
+   where id = v_id and uses_count < max_uses
+   returning duration_days, subscription_type into v_days, v_type;
+  if not found then
+    -- quota épuisé (ou course perdue) : annuler la rédemption réservée, ne rien consommer.
+    delete from public.promo_redemptions where promo_code_id = v_id and user_id = v_uid;
+    return jsonb_build_object('ok', false, 'error', 'Code promo épuisé');
   end if;
 
-  insert into public.promo_redemptions (promo_code_id, user_id) values (v_promo.id, v_uid);
-  update public.promo_codes set uses_count = uses_count + 1 where id = v_promo.id;
-
-  v_end := (now() + make_interval(days => v_promo.duration_days))::date;
+  -- 4) Activer l'abonnement (SECURITY DEFINER : écrit pro_clients malgré le verrou p14).
+  v_end := (now() + make_interval(days => v_days))::date;
   insert into public.pro_clients (user_id, subscription_type, subscription_status,
                                   subscription_start, subscription_end, payment_method, updated_at)
-  values (v_uid, v_promo.subscription_type, 'active', now()::date, v_end, 'promo_code', now())
+  values (v_uid, v_type, 'active', now()::date, v_end, 'promo_code', now())
   on conflict (user_id) do update
     set subscription_type   = excluded.subscription_type,
         subscription_status = 'active',
@@ -419,8 +436,7 @@ begin
         payment_method      = 'promo_code',
         updated_at          = now();
 
-  return jsonb_build_object('ok', true, 'subscription_type', v_promo.subscription_type,
-                            'subscription_end', v_end);
+  return jsonb_build_object('ok', true, 'subscription_type', v_type, 'subscription_end', v_end);
 end;
 $fn$;
 
@@ -629,11 +645,15 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Non authentifié');
   end if;
 
-  select organization_id, role into v_org, v_role
-  from public.organization_members
-  where user_id = p_user_id
-  order by created_at
-  limit 1;
+  -- Pas de « SELECT ... INTO » (incompatible éditeur Supabase) : affectations scalaires.
+  v_org := (
+    select organization_id from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
+  v_role := (
+    select role from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
 
   if v_org is null then
     return jsonb_build_object('ok', false, 'error', 'Membre introuvable');
@@ -667,11 +687,15 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Rôle invalide');
   end if;
 
-  select organization_id, role into v_org, v_role
-  from public.organization_members
-  where user_id = p_user_id
-  order by created_at
-  limit 1;
+  -- Pas de « SELECT ... INTO » (incompatible éditeur Supabase) : affectations scalaires.
+  v_org := (
+    select organization_id from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
+  v_role := (
+    select role from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
 
   if v_org is null then
     return jsonb_build_object('ok', false, 'error', 'Membre introuvable');

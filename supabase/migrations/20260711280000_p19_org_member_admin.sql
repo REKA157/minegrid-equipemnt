@@ -27,11 +27,15 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Non authentifié');
   end if;
 
-  select organization_id, role into v_org, v_role
-  from public.organization_members
-  where user_id = p_user_id
-  order by created_at
-  limit 1;
+  -- Pas de « SELECT ... INTO » (incompatible éditeur Supabase) : affectations scalaires.
+  v_org := (
+    select organization_id from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
+  v_role := (
+    select role from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
 
   if v_org is null then
     return jsonb_build_object('ok', false, 'error', 'Membre introuvable');
@@ -65,11 +69,15 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Rôle invalide');
   end if;
 
-  select organization_id, role into v_org, v_role
-  from public.organization_members
-  where user_id = p_user_id
-  order by created_at
-  limit 1;
+  -- Pas de « SELECT ... INTO » (incompatible éditeur Supabase) : affectations scalaires.
+  v_org := (
+    select organization_id from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
+  v_role := (
+    select role from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
 
   if v_org is null then
     return jsonb_build_object('ok', false, 'error', 'Membre introuvable');

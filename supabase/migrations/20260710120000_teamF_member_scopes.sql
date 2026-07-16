@@ -86,13 +86,16 @@ declare
   v_org  uuid;
   v_role text;
 begin
-  -- Organisation de la CIBLE (le membre à régler).
-  select organization_id, role
-    into v_org, v_role
-  from public.organization_members
-  where user_id = p_user_id
-  order by created_at
-  limit 1;
+  -- Organisation de la CIBLE (le membre à régler). Pas de « SELECT ... INTO »
+  -- (incompatible éditeur Supabase) : affectations par sous-requête scalaire.
+  v_org := (
+    select organization_id from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
+  v_role := (
+    select role from public.organization_members
+    where user_id = p_user_id order by created_at limit 1
+  );
 
   if v_org is null then
     raise exception 'Membre introuvable dans une organisation';
