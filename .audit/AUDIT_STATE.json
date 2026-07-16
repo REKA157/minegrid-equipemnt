@@ -105,7 +105,8 @@
   ],
   "next_mission": "Utilisateur : appliquer APPLY_IN_PROD.sql (p3-restrict + p8->p24) + déployer ai-proxy/delete-account/tenders-ai + suivre .audit/REMAINING_WORK.md",
   "next_action": "cf .audit/REMAINING_WORK.md (baseline pg_dump, collisions, escrow/staging, PII latent, npm, CI)",
-  "last_completed_action": "6 refontes 🟠 (perf accueil/stock, mémoïsation, RLS initplan p22, anti-spam p23 + quota tenders-ai p24, vérité cosmétique) — chacune prouvée (Docker 16/16 + live) et committée.",
+  "verification_prod_2026-07-16": "verify_bundle_applied.sql exécuté en prod par l'utilisateur : 7/7 contrôles OK (verrous argent aucun grant écriture, 8 RPC, 2 triggers anti-spam, 4 tables, code promo actif, RLS optimisée = 212 policies enveloppées, promo_codes non énumérable).",
+  "last_completed_action": "Bundle appliqué + VÉRIFIÉ en prod (7/7 contrôles verts). Reste hors-SQL : déployer/valider 3 Edge Functions (faites), tester code promo bout-en-bout, supprimer hyper-service.",
   "resume_required": false,
   "continuation_mode": "refontes_orange_terminees",
   "last_updated": "2026-07-14"
