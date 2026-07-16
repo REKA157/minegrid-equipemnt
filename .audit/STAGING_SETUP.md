@@ -7,6 +7,7 @@ Convention : **[TOI]** = action dans ton compte (dashboard / une commande). **[M
 et je vérifie en Docker. On avance **une étape à la fois**, on vérifie, puis on enchaîne.
 
 Prod project ref : `tnfbggrftmtxpgbcwqzo`.
+Staging project ref : `vrouxqofmlbkxgznftja` (URL `https://vrouxqofmlbkxgznftja.supabase.co`) — créé le 2026-07-16.
 
 ---
 
@@ -45,7 +46,7 @@ Je relis le dump + je l'applique sur un Postgres jetable (Docker) pour confirmer
 
 ### A4. Appliquer la baseline sur le STAGING  [TOI]
 ```powershell
-npx supabase link --project-ref <REF_STAGING>     # cette fois le staging ; mot de passe DB staging
+npx supabase link --project-ref vrouxqofmlbkxgznftja   # cette fois le staging ; mot de passe DB staging
 npx supabase db push                              # applique la baseline sur le staging
 ```
 (Alternative si besoin : coller le contenu du fichier dans le SQL Editor du **staging**.)
