@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Package, Settings, Bell, User, LogOut, ChevronRight, Shield, Wallet, RefreshCw, Eye, MessageSquare, DollarSign, X, CreditCard, Gift, Save } from 'lucide-react';
-import StripePaymentForm from '../components/StripePaymentForm';
+import PaddleCheckoutButton from '../components/PaddleCheckoutButton';
+import { PAID_PLANS, PLAN_RANK, getPaidPlan, normalizePlanId, planDisplayName, planPriceUsd } from '../config/plans';
 import { MyTrustInline } from '../nextgen/integration/inline';
 import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData, getOffers } from '../utils/api';
 import { supabaseClient as supabase } from '../utils/supabaseClient';
@@ -694,6 +695,9 @@ export default function Dashboard({ section = 'overview' }) {
             }
 
             const plan = data.subscription_type;
+            // Invalide le cache useSubscription : sinon les gardes de route
+            // servent l'état pré-activation pendant jusqu'à 60 s.
+            window.dispatchEvent(new Event('subscriptionRefreshRequested'));
             setHasActiveSubscription(true);
             setSubscriptionType(normalizeSubscriptionType(plan));
             setAccountItem(accountId, 'userSubscription', plan);
@@ -714,7 +718,7 @@ export default function Dashboard({ section = 'overview' }) {
             }
 
             setShowPaymentPage(false);
-            toast(`✅ Abonnement ${plan} activé grâce au code promo !`);
+            toast(`✅ Abonnement ${planDisplayName(plan)} activé grâce au code promo !`);
 
             if (plan === 'enterprise') {
                 window.location.hash = '#dashboard-entreprise';
@@ -727,7 +731,7 @@ export default function Dashboard({ section = 'overview' }) {
         }
     };
 
-    const handleStripePaymentSuccess = () => {
+    const handlePaidCheckoutSuccess = () => {
         setHasActiveSubscription(true);
         setSubscriptionType(normalizeSubscriptionType(selectedPlanForPayment));
         
@@ -755,25 +759,22 @@ export default function Dashboard({ section = 'overview' }) {
         toast('✅ Paiement réussi ! Votre abonnement est maintenant actif.');
     };
 
-    const handleStripePaymentError = (error) => {
-        logger.error('Erreur paiement Stripe:', error);
+    const handlePaidCheckoutError = (error) => {
+        logger.error('Erreur paiement:', error);
         toast(`Erreur lors du paiement: ${error}`);
     };
 
-    const handleStripePaymentCancel = () => {
-        setShowPaymentPage(false);
-    };
+    // Grille tarifaire : SOURCE UNIQUE src/config/plans.ts (codes internes —
+    // attention, le code 'pro' s'affiche « Premium » et 'premium' s'affiche « Pro »).
+    const getPlanPrice = (planType) => planPriceUsd(planType);
 
-    // Grille tarifaire. DOIT rester synchronisée avec src/pages/ProSubscription.tsx
-    // (tableau `plans`). L'ancienne grille avait Premium=30 < Pro=70 = incohérent.
-    const getPlanPrice = (planType) => {
-        switch (planType) {
-            case 'pro': return 70;
-            case 'premium': return 149;
-            case 'enterprise': return 200; // aligné sur l'annonce « À partir de 200 USD » (était 299, incohérent avec les cartes)
-            default: return 0;
-        }
-    };
+    // Rang du plan effectif (normalise la variante historique 'entreprise').
+    // Gating des colonnes « Services » : la colonne « Services Premium » s'active
+    // dès le palier interne 'pro' (plan vendu « Premium » 20 $), la colonne
+    // « Services Pro » dès le palier interne 'premium' (plan vendu « Pro » 50 $).
+    const effectivePlanRank = PLAN_RANK[normalizePlanId(subscriptionType) ?? 'basic'] ?? 0;
+    const hasPremiumTierServices = hasActiveSubscription && effectivePlanRank >= PLAN_RANK.pro;
+    const hasProTierServices = hasActiveSubscription && effectivePlanRank >= PLAN_RANK.premium;
 
     // Fonction pour sauvegarder la configuration du tableau de bord
     const handleSaveDashboard = () => {
@@ -999,115 +1000,32 @@ export default function Dashboard({ section = 'overview' }) {
                                         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
                                             <div className="flex items-center justify-between mb-4">
                                                 <h3 className="text-lg font-semibold text-gray-900">Votre abonnement</h3>
-                                                <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full capitalize">
-                                                    {subscriptionType}
+                                                <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
+                                                    {planDisplayName(subscriptionType)}
                                                 </span>
                                             </div>
+                                            {/* Fonctionnalités du plan : SOURCE UNIQUE src/config/plans.ts
+                                                (getPaidPlan normalise aussi la variante 'entreprise'). */}
                                             <div className="space-y-3">
-                                                {subscriptionType === 'premium' && (
-                                                    <>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Visibilité renforcée sur la page d'accueil</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Jusqu'à 10 images par annonce</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Support prioritaire</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Statistiques détaillées</span>
-                                                        </div>
-                                                    </>
-                                                )}
-                                                {subscriptionType === 'pro' && (
-                                                    <>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Visibilité maximale et positionnement prioritaire</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Jusqu'à 12 images par annonce</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Support prioritaire par téléphone, email et chat</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Analytics avancés et rapports personnalisés</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Tableau de bord professionnel</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Formation et accompagnement</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Badge 'Pro' exclusif</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Services de financement et logistique</span>
-                                                        </div>
-                                                    </>
-                                                )}
-                                                {subscriptionType === 'entreprise' && (
-                                                    <>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Visibilité renforcée sur la page d'accueil</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Jusqu'à 15 images par annonce</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Support prioritaire 24/7</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Statistiques détaillées et analytics</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Tableau de bord entreprise personnalisé</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Gestion multi-utilisateurs</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">API d'intégration</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Analytics complets</span>
-                                                        </div>
-                                                        <div className="flex items-center text-sm">
-                                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                                            <span className="text-gray-700">Réseau partenarial intégré</span>
-                                                        </div>
-                                                    </>
-                                                )}
+                                                {(getPaidPlan(subscriptionType)?.features ?? []).map((feature) => (
+                                                    <div key={feature} className="flex items-center text-sm">
+                                                        <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                                                        <span className="text-gray-700">{feature}</span>
+                                                    </div>
+                                                ))}
                                             </div>
                                             <div className="mt-4 pt-4 border-t border-orange-200">
                                                 <p className="text-xs text-gray-600 mb-3">Renouvellement automatique le 15 juillet 2024</p>
-                                                {(subscriptionType === 'pro' || subscriptionType === 'entreprise') && (
+                                                {(subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'entreprise') && (
                                                     <button
                                                         onClick={() => {
                                                             // Logique de redirection selon le type d'abonnement
                                                             switch (subscriptionType) {
+                                                                case 'premium':
+                                                                    // Palier interne 'premium' = plan vendu « Pro » (50 $)
+                                                                    logger.info('🚀 Redirection vers l\'espace du plan Pro');
+                                                                    window.location.href = '/#premium-dashboard';
+                                                                    break;
                                                                 case 'pro':
                                                                     logger.info('🚀 Redirection vers tableau de bord pro');
                                                                     window.location.href = '/#pro';
@@ -1231,42 +1149,13 @@ export default function Dashboard({ section = 'overview' }) {
                                         <div className="mb-6 p-6 bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl border border-orange-200">
                                             <p className="mb-4 text-lg">
                                                 Vous êtes actuellement sur l'offre{' '}
-                                                <span className="text-orange-700 font-bold capitalize">{subscriptionType}</span>.
+                                                <span className="text-orange-700 font-bold">{planDisplayName(subscriptionType)}</span>.
                                             </p>
+                                            {/* Fonctionnalités : SOURCE UNIQUE src/config/plans.ts. */}
                                             <ul className="list-disc pl-6 text-gray-700 space-y-2">
-                                                {subscriptionType === 'premium' && (
-                                                    <>
-                                                        <li>Jusqu'à 10 images par annonce</li>
-                                                        <li>Visibilité renforcée sur la page d'accueil</li>
-                                                        <li>Support prioritaire</li>
-                                                        <li>Statistiques détaillées</li>
-                                                    </>
-                                                )}
-                                                {subscriptionType === 'pro' && (
-                                                    <>
-                                                        <li>Jusqu'à 12 images par annonce</li>
-                                                        <li>Visibilité maximale et positionnement prioritaire</li>
-                                                        <li>Support prioritaire par téléphone, email et chat</li>
-                                                        <li>Analytics avancés et rapports personnalisés</li>
-                                                        <li>Tableau de bord professionnel</li>
-                                                        <li>Formation et accompagnement</li>
-                                                        <li>Badge 'Pro' exclusif</li>
-                                                        <li>Services de financement et logistique</li>
-                                                    </>
-                                                )}
-                                                {subscriptionType === 'entreprise' && (
-                                                    <>
-                                                        <li>Jusqu'à 15 images par annonce</li>
-                                                        <li>Visibilité renforcée sur la page d'accueil</li>
-                                                        <li>Support prioritaire 24/7</li>
-                                                        <li>Statistiques détaillées et analytics</li>
-                                                        <li>Accès au tableau de bord entreprise</li>
-                                                        <li>Gestion multi-utilisateurs</li>
-                                                        <li>API d'intégration</li>
-                                                        <li>Analytics complets</li>
-                                                        <li>Réseau partenarial intégré</li>
-                                                    </>
-                                                )}
+                                                {(getPaidPlan(subscriptionType)?.features ?? []).map((feature) => (
+                                                    <li key={feature}>{feature}</li>
+                                                ))}
                                             </ul>
                                         </div>
 
@@ -1278,10 +1167,7 @@ export default function Dashboard({ section = 'overview' }) {
                                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                                 <h4 className="font-semibold text-blue-800 mb-2">Prochain paiement</h4>
                                                 <p className="text-sm text-blue-700">
-                                                    15 juillet 2024 - 
-                                                    {subscriptionType === 'premium' ? ' 30 USD/mois' : 
-                                                     subscriptionType === 'pro' ? ' 70 USD/mois' : 
-                                                     subscriptionType === 'entreprise' ? ' 200 USD/mois' : ' 0 USD/mois'}
+                                                    {` ${planPriceUsd(subscriptionType)} USD/mois (plan ${planDisplayName(subscriptionType)})`}
                                                 </p>
                                             </div>
                                         </div>
@@ -1302,98 +1188,51 @@ export default function Dashboard({ section = 'overview' }) {
                                         </div>
                                     </>
                                 ) : (
-                                    // Affichage des offres d'abonnement
+                                    // Affichage des offres d'abonnement — grille SOURCE UNIQUE
+                                    // src/config/plans.ts (les `internalId` sont les codes base de
+                                    // données : 'pro' s'affiche « Premium », 'premium' « Pro »).
                                     <div className="space-y-6">
                                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                            {/* Offre Premium */}
-                                            <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-200 relative">
-                                                <div className="text-center">
-                                                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Premium</h3>
-                                                    <div className="text-3xl font-bold text-orange-600 mb-4">30 USD<span className="text-lg text-gray-500">/mois</span></div>
-                                                    <ul className="text-sm text-gray-600 space-y-2 mb-6">
-                                                        <li>• Visibilité renforcée sur la page d'accueil</li>
-                                                        <li>• Jusqu'à 10 images par annonce</li>
-                                                        <li>• Support prioritaire</li>
-                                                        <li>• Statistiques détaillées</li>
-                                                    </ul>
-                                                    <button
-                                                        onClick={() => handleActivateSubscription('premium')}
-                                                        className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium"
-                                                    >
-                                                        Choisir Premium
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* Offre Pro */}
-                                            <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-200 relative">
-                                                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
-                                                    <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
-                                                        Populaire
-                                                    </span>
-                                                </div>
-                                                <div className="text-center pt-8">
-                                                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Pro</h3>
-                                                    <div className="text-3xl font-bold text-orange-600 mb-4">70 USD<span className="text-lg text-gray-500">/mois</span></div>
-                                                    <ul className="text-sm text-gray-600 space-y-2 mb-6">
-                                                        <li>• Visibilité maximale et positionnement prioritaire</li>
-                                                        <li>• Jusqu'à 12 images par annonce</li>
-                                                        <li>• Support prioritaire par téléphone, email et chat</li>
-                                                        <li>• Analytics avancés et rapports personnalisés</li>
-                                                        <li>• Tableau de bord professionnel</li>
-                                                        <li>• Formation et accompagnement</li>
-                                                        <li>• Badge 'Pro' exclusif</li>
-                                                        <li>• Services de financement et logistique</li>
-                                                    </ul>
-                                                    <button
-                                                        onClick={() => handleActivateSubscription('pro')}
-                                                        className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium"
-                                                    >
-                                                        Choisir Pro
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* Offre Entreprise */}
-                                            <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-200 relative">
-                                                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
-                                                    <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
-                                                        Devis
-                                                    </span>
-                                                </div>
-                                                <div className="text-center pt-8">
-                                                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Entreprise</h3>
-                                                    <div className="text-3xl font-bold text-orange-600 mb-4">À partir de 200 USD<span className="text-lg text-gray-500">/mois</span></div>
-                                                    <div className="text-sm text-gray-500 mb-4">Paiement en ligne ou devis avec un conseiller</div>
-                                                    <ul className="text-sm text-gray-600 space-y-2 mb-6">
-                                                        <li>• Visibilité renforcée sur la page d'accueil</li>
-                                                        <li>• Jusqu'à 15 images par annonce</li>
-                                                        <li>• Support prioritaire 24/7</li>
-                                                        <li>• Statistiques détaillées et analytics</li>
-                                                        <li>• Tableau de bord entreprise personnalisé</li>
-                                                        <li>• Gestion multi-utilisateurs</li>
-                                                        <li>• API d'intégration</li>
-                                                        <li>• Analytics complets</li>
-                                                        <li>• Réseau partenarial intégré</li>
-                                                    </ul>
-                                                    <div className="space-y-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleActivateSubscription('enterprise')}
-                                                            className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium"
-                                                        >
-                                                            Souscrire au forfait (carte ou code promo)
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => (window.location.hash = '#contact')}
-                                                            className="w-full px-4 py-2 bg-white text-orange-600 border border-orange-300 rounded-lg hover:bg-orange-50 transition-all duration-200 font-medium text-sm"
-                                                        >
-                                                            Contacter un conseiller (sur mesure)
-                                                        </button>
+                                            {PAID_PLANS.map((plan) => (
+                                                <div key={plan.internalId} className="bg-white rounded-xl shadow-lg p-6 border border-orange-200 relative flex flex-col">
+                                                    {plan.popular && (
+                                                        <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
+                                                            <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
+                                                                Populaire
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <div className="text-center pt-4 flex flex-col flex-1">
+                                                        <h3 className="text-xl font-semibold text-gray-900 mb-1">{plan.displayName}</h3>
+                                                        <p className="text-sm text-gray-500 mb-2">{plan.tagline}</p>
+                                                        <div className="text-3xl font-bold text-orange-600 mb-4">{plan.priceUsd} USD<span className="text-lg text-gray-500">/mois</span></div>
+                                                        <ul className="text-sm text-gray-600 space-y-2 mb-6 text-left flex-1">
+                                                            {plan.features.map((feature) => (
+                                                                <li key={feature}>• {feature}</li>
+                                                            ))}
+                                                            <li>• {plan.maxUsers > 1 ? `${plan.maxUsers} utilisateurs` : '1 utilisateur'}</li>
+                                                        </ul>
+                                                        <div className="space-y-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleActivateSubscription(plan.internalId)}
+                                                                className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium"
+                                                            >
+                                                                Choisir {plan.displayName}
+                                                            </button>
+                                                            {plan.internalId === 'enterprise' && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => (window.location.hash = '#contact')}
+                                                                    className="w-full px-4 py-2 bg-white text-orange-600 border border-orange-300 rounded-lg hover:bg-orange-50 transition-all duration-200 font-medium text-sm"
+                                                                >
+                                                                    Contacter un conseiller (sur mesure)
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
@@ -1493,11 +1332,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Mise en avant de vos annonces en position prioritaire sur la page d'accueil du site</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasPremiumTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1508,11 +1347,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Possibilité de publier jusqu'à 10 images haute qualité par annonce pour maximiser la visibilité</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasPremiumTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1523,11 +1362,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Accès prioritaire au support technique avec temps de réponse garanti</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasPremiumTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1538,11 +1377,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Accès à des statistiques avancées sur vos annonces, vues, contacts et performances</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasPremiumTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                         </div>
@@ -1561,11 +1400,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Possibilité de publier jusqu'à 12 images haute qualité par annonce</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasProTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1576,11 +1415,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Accès prioritaire au support technique via tous les canaux de communication</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasProTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1591,11 +1430,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Analyses détaillées et rapports personnalisés sur vos performances</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasProTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1606,11 +1445,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Interface de gestion avancée avec outils professionnels intégrés</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasProTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                             
@@ -1621,11 +1460,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                     <p className="text-sm text-orange-700">Solutions de financement et services logistiques intégrés</p>
                                                 </div>
                                                 <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise')
+                                                    hasProTierServices
                                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
                                                         : 'bg-gray-500 text-white cursor-not-allowed'
                                                 }`}>
-                                                    {hasActiveSubscription && (subscriptionType === 'pro' || subscriptionType === 'enterprise') ? 'Actif' : 'Verrouillé'}
+                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
                                                 </button>
                                             </div>
                                         </div>
@@ -2175,8 +2014,7 @@ export default function Dashboard({ section = 'overview' }) {
 
                             <div className="mb-6">
                                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                    {selectedPlanForPayment === 'premium' ? 'Premium' : 
-                                     selectedPlanForPayment === 'pro' ? 'Pro' : 'Enterprise'} - {getPlanPrice(selectedPlanForPayment)} USD/mois
+                                    {planDisplayName(selectedPlanForPayment)} - {getPlanPrice(selectedPlanForPayment)} USD/mois
                                 </h3>
                             </div>
 
@@ -2216,15 +2054,13 @@ export default function Dashboard({ section = 'overview' }) {
                                 </div>
                             </div>
 
-                            {/* Formulaire de paiement Stripe */}
+                            {/* Paiement par carte : checkout hébergé Paddle (aucune saisie de carte sur notre site) */}
                             {paymentMethod === 'card' && (
                                 <div className="mb-6">
-                                    <StripePaymentForm
-                                        planType={selectedPlanForPayment}
-                                        amount={getPlanPrice(selectedPlanForPayment)}
-                                        onSuccess={handleStripePaymentSuccess}
-                                        onError={handleStripePaymentError}
-                                        onCancel={handleStripePaymentCancel}
+                                    <PaddleCheckoutButton
+                                        planId={selectedPlanForPayment}
+                                        onSuccess={handlePaidCheckoutSuccess}
+                                        onError={handlePaidCheckoutError}
                                     />
                                 </div>
                             )}
@@ -2265,8 +2101,7 @@ export default function Dashboard({ section = 'overview' }) {
                                 <h4 className="text-lg font-medium text-gray-900 mb-3">Résumé de commande</h4>
                                 <div className="flex justify-between items-center">
                                     <span className="text-gray-600">
-                                        {selectedPlanForPayment === 'premium' ? 'Premium' : 
-                                         selectedPlanForPayment === 'pro' ? 'Pro' : 'Enterprise'} - Abonnement mensuel
+                                        {planDisplayName(selectedPlanForPayment)} - Abonnement mensuel
                                     </span>
                                     <span className="font-semibold text-lg">
                                         {paymentMethod === 'promo' ? '0 USD' : `${getPlanPrice(selectedPlanForPayment)} USD`}
@@ -2274,7 +2109,7 @@ export default function Dashboard({ section = 'overview' }) {
                                 </div>
                             </div>
 
-                            {/* Le bouton de paiement est maintenant géré par StripePaymentForm */}
+                            {/* Le bouton de paiement carte est géré par PaddleCheckoutButton ci-dessus */}
 
                             <p className="text-xs text-gray-500 text-center mt-4">
                                 Vos informations de paiement sont sécurisées et cryptées.

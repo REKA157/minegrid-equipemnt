@@ -5,6 +5,7 @@ import supabase from '../utils/supabaseClient';
 import PaymentPage from './PaymentPage';
 import { toast } from '../utils/toast';
 import { setAccountItem, removeAccountItem } from '../utils/accountLocalStorage';
+import { FREE_PLAN, PAID_PLANS, planHomeHash } from '../config/plans';
 const TEMP_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
 
 interface RegisterProps {
@@ -151,8 +152,12 @@ export default function Register({ initialType }: RegisterProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const validateBeforePayment = (): boolean => {
-    const isBusinessProfile = formData.accountType === 'seller' || formData.subscription === 'enterprise';
+  // `subscription` est passé EXPLICITEMENT par handleSubscriptionSelect : au clic
+  // sur une carte, formData.subscription (closure) contient encore l'ANCIEN plan
+  // (setFormData est asynchrone) — sans ce paramètre, la validation entreprise
+  // serait contournée et le mauvais plan enregistré.
+  const validateBeforePayment = (subscription: SubscriptionId = formData.subscription): boolean => {
+    const isBusinessProfile = formData.accountType === 'seller' || subscription === 'enterprise';
 
     if (!formData.accountType) {
       toast("Veuillez sélectionner un type de compte : Client ou Revendeur.");
@@ -193,15 +198,34 @@ export default function Register({ initialType }: RegisterProps) {
     return true;
   };
 
-  const preparePaidCheckout = async (): Promise<boolean> => {
+  const preparePaidCheckout = async (
+    subscription: SubscriptionId = formData.subscription,
+  ): Promise<boolean> => {
     try {
       setLoading(true);
+
+      // Compte déjà créé (ex. retour depuis la page de paiement) : re-signUp
+      // échouerait (« User already registered ») et bloquerait définitivement
+      // l'accès au paiement. On réutilise la session existante si c'est bien
+      // le même email.
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      if (
+        existingSession?.user &&
+        existingSession.user.email?.toLowerCase() === formData.email.trim().toLowerCase()
+      ) {
+        localStorage.setItem('selectedSubscription', subscription);
+        return true;
+      }
+
+      // formData.subscription peut être périmé dans cette closure (setFormData
+      // asynchrone) : on force le plan fraîchement sélectionné.
+      const formWithPlan = { ...formData, subscription };
       const response = await registerUser({
-        ...formData,
+        ...formWithPlan,
         accountType: formData.accountType as 'client' | 'seller',
       });
       const hasSession = Boolean(response?.session);
-      localStorage.setItem('selectedSubscription', formData.subscription);
+      localStorage.setItem('selectedSubscription', subscription);
       if (response?.user) {
         localStorage.setItem('user', JSON.stringify(response.user));
       }
@@ -223,12 +247,20 @@ export default function Register({ initialType }: RegisterProps) {
   };
 
   const handleSubscriptionSelect = async (subscription: SubscriptionId) => {
+    if (loading) return; // anti double-clic : pas deux signUp concurrents
     setFormData(prev => ({ ...prev, subscription }));
     if (subscription !== 'gratuit') {
+      // Même exigence de consentement que le flux gratuit (handleSubmit) : pas
+      // de création de compte ni de paiement sans acceptation des CGU.
+      if (!consent) {
+        toast('Vous devez accepter les conditions générales et la politique de confidentialité.');
+        return;
+      }
       // Les formules payantes redirigent vers le paiement dès la sélection,
-      // après validation des informations obligatoires.
-      if (validateBeforePayment()) {
-        const ready = await preparePaidCheckout();
+      // après validation des informations obligatoires. On passe `subscription`
+      // explicitement (formData n'est pas encore à jour dans cette closure).
+      if (validateBeforePayment(subscription)) {
+        const ready = await preparePaidCheckout(subscription);
         if (ready) setShowPayment(true);
       }
     }
@@ -265,28 +297,9 @@ export default function Register({ initialType }: RegisterProps) {
     }
   };
 
-  const createSubscription = async (userId: string, subscriptionType: string) => {
-    try {
-      const { error } = await supabase
-        .from('pro_clients')
-        .insert({
-          user_id: userId,
-          company_name: formData.company || `${formData.firstName} ${formData.lastName}`,
-          subscription_type: subscriptionType,
-          subscription_status: 'active',
-          subscription_start: new Date().toISOString().split('T')[0],
-          max_users: subscriptionType === 'enterprise' ? 10 : 5
-        });
-
-      if (error) {
-        console.error('Erreur création abonnement:', error);
-      } else {
-        console.log('✅ Abonnement créé:', subscriptionType);
-      }
-    } catch (error) {
-      console.error('Erreur création abonnement:', error);
-    }
-  };
+  // (createSubscription supprimé : l'activation d'abonnement est EXCLUSIVEMENT
+  // faite par le webhook de paiement côté serveur — le front n'écrit jamais
+  // pro_clients, la RLS p14 le bloque de toute façon.)
 
   const finalizePaidRegistration = async () => {
     try {
@@ -309,83 +322,43 @@ export default function Register({ initialType }: RegisterProps) {
         removeAccountItem(uid, 'userServices');
       }
 
-      /** Premium / Pro → espace « classique », pas la grille configurateur ENT. */
-      if (sub === 'premium') {
-        window.location.hash = '#premium-dashboard';
-        return;
-      }
-      if (sub === 'pro') {
-        window.location.hash = '#pro';
-        return;
-      }
-
-      window.location.hash = '#dashboard';
+      // Destination par plan (source unique) : interne 'pro' → #pro,
+      // 'premium' → #premium-dashboard, 'enterprise' → #dashboard-entreprise.
+      window.location.hash = planHomeHash(sub);
     } finally {
       setShowPayment(false);
     }
   };
 
+  // Grille construite depuis la SOURCE UNIQUE src/config/plans.ts. Attention au
+  // piège documenté là-bas : les `id` sont les codes INTERNES (base de données),
+  // pas les noms affichés — le code interne 'pro' s'affiche « Premium » (20 $),
+  // le code interne 'premium' s'affiche « Pro » (50 $).
   const subscriptionPlans: SubscriptionPlan[] = [
     {
       id: 'gratuit',
-      name: 'Gratuit',
+      name: FREE_PLAN.displayName,
       icon: <Star className="h-6 w-6" />,
       price: '0 USD',
       priceValue: 0,
-      features: [
-        'Publier des annonces',
-        'Gestion basique',
-        'Support communautaire',
-        'Jusqu\'à 3 images par annonce'
-      ],
+      features: [...FREE_PLAN.features],
       color: 'border-gray-300 bg-gray-50'
     },
-    {
-      id: 'premium',
-      name: 'Premium',
-      icon: <Crown className="h-6 w-6" />,
-      price: '30 USD/mois',
-      priceValue: 30,
-      features: [
-        'Visibilité renforcée',
-        'Jusqu\'à 10 images par annonce',
-        'Support prioritaire',
-        'Statistiques détaillées',
-        'Badge Premium'
-      ],
-      color: 'border-purple-300 bg-purple-50'
-    },
-    {
-      id: 'pro',
-      name: 'Pro',
-      icon: <Building className="h-6 w-6" />,
-      price: '70 USD/mois',
-      priceValue: 70,
-      features: [
-        'Dashboard Pro personnalisé',
-        'Support dédié',
-        'Statistiques complètes',
-        'Outils de gestion commerciale',
-        'Gestion des contacts clients'
-      ],
-      color: 'border-blue-300 bg-blue-50'
-    },
-    {
-      id: 'enterprise',
-      name: 'Entreprise',
-      icon: <Crown className="h-6 w-6" />,
-      price: 'À partir de 200 USD/mois',
-      priceValue: 200,
-      features: [
-        'Dashboard personnalisable',
-        'Gestion multi-utilisateurs',
-        'Support 24/7',
-        'API dédiée',
-        'Workflows automatisés',
-        'Box IA + LLM dédié'
-      ],
-      color: 'border-orange-300 bg-orange-50'
-    }
+    ...PAID_PLANS.map((plan) => ({
+      id: plan.internalId as SubscriptionId,
+      name: plan.displayName,
+      icon: plan.internalId === 'enterprise'
+        ? <Crown className="h-6 w-6" />
+        : <Building className="h-6 w-6" />,
+      price: `${plan.priceUsd} USD/mois`,
+      priceValue: plan.priceUsd,
+      features: plan.features,
+      color: plan.internalId === 'pro'
+        ? 'border-purple-300 bg-purple-50'
+        : plan.internalId === 'premium'
+          ? 'border-blue-300 bg-blue-50'
+          : 'border-orange-300 bg-orange-50',
+    })),
   ];
 
   if (showPayment) {

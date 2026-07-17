@@ -1,14 +1,8 @@
 import React from 'react';
 import { Loader2, Lock } from 'lucide-react';
 import { useSubscription } from '../hooks/useSubscription';
+import { PLAN_RANK, planDisplayName } from '../config/plans';
 import type { SubscriptionType } from '../utils/api/subscription';
-
-const RANK: Record<SubscriptionType, number> = {
-  basic: 1,
-  pro: 2,
-  premium: 3,
-  enterprise: 4,
-};
 
 interface RequireSubscriptionProps {
   /** Niveau d'abonnement minimum requis (défaut : 'pro'). */
@@ -45,7 +39,7 @@ export default function RequireSubscription({
   const granted =
     subscription.isActive &&
     subscription.type != null &&
-    RANK[subscription.type] >= RANK[level];
+    PLAN_RANK[subscription.type] >= PLAN_RANK[level];
 
   if (granted) return <>{children}</>;
   if (fallback) return <>{fallback}</>;
@@ -58,10 +52,11 @@ export default function RequireSubscription({
         </div>
         <h2 className="text-lg font-bold text-gray-900">Espace réservé aux abonnés</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Cet espace nécessite un abonnement {level} actif.
+          {/* Nom COMMERCIAL du palier (≠ code interne — cf. src/config/plans.ts). */}
+          Cet espace nécessite un abonnement {planDisplayName(level)} actif.
         </p>
         <a
-          href="#dashboard"
+          href="#tarifs"
           className="inline-block mt-5 w-full py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition-colors"
         >
           Voir les abonnements

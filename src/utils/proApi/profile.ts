@@ -12,7 +12,7 @@ import supabase from '../supabaseClient';
 // insérait automatiquement une ligne `pro_clients` "pro/active" valable 1 an dès
 // qu'un appel échouait — soit un contournement total du paiement. L'activation
 // d'un abonnement est désormais EXCLUSIVEMENT serveur : voir
-// `supabase/functions/stripe-webhook/` (webhook Stripe + service_role) et la RLS
+// `supabase/functions/paddle-webhook/` (webhook Paddle + service_role) et la RLS
 // durcie `sql/2026-06_pro_clients_rls_hardening.sql` (écritures interdites au client).
 export async function getProClientProfile(): Promise<ProClient | null> {
   try {

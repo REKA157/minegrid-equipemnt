@@ -1,4 +1,7 @@
 import supabase from '../supabaseClient';
+// Import de VALEUR autorisé : plans.ts n'importe d'ici qu'un `import type`
+// (effacé à la compilation), donc pas de cycle à l'exécution.
+import { normalizePlanId } from '../../config/plans';
 
 export type SubscriptionType = 'basic' | 'pro' | 'premium' | 'enterprise';
 
@@ -19,7 +22,7 @@ export const INACTIVE_SUBSCRIPTION: SubscriptionState = {
 
 // SOURCE DE VÉRITÉ de l'abonnement = lecture SERVEUR. Ne JAMAIS dériver l'état
 // payant de localStorage : c'est falsifiable en une ligne de console (finding #5).
-// L'activation est écrite uniquement par le webhook Stripe (RLS durcie).
+// L'activation est écrite uniquement par l'Edge Function paddle-webhook (RLS durcie).
 //
 // On passe par la fonction SQL get_effective_subscription() (SECURITY DEFINER) :
 // elle renvoie le MEILLEUR abonnement actif entre celui de l'utilisateur et celui
@@ -40,7 +43,11 @@ export async function getMySubscription(): Promise<SubscriptionState> {
     const isActive = Boolean(row.is_active);
     return {
       isActive,
-      type: isActive ? ((row.type as SubscriptionType) ?? null) : null,
+      // Normalisation à la frontière API : tolère la variante historique
+      // 'entreprise' en base — sinon PLAN_RANK[type] vaudrait undefined et un
+      // abonné payant serait verrouillé dehors (RequireSubscription, polling
+      // d'activation du bouton Paddle, hasEnterprise).
+      type: isActive ? normalizePlanId(row.type) : null,
       status: row.status ?? null,
       endsAt: row.ends_at ?? null,
     };

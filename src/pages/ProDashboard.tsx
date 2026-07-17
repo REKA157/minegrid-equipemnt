@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MyTrustInline } from '../nextgen/integration/inline';
+import { planDisplayName } from '../config/plans';
 import {
   Activity,
   Package, 
@@ -237,8 +238,9 @@ export default function ProDashboard() {
           <span className="text-gray-300 hidden sm:inline" aria-hidden>
             ·
           </span>
-          <span className="text-orange-800 font-medium capitalize">
-            {proProfile?.subscription_type || 'Pro'}
+          <span className="text-orange-800 font-medium">
+            {/* Nom COMMERCIAL du plan (le code interne 'pro' se vend « Premium »). */}
+            {proProfile?.subscription_type ? planDisplayName(proProfile.subscription_type) : '—'}
           </span>
           {proProfile?.subscription_status === 'active' ? (
             <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">

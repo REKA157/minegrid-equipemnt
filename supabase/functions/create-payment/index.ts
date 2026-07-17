@@ -1,3 +1,7 @@
+// ⚠️ OBSOLÈTE (2026-07) : Stripe abandonné (société marocaine non éligible).
+// Le paiement passe par le checkout hébergé Paddle (aucun PaymentIntent serveur
+// nécessaire — les montants sont fixés par le catalogue Paddle) et l'activation
+// par `supabase/functions/paddle-webhook/`. Plus aucun appelant front.
 import Stripe from 'npm:stripe@14.14.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 

@@ -31,7 +31,7 @@ export async function requestPremiumService(serviceType: 'premium' | 'enterprise
 
   // SÉCURITÉ (anti-contournement paiement, finding #5 / backlog Q1) : on n'active
   // JAMAIS un service côté client. La demande est créée en 'pending' ; le passage
-  // en 'active' est fait côté serveur APRÈS paiement (edge function stripe-webhook,
+  // en 'active' est fait côté serveur APRÈS paiement (edge function paddle-webhook,
   // source de vérité pro_clients). Aucun appelant UI aujourd'hui.
   const serviceData = {
     user_id: user.id,

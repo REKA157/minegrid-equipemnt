@@ -15,6 +15,8 @@ import {
   getSellerMachines
 } from '../utils/api';
 import supabase from '../utils/supabaseClient';
+import { useSubscription } from '../hooks/useSubscription';
+import { getPaidPlan, planDisplayName } from '../config/plans';
 
 interface PremiumStats {
   totalViews: number;
@@ -53,6 +55,11 @@ interface UserProfile {
 }
 
 const PremiumDashboard: React.FC = () => {
+  // Nom COMMERCIAL du plan effectif. Cette page est l'espace du palier interne
+  // 'premium' (vendu « Pro » 50 $) — cf. le piège de nommage dans src/config/plans.ts.
+  const { subscription } = useSubscription();
+  const planLabel = subscription.type ? planDisplayName(subscription.type) : planDisplayName('premium');
+
   const [premiumService, setPremiumService] = useState<PremiumService | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<PremiumStats | null>(null);
@@ -153,7 +160,7 @@ const PremiumDashboard: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement de votre tableau de bord Premium...</p>
+          <p className="text-gray-600">Chargement de votre tableau de bord…</p>
         </div>
       </div>
     );
@@ -184,7 +191,7 @@ const PremiumDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Tableau de Bord Premium</h1>
+              <h1 className="text-3xl font-bold">Tableau de Bord {planLabel}</h1>
               <p className="text-orange-100 mt-2">
                 Bienvenue {userProfile?.first_name} {userProfile?.last_name}
               </p>
@@ -192,10 +199,7 @@ const PremiumDashboard: React.FC = () => {
             <div className="text-right">
               <div className="flex items-center space-x-2">
                 <Shield className="h-6 w-6" />
-                <span className="font-semibold">
-                  {premiumService?.service_type === 'enterprise' ? 'Enterprise' : 
-                   premiumService?.service_type === 'premium' ? 'Premium' : 'Basic'}
-                </span>
+                <span className="font-semibold">{planLabel}</span>
               </div>
               <p className="text-sm text-orange-100">
                 Actif jusqu'au {premiumService?.end_date ? new Date(premiumService.end_date).toLocaleDateString() : 'N/A'}
@@ -388,7 +392,9 @@ const PremiumDashboard: React.FC = () => {
             {/* Statut du service Premium */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Votre service Premium</h2>
+                {/* premium_services = produit distinct de MISE EN AVANT d'annonces
+                    (pas l'abonnement — celui-ci vit dans pro_clients). */}
+                <h2 className="text-lg font-semibold text-gray-900">Votre service de mise en avant</h2>
               </div>
               <div className="p-6">
                 {premiumService ? (
@@ -426,10 +432,10 @@ const PremiumDashboard: React.FC = () => {
                 ) : (
                   <div className="text-center py-4">
                     <Shield className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Aucun service Premium actif</p>
-                    <button className="mt-2 text-orange-600 hover:text-orange-700 text-sm">
-                      Souscrire à Premium
-                    </button>
+                    <p className="text-gray-500">Aucun service de mise en avant actif</p>
+                    <a href="#tarifs" className="mt-2 inline-block text-orange-600 hover:text-orange-700 text-sm">
+                      Voir les abonnements
+                    </a>
                   </div>
                 )}
               </div>
@@ -438,31 +444,17 @@ const PremiumDashboard: React.FC = () => {
             {/* Fonctionnalités Premium */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Fonctionnalités Premium</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Fonctionnalités de votre plan</h2>
               </div>
               <div className="p-6">
+                {/* Fonctionnalités du plan : SOURCE UNIQUE src/config/plans.ts. */}
                 <div className="space-y-3">
-                  {premiumService?.features?.map((feature, index) => (
-                    <div key={index} className="flex items-center">
+                  {(getPaidPlan(subscription.type ?? 'premium')?.features ?? []).map((feature) => (
+                    <div key={feature} className="flex items-center">
                       <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
                       <span className="text-sm text-gray-700">{feature}</span>
                     </div>
-                  )) || (
-                    <div className="space-y-3">
-                      <div className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
-                        <span className="text-sm text-gray-700">Annonces prioritaires</span>
-                      </div>
-                      <div className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
-                        <span className="text-sm text-gray-700">Statistiques avancées</span>
-                      </div>
-                      <div className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
-                        <span className="text-sm text-gray-700">Support prioritaire</span>
-                      </div>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>

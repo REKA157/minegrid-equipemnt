@@ -51,7 +51,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
           <div className="h-14 w-14 rounded-full bg-primary-100 flex items-center justify-center mb-4">
             <Globe className="h-7 w-7 text-primary-600" />
           </div>
-          <h2 className="text-lg font-bold text-gray-900">Global Monitor</h2>
+          {/* Écran générique : affiché sur TOUTES les routes protégées (pas
+              seulement le Global Monitor, son usage d'origine). */}
+          <h2 className="text-lg font-bold text-gray-900">Espace réservé</h2>
           <p className="text-sm text-gray-500 mt-1 text-center">
             {TEMP_ACCESS_ENABLED
               ? "Accès réservé. Entrez le code d'accès temporaire ou connectez-vous."

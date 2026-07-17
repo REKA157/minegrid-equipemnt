@@ -383,9 +383,11 @@ const Header = () => {
                   >
                     <User className="h-4 w-4 mr-2 mt-0.5 text-gray-400" />
                     <span>
-                      <span className="font-medium">Compte Pro</span>
+                      {/* Libellé neutre : #pro = gestion du parc, inclus dès le
+                          plan VENDU « Premium » (code interne 'pro'). */}
+                      <span className="font-medium">Gestion du parc</span>
                       <br />
-                      <span className="text-xs text-gray-400">Espace vendeur professionnel</span>
+                      <span className="text-xs text-gray-400">Inclus dès le plan Premium</span>
                     </span>
                   </a>
                   <a
@@ -624,7 +626,7 @@ const Header = () => {
             <div className="py-2 border-b border-gray-100">
               <div className="text-gray-800 font-semibold mb-1">Espace Pro</div>
               <a href="#pro" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
-                Compte Pro
+                Gestion du parc
               </a>
               <a href="#dashboard-entreprise-display" onClick={closeMobileMenu} className="block pl-3 py-1.5 text-sm text-gray-700 hover:text-primary-600">
                 Compte Entreprise

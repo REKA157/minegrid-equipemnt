@@ -51,6 +51,7 @@ const paidRoute = (level: SubscriptionType, element: React.ReactNode): React.Rea
 );
 
 const SellEquipment = lazy(() => import('./pages/SellEquipment'));
+const ProSubscription = lazy(() => import('./pages/ProSubscription'));
 const ProDashboard = lazy(() => import('./pages/ProDashboard'));
 const EnterpriseService = lazy(() => import('./pages/EnterpriseService'));
 const DashboardConfigurator = lazy(() => import('./pages/DashboardConfigurator'));
@@ -327,6 +328,12 @@ function AppContent() {
       case 'entreprise':
         return <EnterpriseService />;
 
+      // Page de tarifs publique (grille validée : Gratuit / Premium 20 $ /
+      // Pro 50 $ / Enterprise 200 $ — paiement Paddle). Accessible sans compte.
+      case 'tarifs':
+      case 'abonnements':
+        return <ProSubscription />;
+
       case 'dashboard-entreprise':
         return paidRoute('enterprise', <DashboardConfigurator />);
 
@@ -418,27 +425,22 @@ function AppContent() {
         return paidRoute('enterprise', <MultiUserManagement />);
 
       // Panneau de connexion IA de la société (OpenAI / Claude / Grok / autre).
+      // Palier interne 'premium' = plan affiché « Pro » (l'Assistant IA en fait partie).
       case 'assistant-ia':
-        return paidRoute('enterprise', <AiSettings />);
+        return paidRoute('premium', <AiSettings />);
 
       // Page publique d'acceptation d'invitation : l'invité n'est pas encore
       // connecté et n'a pas d'abonnement -> aucun garde. La page gère l'auth.
       case 'accepter-invitation':
         return <AcceptInvitation />;
 
+      // Radar d'opportunités : réservé au plan affiché « Pro » (code interne
+      // 'premium') et au-dessus — grille validée 2026-07 (src/config/plans.ts).
       case 'global-monitor':
-        return (
-          <ProtectedRoute>
-            <GlobalMonitor />
-          </ProtectedRoute>
-        );
+        return paidRoute('premium', <GlobalMonitor />);
 
       case 'opportunites-vente':
-        return (
-          <ProtectedRoute>
-            <SalesOpportunities />
-          </ProtectedRoute>
-        );
+        return paidRoute('premium', <SalesOpportunities />);
 
       // Outil INTERNE : disponible seulement dans un build interne (jeton admin
       // configuré). Dans le build public, la route est inaccessible.
@@ -485,8 +487,11 @@ function AppContent() {
           </div>
         );
 
+      // Appels d'offres (analyse DCE, go/no-go, mémoire IA) : plan affiché « Pro »
+      // (code interne 'premium') et au-dessus. Les membres invités héritent de
+      // l'abonnement du propriétaire (get_effective_subscription).
       case 'appels-offres':
-        return <TendersApp />;
+        return paidRoute('premium', <TendersApp />);
 
       case 'demo-entreprise':
         return <DemoEntrepriseAccess />;

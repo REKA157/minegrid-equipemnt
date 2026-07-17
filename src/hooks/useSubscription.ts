@@ -12,8 +12,9 @@ export const SUBSCRIPTION_QUERY_KEY = ['subscription', 'me'] as const;
  * État d'abonnement dérivé du SERVEUR (jamais de localStorage). À utiliser pour
  * tout gating de fonctionnalité payante (espaces Pro/Enterprise, widgets premium).
  *
- * Se rafraîchit automatiquement après un paiement : StripePaymentForm émet
- * l'événement `subscriptionRefreshRequested`, qui invalide ce cache React Query.
+ * Se rafraîchit automatiquement après un paiement : le checkout Paddle
+ * (src/utils/paddle.ts) émet l'événement `subscriptionRefreshRequested`,
+ * qui invalide ce cache React Query.
  */
 export function useSubscription() {
   const queryClient = useQueryClient();

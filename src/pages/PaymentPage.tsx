@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { CreditCard, Lock, Check, X, ArrowLeft, Gift } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
 import { toast } from '../utils/toast';
-import { setAccountItem } from '../utils/accountLocalStorage';
-import StripePaymentForm from '../components/StripePaymentForm';
+import PaddleCheckoutButton from '../components/PaddleCheckoutButton';
+import { planDisplayName, planHomeHash } from '../config/plans';
 interface PaymentPageProps {
   subscription: {
     id: string;
@@ -24,12 +24,11 @@ interface PaymentPageProps {
 export default function PaymentPage({ subscription, userData, onSuccess, onBack }: PaymentPageProps) {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'promo'>('card');
   const [promoCode, setPromoCode] = useState('');
-  const [isValidatingPromo, setIsValidatingPromo] = useState(false);
   const [promoValid, setPromoValid] = useState(false);
   const [promoError, setPromoError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handlePromoCodeValidation = async () => {
+  const handlePromoCodeValidation = () => {
     if (!promoCode.trim()) {
       setPromoError('Veuillez saisir un code promo');
       return;
@@ -41,18 +40,13 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
   };
 
   const handlePayment = async () => {
-    if (paymentMethod !== 'promo') {
-      toast('Utilisez le formulaire Stripe pour le paiement par carte.');
-      return;
-    }
+    // Le paiement carte est géré par PaddleCheckoutButton — ce bouton ne sert
+    // qu'au chemin code promo.
+    if (paymentMethod !== 'promo' || !promoValid) return;
 
     setLoading(true);
-
     try {
-      if (paymentMethod === 'promo' && promoValid) {
-        // Accès direct avec code promo
-        await activateSubscriptionWithPromo();
-      }
+      await activateSubscriptionWithPromo();
     } catch (error) {
       console.error('Erreur lors du paiement:', error);
       toast('Erreur lors du traitement du paiement');
@@ -71,14 +65,23 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
       const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });
       if (error) { toast('Impossible de valider le code pour le moment. Réessayez.'); return; }
       if (!data?.ok) { toast(`❌ ${data?.error || 'Code promo invalide'}`); return; }
-      toast(`✅ Abonnement ${data.subscription_type} activé grâce au code promo !`);
-      window.location.hash = data.subscription_type === 'enterprise' ? '#dashboard-entreprise' : '#dashboard';
+      // Invalide le cache useSubscription : sinon les gardes de route peuvent
+      // servir l'état « inactif » pré-activation pendant jusqu'à 60 s.
+      window.dispatchEvent(new Event('subscriptionRefreshRequested'));
+      toast(`✅ Abonnement ${planDisplayName(data.subscription_type)} activé grâce au code promo !`);
+      // Laisse le parent poser ses drapeaux (ex. finalizePaidRegistration côté
+      // inscription), puis route vers l'espace du plan RÉELLEMENT accordé par
+      // le serveur (qui peut différer du plan sélectionné).
+      onSuccess();
+      window.location.hash = planHomeHash(data.subscription_type);
     } catch {
       toast("Erreur lors de l'activation de l'abonnement.");
     }
   };
 
-  const stripePlanType: 'premium' | 'pro' | 'enterprise' =
+  // `subscription.id` est déjà le code INTERNE du plan ('pro' | 'premium' |
+  // 'enterprise') — cf. src/config/plans.ts pour le mapping code ↔ nom affiché.
+  const paidPlanId: 'premium' | 'pro' | 'enterprise' =
     subscription.id === 'enterprise'
       ? 'enterprise'
       : subscription.id === 'premium'
@@ -148,18 +151,24 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
           {/* Formulaire de paiement */}
           <div className="p-6">
             {paymentMethod === 'card' ? (
-              <StripePaymentForm
-                planType={stripePlanType}
-                amount={subscription.priceValue}
-                onSuccess={() => {
-                  toast('✅ Paiement confirmé. Abonnement activé.');
-                  onSuccess();
-                }}
-                onError={(message) => {
-                  toast(message || 'Erreur lors du paiement Stripe');
-                }}
-                onCancel={onBack}
-              />
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex justify-between font-semibold">
+                    <span>Abonnement {subscription.name}</span>
+                    <span>{subscription.price}/mois</span>
+                  </div>
+                </div>
+                <PaddleCheckoutButton
+                  planId={paidPlanId}
+                  onSuccess={() => {
+                    toast('✅ Paiement confirmé. Abonnement activé.');
+                    onSuccess();
+                  }}
+                  onError={(message) => {
+                    toast(message || 'Erreur lors du paiement');
+                  }}
+                />
+              </div>
             ) : (
               /* Formulaire code promo */
               <div className="space-y-4">
@@ -181,10 +190,10 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
                     />
                     <button
                       onClick={handlePromoCodeValidation}
-                      disabled={isValidatingPromo || !promoCode.trim()}
+                      disabled={!promoCode.trim()}
                       className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isValidatingPromo ? 'Vérification...' : 'Valider'}
+                      Valider
                     </button>
                   </div>
                   
@@ -198,7 +207,7 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
                   {promoValid && (
                     <div className="flex items-center text-green-600 text-sm mt-2">
                       <Check className="h-4 w-4 mr-1" />
-                      Code promo valide ! Accès temporaire de 30 jours.
+                      Code saisi — il sera vérifié lors de l'activation.
                     </div>
                   )}
                 </div>

@@ -1,3 +1,7 @@
+// ⚠️ OBSOLÈTE (2026-07) : Stripe abandonné (société marocaine non éligible).
+// Remplacé par `supabase/functions/paddle-webhook/` — SEUL point d'activation.
+// Conservé pour référence tant que la fonction n'est pas dé-déployée de la prod.
+//
 // Edge Function `stripe-webhook` — activation d'abonnement AUTORITATIVE (serveur).
 //
 // C'est le SEUL endroit où un abonnement `pro_clients` doit être activé. Stripe

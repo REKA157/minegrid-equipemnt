@@ -36,7 +36,7 @@ export default defineConfig({
          * - react-vendor : react + react-dom + react-query (même fichier = même contexte)
          * - supabase     : utilise partout, mais en chunk separe pour
          *                  meilleur cache entre deploiements
-         * - charts/maps/grid/stripe : chunks optionnels charges a la
+         * - charts/maps/grid/paddle : chunks optionnels charges a la
          *                  demande par les pages qui en ont besoin
          */
         manualChunks: {
@@ -45,7 +45,7 @@ export default defineConfig({
           'charts': ['recharts', 'chart.js', 'react-chartjs-2'],
           'maps': ['leaflet'],
           'grid': ['react-grid-layout', '@hello-pangea/dnd'],
-          'stripe': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+          'paddle': ['@paddle/paddle-js'],
           'zustand': ['zustand'],
         },
       },
