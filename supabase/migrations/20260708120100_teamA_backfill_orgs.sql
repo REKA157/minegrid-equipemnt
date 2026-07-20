@@ -12,7 +12,9 @@
 -- No-op si la table pro_clients n'existe pas (ex. base de test).
 -- =====================================================================
 
-do $$
+-- (Délimiteur nommé + affectations scalaires : l'éditeur SQL Supabase gère mal
+--  les $$ multiples et mange les SELECT ... INTO.)
+do $do_backfill$
 declare
   r record;
   v_org uuid;
@@ -33,11 +35,13 @@ begin
       and exists (select 1 from auth.users u where u.id = p.user_id)
   loop
     -- Déjà rattaché à une organisation ? On ne recrée pas.
-    select organization_id into v_org
-    from public.organization_members
-    where user_id = r.user_id
-    order by (role = 'owner') desc
-    limit 1;
+    v_org := (
+      select organization_id
+      from public.organization_members
+      where user_id = r.user_id
+      order by (role = 'owner') desc
+      limit 1
+    );
 
     if v_org is null then
       insert into public.organizations (name) values (r.company_name) returning id into v_org;
@@ -45,7 +49,7 @@ begin
       values (v_org, r.user_id, 'owner');
     end if;
   end loop;
-end $$;
+end $do_backfill$;
 
 -- Rattacher les leads à la société de leur vendeur (owner de l'org).
 update public.leads l

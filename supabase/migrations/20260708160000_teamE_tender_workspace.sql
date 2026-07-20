@@ -38,7 +38,8 @@ grant select on public.tender_workspaces to authenticated;
 revoke insert, update, delete on public.tender_workspaces from authenticated, anon, public;
 
 -- Purge d'éventuelles anciennes policies pour éviter tout cumul permissif.
-do $$
+-- (Délimiteur nommé : l'éditeur SQL Supabase gère mal les $$ multiples.)
+do $do_tw$
 declare p record;
 begin
   for p in
@@ -47,7 +48,7 @@ begin
   loop
     execute format('drop policy if exists %I on public.tender_workspaces', p.policyname);
   end loop;
-end $$;
+end $do_tw$;
 
 -- SELECT : tout membre de la société voit l'espace de travail de sa société.
 create policy tender_workspaces_select_team
@@ -64,14 +65,14 @@ language sql
 security definer
 set search_path = public
 stable
-as $$
+as $fn_get_tw$
   select coalesce(tw.data, '{}'::jsonb)
   from public.organization_members om
   left join public.tender_workspaces tw on tw.organization_id = om.organization_id
   where om.user_id = auth.uid()
   order by (om.role = 'owner') desc, om.created_at asc
   limit 1
-$$;
+$fn_get_tw$;
 
 grant execute on function public.get_my_tender_workspace() to authenticated;
 
@@ -85,19 +86,22 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn_save_tw$
 declare
   v_org uuid;
 begin
   -- Écriture réservée aux membres qui PEUVENT modifier (owner/admin/manager) :
   -- un rôle 'viewer' (lecture seule, et rôle par défaut) ne doit jamais
   -- écraser l'espace partagé. Aligné sur user_in_org_admin / leads_update_team.
-  select om.organization_id into v_org
-  from public.organization_members om
-  where om.user_id = auth.uid()
-    and om.role in ('owner', 'admin', 'manager')
-  order by (om.role = 'owner') desc, om.created_at asc
-  limit 1;
+  -- (Affectation scalaire — l'éditeur SQL Supabase mange les SELECT ... INTO.)
+  v_org := (
+    select om.organization_id
+    from public.organization_members om
+    where om.user_id = auth.uid()
+      and om.role in ('owner', 'admin', 'manager')
+    order by (om.role = 'owner') desc, om.created_at asc
+    limit 1
+  );
 
   if v_org is null then
     -- Pas de société OU rôle lecteur seul : le client retombe en local
@@ -112,6 +116,6 @@ begin
 
   return v_org;
 end;
-$$;
+$fn_save_tw$;
 
 grant execute on function public.save_my_tender_workspace(jsonb) to authenticated;
