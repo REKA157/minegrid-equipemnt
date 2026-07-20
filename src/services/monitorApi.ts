@@ -8,6 +8,11 @@ import type {
 } from '../types/monitor';
 
 const BASE_URL = import.meta.env.VITE_MONITOR_API_URL || 'http://localhost:8000';
+/** true si l'URL du monitor-service est explicitement configurée (sinon on retombe
+ * sur localhost:8000, qui n'existe que sur un poste de dev avec le service lancé). */
+export const MONITOR_CONFIGURED = Boolean(
+  String(import.meta.env.VITE_MONITOR_API_URL ?? '').trim(),
+);
 /** Jamais de jeton par défaut côté client : définir `VITE_MONITOR_ADMIN_TOKEN` si les routes admin sont nécessaires. */
 const ADMIN_TOKEN = String(import.meta.env.VITE_MONITOR_ADMIN_TOKEN ?? '').trim();
 const hasConfiguredAdminToken = ADMIN_TOKEN.length > 0;

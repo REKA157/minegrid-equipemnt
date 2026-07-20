@@ -16,6 +16,7 @@ import {
   fetchProjectDetail,
   fetchProjectAnalysisCompare,
   ADMIN_SOURCES_ENABLED,
+  MONITOR_CONFIGURED,
   type ProjectAnalysisCompare,
 } from '../services/monitorApi';
 import { normalizeBudget as normalizeBudgetUtil } from '../utils/globalMonitorCoverage';
@@ -104,7 +105,11 @@ export default function GlobalMonitor() {
       setLiveError(null);
       hadLiveSuccessRef.current = true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur API Monitor';
+      // Message UTILISATEUR en français ; le détail technique part en console.
+      console.error('[GlobalMonitor] API injoignable:', error);
+      const message = MONITOR_CONFIGURED
+        ? 'Service Radar momentanément injoignable — réessayez plus tard.'
+        : "Radar non configuré sur cet environnement.";
       setLiveError(message);
       if (!hadLiveSuccessRef.current) {
         // API injoignable et jamais de succès : on n'invente rien (anti-façade) -> vide + erreur.
@@ -409,7 +414,9 @@ export default function GlobalMonitor() {
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full ${isLive ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
               {isLive ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              {isLive ? 'Live' : 'Démo'}
+              {/* « Hors ligne » : la page n'affiche AUCUNE donnée de démo (anti-façade),
+                  l'ancien libellé « Démo » était trompeur. */}
+              {isLive ? 'Live' : 'Hors ligne'}
             </span>
             {!isLive && liveError && (
               <span className="text-[11px] text-orange-700 max-w-[18rem] truncate" title={liveError}>
