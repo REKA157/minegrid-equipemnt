@@ -87,7 +87,8 @@ function TransactionCaseActions({ caseId, onDone }: { caseId: string; onDone: ()
       setMsg('Étape enregistrée. Si aucun partenaire n’est disponible, elle reste « à assigner / en attente partenaire ».');
       onDone();
     } else if (r.reason === 'not_deployed') {
-      setMsg('Workflow dossier non déployé sur cet environnement (RPC absente). Appliquez sql/2026-06_transaction_chain_write_side.sql.');
+      console.error('[Dossier] RPC absente — appliquer sql/2026-06_transaction_chain_write_side.sql');
+      setMsg("Cette action n'est pas disponible sur cet environnement. Contactez le support.");
     } else if (r.reason === 'forbidden') {
       setMsg('Action non autorisée : vous devez être partie prenante de ce dossier.');
     } else {
@@ -306,7 +307,8 @@ function AssignPartnerPanel({ caseId, onChanged }: { caseId: string; onChanged: 
     } else if (r.reason === 'partner_not_found') {
       setMsg({ tone: 'err', text: 'Aucun utilisateur avec cet email. Le partenaire doit avoir un compte MineGrid.' });
     } else if (r.reason === 'not_deployed') {
-      setMsg({ tone: 'err', text: 'Module non déployé : appliquez sql/2026-06_transaction_participant_assign.sql.' });
+      console.error('[Dossier] RPC absente — appliquer sql/2026-06_transaction_participant_assign.sql');
+      setMsg({ tone: 'err', text: "Cette action n'est pas disponible sur cet environnement. Contactez le support." });
     } else if (r.reason === 'forbidden') {
       setMsg({ tone: 'err', text: 'Seuls le vendeur, l’acheteur ou un délégué du dossier peuvent assigner un partenaire.' });
     } else {

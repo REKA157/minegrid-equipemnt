@@ -66,8 +66,8 @@ export default function MyTransactionCasesPage() {
             Mes dossiers
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Dossiers visibles selon vos droits Supabase : vendeur / acheteur, participant ou admin d&apos;organisation sur
-            le dossier (RLS).
+            Vos dossiers d&apos;achat et de vente : devis, négociation, transaction et séquestre,
+            partagés entre les participants du dossier.
           </p>
         </div>
         <button
@@ -93,38 +93,28 @@ export default function MyTransactionCasesPage() {
       )}
 
       {!loading && rows.length === 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-950 space-y-3">
-          <p className="font-medium">Aucun dossier visible pour votre compte.</p>
-          <p className="text-amber-900/90">
-            Ce n’est pas une erreur si vous n’avez pas encore de flux « acheteur connecté → devis sur annonce d’un tiers » : les dossiers sont une couche distincte des emails et des lignes{' '}
-            <a href="#leads" className="underline font-medium">
-              Leads
-            </a>
-            .
+        <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center">
+          <FolderOpen className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+          <p className="font-semibold text-gray-900 mb-1">Aucun dossier pour le moment</p>
+          <p className="text-sm text-gray-600 max-w-md mx-auto mb-6">
+            Un dossier est créé automatiquement dès que vous envoyez une demande de devis
+            sur une annonce, ou qu&apos;un acheteur en envoie une sur l&apos;une des vôtres.
+            Vous y suivrez ensemble le devis, la négociation et la transaction.
           </p>
-          <ul className="list-disc pl-5 space-y-1 text-amber-900/90">
-            <li>
-              Déploiement conseillé :{' '}
-              <code className="text-xs bg-white/80 px-1 rounded">sql/transaction_platform_core.sql</code> puis{' '}
-              <code className="text-xs bg-white/80 px-1 rounded">sql/transaction_platform_extended.sql</code> (ou{' '}
-              <code className="text-xs bg-white/80 px-1 rounded">sql/patch_transaction_participants_insert_buyer.sql</code>{' '}
-              pour corriger la policy participants si vous n’utilisez pas l’extended).
-            </li>
-            <li>
-              Création automatique : un <strong>acheteur connecté</strong> envoie une <strong>demande de devis</strong> sur une annonce d’un{' '}
-              <strong>autre</strong> vendeur — la ligne Leads peut alors afficher « Ouvrir » dans la colonne Dossier.
-            </li>
-            <li>
-              <strong>Rattrapage données</strong> (SQL Editor, rôle postgres) :{' '}
-              <code className="text-xs bg-white/80 px-1 rounded">sql/backfill_dossiers_from_quote_requests.sql</code>{' '}
-              pour les anciennes demandes avec acheteur déjà stocké dans la colonne{' '}
-              <code className="text-xs bg-white/80 px-1 rounded">buyer_user_id</code>.
-            </li>
-            <li>
-              Ouverture directe si vous connaissez l’id :{' '}
-              <span className="font-mono text-xs">#dossier/&lt;uuid&gt;</span>
-            </li>
-          </ul>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <a
+              href="#machines"
+              className="inline-flex rounded-md bg-orange-600 px-5 py-2.5 text-white text-sm font-medium hover:bg-orange-700"
+            >
+              Parcourir les machines
+            </a>
+            <a
+              href="#leads"
+              className="inline-flex rounded-md border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Voir mes demandes reçues
+            </a>
+          </div>
         </div>
       )}
 

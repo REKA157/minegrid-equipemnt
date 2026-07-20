@@ -49,7 +49,9 @@ export default function LeadsInbox() {
           (err as { code?: string }).code === 'PGRST205');
       if (isMissingTable) {
         setRows([]);
-        setError("Le module Leads n'est pas encore activé sur votre base. Exécutez le script `sql/quote_requests.sql`.");
+        // Détail technique pour les développeurs uniquement (table quote_requests absente).
+        console.error('[Leads] table quote_requests absente — déployer sql/quote_requests.sql');
+        setError("Le module Leads n'est pas disponible sur cet environnement. Contactez le support.");
         return;
       }
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
@@ -75,7 +77,8 @@ export default function LeadsInbox() {
         prev.map((row) => (row.id === quoteRequestId ? { ...row, transaction_case_id: r.caseId } : row)),
       );
     } else if (r.reason === 'not_deployed') {
-      setError('RPC ensure_transaction_case_for_quote_request absente : appliquez sql/rpc_ensure_transaction_case_for_quote_request.sql.');
+      console.error('[Leads] RPC ensure_transaction_case_for_quote_request absente — appliquer sql/rpc_ensure_transaction_case_for_quote_request.sql');
+      setError("La création de dossier n'est pas disponible sur cet environnement. Contactez le support.");
     } else if (r.reason === 'forbidden') {
       setError('Création du dossier refusée (droits). Vérifiez que l’acheteur est bien relié à la ligne.');
     } else {
@@ -205,23 +208,9 @@ export default function LeadsInbox() {
               de dossier transaction automatique (le vendeur peut suivre depuis cette liste et par email).
             </li>
             <li>
-              <strong>Avec session</strong> et toujours sans lien : vérifiez le déploiement SQL{' '}
-              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
-                transaction_platform_core.sql
-              </code>{' '}
-              (+{' '}
-              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
-                patch_transaction_participants_insert_buyer.sql
-              </code>{' '}
-              ou{' '}
-              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
-                transaction_platform_extended.sql
-              </code>
-              ). Pour les anciennes lignes avec acheteur identifié :{' '}
-              <code className="text-xs bg-white/90 px-1 rounded border border-amber-200/80">
-                sql/backfill_dossiers_from_quote_requests.sql
-              </code>
-              .
+              <strong>Acheteur connecté</strong> et toujours pas de lien : utilisez le bouton
+              « Créer le dossier » sur la ligne concernée — il rattache la demande à un
+              dossier transaction que vous retrouverez dans « Mes dossiers ».
             </li>
           </ul>
         </div>
@@ -275,11 +264,8 @@ export default function LeadsInbox() {
               </h2>
               <ul className="list-disc pl-5 space-y-1 marker:text-orange-500">
                 <li>
-                  Vous voyez les lignes où la base vous a enregistré comme vendeur de la demande (
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">seller_id</code>
-                  <span className="text-slate-500"> = votre compte</span>
-                  ). C’est votre <strong className="font-medium text-slate-800">boîte vendeur</strong> pour les leads
-                  capturés depuis le site.
+                  C&apos;est votre <strong className="font-medium text-slate-800">boîte vendeur</strong> :
+                  vous y voyez les demandes de devis reçues sur <strong className="font-medium text-slate-800">vos annonces</strong>.
                 </li>
                 <li>
                   Les <strong className="font-medium text-slate-800">acheteurs</strong> ne passent pas par cette page : ils utilisent le{' '}
@@ -294,46 +280,21 @@ export default function LeadsInbox() {
                 Colonne « Dossier » (pourquoi « — » ?)
               </h2>
               <p className="mb-2 text-slate-600">
-                Ici, « Dossier » = <strong className="font-medium text-slate-800">dossier transaction</strong> déjà lié à la demande.
-                Tant que{' '}
-                <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">transaction_case_id</code> est vide, le lien
-                reste « — » (normal dans plusieurs cas).
+                Ici, « Dossier » = <strong className="font-medium text-slate-800">dossier transaction</strong> déjà
+                lié à la demande (devis, négociation, transaction). Un « — » est normal dans plusieurs cas.
               </p>
-              <p className="mb-2 font-medium text-slate-800">Pour qu’un lien « Ouvrir » apparaisse, il faut notamment :</p>
+              <p className="mb-2 font-medium text-slate-800">Pour qu&apos;un lien « Ouvrir » apparaisse :</p>
               <ul className="list-disc pl-5 space-y-1 marker:text-orange-500">
-                <li>L’acheteur est <strong className="font-medium text-slate-800">connecté</strong> au moment de la demande (pour que le système crée et rattache un dossier).</li>
-                <li>Le vendeur sur l’annonce est bien identifié dans la table machines (champs courants :{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">seller_id</code>,{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">sellerid</code>,{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">user_id</code>,{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">owner_id</code>…).</li>
-                <li>L’acheteur n’est pas la même personne que le vendeur sur cette annonce.</li>
-                <li>
-                  Les scripts SQL plateforme transaction sont déployés :{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">
-                    sql/transaction_platform_core.sql
-                  </code>{' '}
-                  , puis{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">
-                    sql/transaction_platform_extended.sql
-                  </code>{' '}
-                  (ou au minimum{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">
-                    sql/patch_transaction_participants_insert_buyer.sql
-                  </code>{' '}
-                  pour la policy participants compatible acheteur créateur).
-                  Table{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">quote_requests</code>{' '}
-                  à jour avec RLS permettant à l’acheteur de mettre à jour sa ligne après création du dossier.
-                </li>
+                <li>L&apos;acheteur était <strong className="font-medium text-slate-800">connecté</strong> au moment de sa demande (le dossier se crée alors automatiquement).</li>
+                <li>L&apos;acheteur et le vendeur sont deux comptes différents.</li>
+                <li>Sinon, utilisez « Créer le dossier » sur la ligne pour le rattacher manuellement.</li>
               </ul>
               <p className="mt-2 text-slate-600">
-                Retrouvez vos dossiers depuis le menu{' '}
+                Retrouvez tous vos dossiers depuis le menu{' '}
                 <a href="#dossiers" className="text-orange-700 font-medium hover:underline">
                   Mes dossiers
                 </a>
-                , ou ouvrez directement{' '}
-                <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">#dossier/&lt;uuid&gt;</code> si vous connaissez l’identifiant.
+                .
               </p>
             </section>
 
@@ -342,33 +303,13 @@ export default function LeadsInbox() {
                 <Mail className="h-3.5 w-3.5" aria-hidden />
                 Emails (contact) ≠ cette liste « Leads »
               </h2>
-              <p className="mb-2 text-slate-600">
-                La notification envoyée après le formulaire de contact passe par l’Edge Function{' '}
-                <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">send-contact-email</code>.
-                Elle ne réutilise pas la colonne dossier ci-dessus ; c’est un <strong className="font-medium text-slate-800">autre flux</strong> (email instantané).
+              <p className="text-slate-600">
+                Quand un acheteur utilise le formulaire de contact, vous recevez aussi un{' '}
+                <strong className="font-medium text-slate-800">email immédiat</strong>. Cet email et la
+                liste ci-dessous sont <strong className="font-medium text-slate-800">deux canaux distincts</strong> :
+                l&apos;email vous alerte tout de suite, cette liste garde l&apos;historique et le suivi
+                (statut, dossier, relances).
               </p>
-              <ul className="list-disc pl-5 space-y-1 marker:text-orange-500">
-                <li>
-                  Si le corps de la requête contient un{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">machineId</code>{' '}
-                  valide, la fonction tente de joindre l’email du <strong className="font-medium text-slate-800">propriétaire de l’annonce</strong>, en lisant les champs vendeur/loueur sur{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">machines</code> puis Auth / tables annexes ({' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">users</code>,{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">pro_clients</code>…) — la clé{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">SUPABASE_SERVICE_ROLE_KEY</code> doit être disponible pour la fonction.
-                </li>
-                <li>
-                  Sinon (ou si l’owner n’a pas été résolu), l’email part vers la boîte générique{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">CONTACT_RECEIVER_EMAIL</code>. Idéalement, gardez la même valeur dans{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">VITE_CONTACT_RECEIVER_EMAIL</code>{' '}
-                  côté site pour ce repli cohérent.
-                </li>
-                <li>
-                  Option trace :{' '}
-                  <code className="text-xs bg-white px-1 py-0.5 rounded border border-slate-200">CONTACT_INQUIRY_BCC_EMAIL</code>{' '}
-                  pour une copie cachée quand le destinataire est le propriétaire de l’annonce (non obligatoire).
-                </li>
-              </ul>
             </section>
           </div>
         )}

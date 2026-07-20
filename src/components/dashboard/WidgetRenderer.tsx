@@ -1769,7 +1769,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
             <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
               <Target className="h-10 w-10 text-gray-300 mb-2" />
               <div>Aucun KPI enregistré</div>
-              <div className="text-xs text-gray-400 mt-1">Déployez sql/deploy_logisticien.sql</div>
+              <div className="text-xs text-gray-400 mt-1">
+                Les indicateurs apparaîtront dès vos premières opérations logistiques
+              </div>
             </div>
           );
         }
