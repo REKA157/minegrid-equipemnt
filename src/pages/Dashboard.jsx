@@ -1221,9 +1221,12 @@ export default function Dashboard({ section = 'overview' }) {
                                                 </p>
                                             </div>
                                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                                <h4 className="font-semibold text-blue-800 mb-2">Prochain paiement</h4>
+                                                {/* Libellé neutre : vrai qu'il y ait reconduction OU résiliation
+                                                    programmée (on ne connaît pas ce statut Paddle côté client
+                                                    tant que l'échéance n'est pas passée). */}
+                                                <h4 className="font-semibold text-blue-800 mb-2">Période en cours</h4>
                                                 <p className="text-sm text-blue-700">
-                                                    {formatDateFr(subscriptionEndsAt) ? `${formatDateFr(subscriptionEndsAt)} — ` : ''}
+                                                    {formatDateFr(subscriptionEndsAt) ? `Jusqu'au ${formatDateFr(subscriptionEndsAt)} — ` : ''}
                                                     {`${planPriceUsd(subscriptionType)} USD/mois (plan ${planDisplayName(subscriptionType)})`}
                                                 </p>
                                             </div>
