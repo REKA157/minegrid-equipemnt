@@ -11,7 +11,9 @@ import {
 } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
 import { toast } from '../utils/toast';
-import { FREE_PLAN, PAID_PLANS, planHomeHash, type PaidPlanDef } from '../config/plans';
+import { useAuth } from '../hooks/useAuth';
+import { useSubscription } from '../hooks/useSubscription';
+import { FREE_PLAN, PAID_PLANS, PLAN_RANK, planHomeHash, type PaidPlanDef } from '../config/plans';
 import PaddleCheckoutButton from '../components/PaddleCheckoutButton';
 
 // Page de tarifs publique — grille validée 2026-07 (USD, mensuel) :
@@ -24,6 +26,24 @@ import PaddleCheckoutButton from '../components/PaddleCheckoutButton';
 export default function ProSubscription() {
   const [promoCode, setPromoCode] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
+
+  // Situation du visiteur : connecté ? abonné à quel palier ? La page marque
+  // « Votre plan actuel » sur la bonne carte au lieu de proposer de re-souscrire.
+  const { user } = useAuth();
+  const { subscription } = useSubscription();
+  const activeRank =
+    subscription.isActive && subscription.type ? PLAN_RANK[subscription.type] : 0;
+
+  const currentPlanBadge = (
+    <div className="w-full text-center py-3 px-4 rounded-lg font-semibold bg-green-50 text-green-700 border border-green-200">
+      ✓ Votre plan actuel
+    </div>
+  );
+  const includedBadge = (
+    <div className="w-full text-center py-3 px-4 rounded-lg font-semibold bg-gray-50 text-gray-400 border border-gray-200">
+      Inclus dans votre plan
+    </div>
+  );
 
   const goToPlanHome = (internalId: string) => {
     window.location.hash = planHomeHash(internalId);
@@ -101,15 +121,27 @@ export default function ProSubscription() {
         ))}
       </ul>
 
-      <PaddleCheckoutButton
-        planId={plan.internalId}
-        label={`S'abonner — ${plan.priceUsd} USD/mois`}
-        onSuccess={() => {
-          toast('✅ Paiement confirmé. Votre abonnement est actif !');
-          goToPlanHome(plan.internalId);
-        }}
-        onError={(message) => toast(message)}
-      />
+      {activeRank === PLAN_RANK[plan.internalId] ? (
+        currentPlanBadge
+      ) : activeRank > PLAN_RANK[plan.internalId] ? (
+        includedBadge
+      ) : (
+        // NB : « Passer à » ouvre un NOUVEL abonnement Paddle ; l'upgrade propre
+        // (proration + annulation de l'ancien) sera géré côté Paddle avant la prod.
+        <PaddleCheckoutButton
+          planId={plan.internalId}
+          label={
+            activeRank > 0
+              ? `Passer à ${plan.displayName} — ${plan.priceUsd} USD/mois`
+              : `S'abonner — ${plan.priceUsd} USD/mois`
+          }
+          onSuccess={() => {
+            toast('✅ Paiement confirmé. Votre abonnement est actif !');
+            goToPlanHome(plan.internalId);
+          }}
+          onError={(message) => toast(message)}
+        />
+      )}
     </div>
   );
 
@@ -154,12 +186,18 @@ export default function ProSubscription() {
                 </li>
               ))}
             </ul>
-            <a
-              href="#inscription"
-              className="w-full text-center py-3 px-4 rounded-lg font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-            >
-              Créer un compte gratuit
-            </a>
+            {!user ? (
+              <a
+                href="#inscription"
+                className="w-full text-center py-3 px-4 rounded-lg font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                Créer un compte gratuit
+              </a>
+            ) : activeRank === 0 ? (
+              currentPlanBadge
+            ) : (
+              includedBadge
+            )}
           </div>
 
           {PAID_PLANS.map(renderPaidCard)}
