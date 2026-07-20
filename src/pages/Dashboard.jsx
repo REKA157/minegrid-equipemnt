@@ -4,7 +4,7 @@ import PaddleCheckoutButton from '../components/PaddleCheckoutButton';
 import { PAID_PLANS, PLAN_RANK, getPaidPlan, normalizePlanId, planDisplayName, planPriceUsd } from '../config/plans';
 import { getMySubscription } from '../utils/api/subscription';
 import { MyTrustInline } from '../nextgen/integration/inline';
-import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData, getOffers } from '../utils/api';
+import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData, getOffers, getNotifications } from '../utils/api';
 import { supabaseClient as supabase } from '../utils/supabaseClient';
 import { logger } from '../utils/logger';
 import { toast } from '../utils/toast';
@@ -13,7 +13,6 @@ import {
     getAccountItem,
     setAccountItem,
     removeAccountItem,
-    clearAllScopedKeysForUser,
     SUBSCRIPTION_KEYS,
     isWatchedAccountKey,
 } from '../utils/accountLocalStorage';
@@ -106,6 +105,20 @@ export default function Dashboard({ section = 'overview' }) {
     };
 
     const [subscriptionType, setSubscriptionType] = useState('aucun');
+    // Date de fin réelle de l'abonnement (subscription_end serveur) — remplace
+    // les dates codées en dur (« 15 juillet 2024 ») affichées auparavant.
+    const [subscriptionEndsAt, setSubscriptionEndsAt] = useState(null);
+    const formatDateFr = (iso) => {
+        if (!iso) return null;
+        const d = new Date(iso);
+        return Number.isNaN(d.getTime())
+            ? null
+            : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    };
+
+    // VRAIES notifications (table `notifications`) — remplace la notification de
+    // démonstration codée en dur (« Pelle hydraulique CAT 320D il y a 2 heures »).
+    const [userNotifications, setUserNotifications] = useState([]);
 
     const [, setIsFirstTimeEnterpriseDashboard] = useState(true);
 
@@ -191,12 +204,14 @@ export default function Dashboard({ section = 'overview' }) {
                     setHasActiveSubscription(true);
                     setSubscriptionType(normalizeSubscriptionType(sub.type));
                     setHasEnterpriseSubscription(sub.type === 'enterprise');
+                    setSubscriptionEndsAt(sub.endsAt ?? null);
                 } else {
                     // Pas d'abonnement actif côté serveur : on ne laisse pas un
                     // vieux drapeau localStorage prétendre le contraire.
                     setHasActiveSubscription(false);
                     setSubscriptionType('aucun');
                     setHasEnterpriseSubscription(false);
+                    setSubscriptionEndsAt(null);
                 }
             } catch {
                 // Serveur injoignable : on conserve l'état local (meilleur effort).
@@ -205,6 +220,12 @@ export default function Dashboard({ section = 'overview' }) {
         void syncFromServer();
         const handleSubscriptionRefresh = () => void syncFromServer();
         window.addEventListener('subscriptionRefreshRequested', handleSubscriptionRefresh);
+
+        // Vraies notifications du compte (échec silencieux -> liste vide honnête).
+        getNotifications()
+            .then((rows) => { if (!cancelledSync) setUserNotifications(rows || []); })
+            .catch(() => { if (!cancelledSync) setUserNotifications([]); });
+
         return () => {
             cancelledSync = true;
             window.removeEventListener('subscriptionRefreshRequested', handleSubscriptionRefresh);
@@ -486,39 +507,35 @@ export default function Dashboard({ section = 'overview' }) {
         }
     };
 
-    const handleCancelSubscription = () => {
-        if (confirm('Êtes-vous sûr de vouloir résilier votre abonnement ?')) {
-            setHasActiveSubscription(false);
-            setSubscriptionType('aucun');
-            setHasEnterpriseSubscription(false);
-            
-            if (accountId) {
-                clearAllScopedKeysForUser(accountId);
-                setAccountItem(accountId, 'subscriptionCancelled', 'true');
-            } else {
-                localStorage.removeItem('tempSubscription');
-                localStorage.removeItem('tempHasActiveSubscription');
-                localStorage.removeItem('enterpriseDashboardConfigured');
-                localStorage.removeItem('userSubscription');
-                localStorage.removeItem('enterpriseService');
-                localStorage.removeItem('userServices');
-                localStorage.removeItem('lastActiveMetier');
-                const metierKeys = Object.keys(localStorage).filter(
-                    k => k.startsWith('enterpriseDashboardConfig')
-                );
-                metierKeys.forEach(k => localStorage.removeItem(k));
-                localStorage.removeItem('enterpriseDashboardConfig');
-                localStorage.setItem('subscriptionCancelled', 'true');
+    // RÉSILIATION RÉELLE : on demande au SERVEUR d'annuler l'abonnement Paddle
+    // (Edge Function paddle-cancel → API Paddle, prise d'effet en fin de période).
+    // L'ancienne version ne faisait qu'effacer des drapeaux localStorage : le
+    // client croyait avoir résilié alors que Paddle continuait de facturer.
+    const [cancelInProgress, setCancelInProgress] = useState(false);
+    const handleCancelSubscription = async () => {
+        if (cancelInProgress) return;
+        if (!confirm("Résilier votre abonnement ? Votre accès restera actif jusqu'à la fin de la période déjà payée, puis ne sera pas renouvelé.")) {
+            return;
+        }
+        setCancelInProgress(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('paddle-cancel');
+            if (!error && data?.ok) {
+                window.dispatchEvent(new Event('subscriptionRefreshRequested'));
+                toast("✅ Résiliation enregistrée : plus aucun prélèvement. Votre accès reste actif jusqu'à la fin de la période payée.");
+                return;
             }
-            
-            logger.info('🚫 Abonnement résilié - Toutes les données nettoyées');
-            
-            // Déclencher un événement pour notifier les autres composants
-            window.dispatchEvent(new CustomEvent('subscriptionCancelled', {
-                detail: { cancelled: true }
-            }));
-            
-            toast('Votre abonnement a été résilié avec succès ! Vous pouvez maintenant choisir un nouvel abonnement.');
+            if (data?.reason === 'no_paddle_subscription') {
+                toast("Votre accès actuel ne provient pas d'un prélèvement par carte (code promo…) : il expirera simplement à sa date de fin, sans reconduction.");
+                return;
+            }
+            logger.error('paddle-cancel:', error || data);
+            toast("La résiliation en ligne est momentanément indisponible. Contactez le support — aucune reconduction ne sera faite sans votre accord.");
+        } catch (e) {
+            logger.error('paddle-cancel:', e);
+            toast('La résiliation en ligne est momentanément indisponible. Contactez le support.');
+        } finally {
+            setCancelInProgress(false);
         }
     };
 
@@ -803,13 +820,9 @@ export default function Dashboard({ section = 'overview' }) {
     // attention, le code 'pro' s'affiche « Premium » et 'premium' s'affiche « Pro »).
     const getPlanPrice = (planType) => planPriceUsd(planType);
 
-    // Rang du plan effectif (normalise la variante historique 'entreprise').
-    // Gating des colonnes « Services » : la colonne « Services Premium » s'active
-    // dès le palier interne 'pro' (plan vendu « Premium » 20 $), la colonne
-    // « Services Pro » dès le palier interne 'premium' (plan vendu « Pro » 50 $).
+    // Rang du plan effectif (normalise la variante historique 'entreprise') —
+    // sert au déverrouillage par palier de la section « Services ».
     const effectivePlanRank = PLAN_RANK[normalizePlanId(subscriptionType) ?? 'basic'] ?? 0;
-    const hasPremiumTierServices = hasActiveSubscription && effectivePlanRank >= PLAN_RANK.pro;
-    const hasProTierServices = hasActiveSubscription && effectivePlanRank >= PLAN_RANK.premium;
 
     // Fonction pour sauvegarder la configuration du tableau de bord
     const handleSaveDashboard = () => {
@@ -936,7 +949,7 @@ export default function Dashboard({ section = 'overview' }) {
                                             <div>
                                                 <p className="text-sm font-medium text-gray-600">Total des annonces</p>
                                                 <p className="text-2xl font-bold text-gray-900">{machines.length}</p>
-                                                <p className="text-xs text-green-600 mt-1">+12% ce mois</p>
+                                                {/* (ancien « +12% ce mois » supprimé : pourcentage codé en dur, faux) */}
                                             </div>
                                             <div className="h-12 w-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
                                                 <Package className="h-6 w-6 text-white" />
@@ -1050,7 +1063,11 @@ export default function Dashboard({ section = 'overview' }) {
                                                 ))}
                                             </div>
                                             <div className="mt-4 pt-4 border-t border-orange-200">
-                                                <p className="text-xs text-gray-600 mb-3">Renouvellement automatique le 15 juillet 2024</p>
+                                                <p className="text-xs text-gray-600 mb-3">
+                                                    {formatDateFr(subscriptionEndsAt)
+                                                        ? `Renouvellement automatique le ${formatDateFr(subscriptionEndsAt)}`
+                                                        : 'Abonnement actif'}
+                                                </p>
                                                 {(subscriptionType === 'premium' || subscriptionType === 'pro' || subscriptionType === 'entreprise') && (
                                                     <button
                                                         onClick={() => {
@@ -1197,22 +1214,28 @@ export default function Dashboard({ section = 'overview' }) {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                                             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                                                 <h4 className="font-semibold text-green-800 mb-2">Statut de l'abonnement</h4>
-                                                <p className="text-sm text-green-700">Actif jusqu'au 15 juillet 2024</p>
+                                                <p className="text-sm text-green-700">
+                                                    {formatDateFr(subscriptionEndsAt)
+                                                        ? `Actif jusqu'au ${formatDateFr(subscriptionEndsAt)}`
+                                                        : 'Actif'}
+                                                </p>
                                             </div>
                                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                                 <h4 className="font-semibold text-blue-800 mb-2">Prochain paiement</h4>
                                                 <p className="text-sm text-blue-700">
-                                                    {` ${planPriceUsd(subscriptionType)} USD/mois (plan ${planDisplayName(subscriptionType)})`}
+                                                    {formatDateFr(subscriptionEndsAt) ? `${formatDateFr(subscriptionEndsAt)} — ` : ''}
+                                                    {`${planPriceUsd(subscriptionType)} USD/mois (plan ${planDisplayName(subscriptionType)})`}
                                                 </p>
                                             </div>
                                         </div>
 
                                         <div className="flex flex-col sm:flex-row gap-4">
                                             <button
-                                                onClick={handleCancelSubscription}
-                                                className="px-6 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all duration-200 transform hover:scale-105 shadow-lg font-medium"
+                                                onClick={() => void handleCancelSubscription()}
+                                                disabled={cancelInProgress}
+                                                className="px-6 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all duration-200 transform hover:scale-105 shadow-lg font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                                             >
-                                                Résilier mon abonnement
+                                                {cancelInProgress ? 'Résiliation en cours…' : 'Résilier mon abonnement'}
                                             </button>
                                             <button
                                                 onClick={() => window.location.hash = '#contact'}
@@ -1347,405 +1370,46 @@ export default function Dashboard({ section = 'overview' }) {
                             <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-100">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-xl font-semibold text-gray-900 bg-gradient-to-r from-orange-600 to-orange-800 bg-clip-text text-transparent">
-                                        Mes Services Entreprise
+                                        Services inclus dans les plans
                                     </h3>
                                 </div>
-                                
-
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                                    {/* Services Premium - Colonne gauche */}
-                                    <div className="space-y-4">
-                                        <h4 className="font-semibold text-gray-900 border-b border-orange-200 pb-3 text-lg">
-                                            Services Premium
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-emerald-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-emerald-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Visibilité renforcée sur la page d'accueil</h5>
-                                                    <p className="text-sm text-orange-700">Mise en avant de vos annonces en position prioritaire sur la page d'accueil du site</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasPremiumTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-blue-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-blue-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Jusqu'à 10 images par annonce</h5>
-                                                    <p className="text-sm text-orange-700">Possibilité de publier jusqu'à 10 images haute qualité par annonce pour maximiser la visibilité</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasPremiumTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-purple-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-purple-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Support prioritaire</h5>
-                                                    <p className="text-sm text-orange-700">Accès prioritaire au support technique avec temps de réponse garanti</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasPremiumTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-green-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-green-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Statistiques détaillées</h5>
-                                                    <p className="text-sm text-orange-700">Accès à des statistiques avancées sur vos annonces, vues, contacts et performances</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasPremiumTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasPremiumTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Services Pro - Colonne droite */}
-                                    <div className="space-y-4">
-                                        <h4 className="font-semibold text-gray-900 border-b border-orange-200 pb-3 text-lg">
-                                            Services Pro
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-purple-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-purple-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Jusqu'à 12 images par annonce</h5>
-                                                    <p className="text-sm text-orange-700">Possibilité de publier jusqu'à 12 images haute qualité par annonce</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasProTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-blue-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-blue-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Support prioritaire par téléphone, email et chat</h5>
-                                                    <p className="text-sm text-orange-700">Accès prioritaire au support technique via tous les canaux de communication</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasProTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-teal-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-teal-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Analytics avancés et rapports personnalisés</h5>
-                                                    <p className="text-sm text-orange-700">Analyses détaillées et rapports personnalisés sur vos performances</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasProTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-cyan-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-cyan-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Tableau de bord professionnel</h5>
-                                                    <p className="text-sm text-orange-700">Interface de gestion avancée avec outils professionnels intégrés</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasProTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex items-center p-4 bg-gradient-to-r from-rose-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
-                                                <div className="w-4 h-4 bg-gradient-to-r from-rose-100 via-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Services de financement et logistique</h5>
-                                                    <p className="text-sm text-orange-700">Solutions de financement et services logistiques intégrés</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasProTierServices
-                                                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                                        : 'bg-gray-500 text-white cursor-not-allowed'
-                                                }`}>
-                                                    {hasProTierServices ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                {/* Services Entreprise - En bas sur deux colonnes */}
-                                <div className="mt-8">
-                                    <h4 className="font-semibold text-gray-900 border-b border-orange-200 pb-3 text-lg mb-6">
-                                        Services Entreprise
-                                    </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        {/* Colonne gauche Services Entreprise */}
-                                        <div className="space-y-4">
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-green-50 via-orange-100 to-orange-200 border-orange-300' 
-                                                    : 'bg-gradient-to-r from-green-50 via-orange-100 to-orange-200 border-orange-300'
-                                            }`}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-green-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-green-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Visibilité renforcée sur la page d'accueil</h5>
-                                                    <p className="text-sm text-orange-700">Mise en avant maximale et positionnement prioritaire</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                                        : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                }`}>
-                                                    {hasEnterpriseSubscription ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-blue-50 via-orange-100 to-orange-200 border-orange-300' 
-                                                    : 'bg-gradient-to-r from-blue-50 via-orange-100 to-orange-200 border-orange-300'
-                                            }`}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-blue-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-blue-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Jusqu'à 15 images par annonce</h5>
-                                                    <p className="text-sm text-orange-700">Possibilité de publier jusqu'à 15 images haute qualité par annonce</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                                        : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                }`}>
-                                                    {hasEnterpriseSubscription ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-red-50 via-orange-100 to-orange-200 border-orange-300 hover:shadow-md cursor-pointer' 
-                                                    : 'bg-gradient-to-r from-red-50 via-orange-100 to-orange-200 border-orange-300 cursor-not-allowed'
-                                            }`} onClick={hasEnterpriseSubscription ? () => window.open('#priority-support', '_blank') : undefined}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-red-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-red-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Support prioritaire 24/7</h5>
-                                                    <p className="text-sm text-orange-700">Assistance téléphonique, email et chat en direct</p>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                        hasEnterpriseSubscription 
-                                                            ? 'bg-green-600 text-white hover:bg-green-700' 
-                                                            : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                    }`}>
-                                                        {hasEnterpriseSubscription ? 'Disponible' : 'Verrouillé'}
-                                                    </button>
-                                                    {hasEnterpriseSubscription && (
-                                                        <button className="text-xs bg-orange-600 text-white px-3 py-1 rounded-full hover:bg-orange-700 transition-colors">
-                                                            Contacter
-                                                        </button>
+                                {/* Généré depuis la SOURCE UNIQUE src/config/plans.ts : chaque colonne
+                                    liste les fonctionnalités réellement vendues. Déverrouillage par rang
+                                    (un plan supérieur inclut les colonnes des plans inférieurs) —
+                                    l'ancienne version listait des services de l'ANCIENNE grille
+                                    (images par annonce, visibilité…) qui ne correspondaient plus à l'offre. */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                    {PAID_PLANS.map((plan) => {
+                                        const unlocked = hasActiveSubscription && effectivePlanRank >= PLAN_RANK[plan.internalId];
+                                        return (
+                                            <div key={plan.internalId} className="space-y-4">
+                                                <h4 className="font-semibold text-gray-900 border-b border-orange-200 pb-3 text-lg">
+                                                    Services {plan.displayName}
+                                                    <span className="block text-xs font-normal text-gray-500 mt-1">{plan.tagline} · {plan.priceUsd} USD/mois</span>
+                                                </h4>
+                                                <div className="space-y-4">
+                                                    {plan.features.filter((f) => !f.startsWith('Tout le plan')).map((feature) => (
+                                                        <div key={feature} className="flex items-center p-4 bg-gradient-to-r from-orange-50 via-orange-100 to-orange-200 rounded-xl border border-orange-300 shadow-sm">
+                                                            <div className="w-4 h-4 bg-gradient-to-r from-orange-200 to-orange-400 rounded-full mr-4 shadow-sm"></div>
+                                                            <div className="flex-1">
+                                                                <h5 className="font-semibold text-orange-900">{feature}</h5>
+                                                            </div>
+                                                            <span className={`text-xs px-3 py-1 rounded-full ${
+                                                                unlocked ? 'bg-orange-500 text-white' : 'bg-gray-500 text-white'
+                                                            }`}>
+                                                                {unlocked ? 'Actif' : 'Verrouillé'}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {!unlocked && (
+                                                        <a href="#tarifs" className="block text-center text-sm text-orange-700 font-medium hover:underline">
+                                                            Débloquer avec le plan {plan.displayName} →
+                                                        </a>
                                                     )}
                                                 </div>
                                             </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-purple-50 via-orange-100 to-orange-200 border-orange-300' 
-                                                    : 'bg-gradient-to-r from-purple-50 via-orange-100 to-orange-200 border-orange-300'
-                                            }`}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-purple-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-purple-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Statistiques détaillées et analytics</h5>
-                                                    <p className="text-sm text-orange-700">Analytics complets et métriques avancées</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                                        : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                }`}>
-                                                    {hasEnterpriseSubscription ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-teal-50 via-orange-100 to-orange-200 border-orange-300' 
-                                                    : 'bg-gradient-to-r from-teal-50 via-orange-100 to-orange-200 border-orange-300'
-                                            }`}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-teal-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-teal-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Tableau de bord entreprise personnalisé</h5>
-                                                    <p className="text-sm text-orange-700">Interface de gestion avancée et personnalisable</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                                        : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                }`}>
-                                                    {hasEnterpriseSubscription ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Colonne droite Services Entreprise */}
-                                        <div className="space-y-4">
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-yellow-50 via-orange-100 to-orange-200 border-orange-300 hover:shadow-md cursor-pointer' 
-                                                    : 'bg-gradient-to-r from-yellow-50 via-orange-100 to-orange-200 border-orange-300 cursor-not-allowed'
-                                            }`} onClick={hasEnterpriseSubscription ? () => window.open('#multi-user-management', '_blank') : undefined}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-yellow-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-yellow-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Gestion multi-utilisateurs</h5>
-                                                    <p className="text-sm text-orange-700">Accès pour toute votre équipe</p>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                        hasEnterpriseSubscription 
-                                                            ? 'bg-green-600 text-white hover:bg-green-700' 
-                                                            : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                    }`}>
-                                                        {hasEnterpriseSubscription ? 'Disponible' : 'Verrouillé'}
-                                                    </button>
-                                                    {hasEnterpriseSubscription && (
-                                                        <button className="text-xs bg-orange-600 text-white px-3 py-1 rounded-full hover:bg-orange-700 transition-colors">
-                                                            Gérer
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-indigo-50 via-orange-100 to-orange-200 border-orange-300 hover:shadow-md cursor-pointer' 
-                                                    : 'bg-gradient-to-r from-indigo-50 via-orange-100 to-orange-200 border-orange-300 cursor-not-allowed'
-                                            }`} onClick={hasEnterpriseSubscription ? () => window.open('#api-docs', '_blank') : undefined}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-indigo-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-indigo-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">API d'intégration</h5>
-                                                    <p className="text-sm text-orange-700">Connexion avec vos systèmes existants</p>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                        hasEnterpriseSubscription 
-                                                            ? 'bg-green-600 text-white hover:bg-green-700' 
-                                                            : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                    }`}>
-                                                        {hasEnterpriseSubscription ? 'Disponible' : 'Verrouillé'}
-                                                    </button>
-                                                    {hasEnterpriseSubscription && (
-                                                        <button className="text-xs bg-orange-600 text-white px-3 py-1 rounded-full hover:bg-orange-700 transition-colors">
-                                                            Accéder
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-cyan-50 via-orange-100 to-orange-200 border-orange-300' 
-                                                    : 'bg-gradient-to-r from-cyan-50 via-orange-100 to-orange-200 border-orange-300'
-                                            }`}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-cyan-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-cyan-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Analytics complets</h5>
-                                                    <p className="text-sm text-orange-700">Analyses détaillées et rapports avancés</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                                        : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                }`}>
-                                                    {hasEnterpriseSubscription ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                            
-                                            <div className={`flex items-center p-4 rounded-xl border shadow-sm transition-all ${
-                                                hasEnterpriseSubscription 
-                                                    ? 'bg-gradient-to-r from-emerald-50 via-orange-100 to-orange-200 border-orange-300' 
-                                                    : 'bg-gradient-to-r from-emerald-50 via-orange-100 to-orange-200 border-orange-300'
-                                            }`}>
-                                                <div className={`w-4 h-4 rounded-full mr-4 shadow-sm ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-gradient-to-r from-emerald-100 via-orange-200 to-orange-400' 
-                                                        : 'bg-gradient-to-r from-emerald-100 via-orange-200 to-orange-400'
-                                                }`}></div>
-                                                <div className="flex-1">
-                                                    <h5 className="font-semibold text-orange-900">Réseau partenarial intégré</h5>
-                                                    <p className="text-sm text-orange-700">Accès au réseau de partenaires exclusifs</p>
-                                                </div>
-                                                <button className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                                                    hasEnterpriseSubscription 
-                                                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                                        : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                }`}>
-                                                    {hasEnterpriseSubscription ? 'Actif' : 'Verrouillé'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -1875,24 +1539,38 @@ export default function Dashboard({ section = 'overview' }) {
                                         Notifications
                                     </h3>
                                 </div>
-                                <div className="space-y-4">
-                                    <div className="flex items-start p-5 bg-gradient-to-r from-blue-50 via-orange-100 to-orange-200 rounded-xl border-l-4 border-orange-300 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="flex-shrink-0">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-blue-100 via-orange-200 to-orange-400 rounded-full flex items-center justify-center shadow-md">
-                                                <span className="text-orange-700 text-sm font-medium">👁️</span>
-                                            </div>
-                                        </div>
-                                        <div className="ml-4 flex-1">
-                                            <div className="flex items-center justify-between">
-                                                <h4 className="text-sm font-semibold text-orange-900">Nouvelle vue sur votre annonce</h4>
-                                                <span className="text-xs text-orange-600 bg-white px-2 py-1 rounded-full">Il y a 2 heures</span>
-                                            </div>
-                                            <p className="text-sm text-orange-700 mt-2">
-                                                Quelqu'un a consulté votre annonce "Pelle hydraulique CAT 320D"
-                                            </p>
-                                        </div>
+                                {/* VRAIES notifications du compte — l'ancienne carte de démonstration
+                                    (« Pelle hydraulique CAT 320D il y a 2 heures ») était codée en dur. */}
+                                {userNotifications.length === 0 ? (
+                                    <div className="text-center py-10 text-gray-500">
+                                        <Bell className="h-10 w-10 mx-auto text-gray-300 mb-3" />
+                                        <p className="font-medium text-gray-700">Aucune notification pour le moment</p>
+                                        <p className="text-sm mt-1">Vous serez averti ici des vues, messages et offres sur vos annonces.</p>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {userNotifications.map((n) => (
+                                            <div key={n.id} className="flex items-start p-5 bg-gradient-to-r from-blue-50 via-orange-100 to-orange-200 rounded-xl border-l-4 border-orange-300 shadow-sm">
+                                                <div className="flex-shrink-0">
+                                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-100 via-orange-200 to-orange-400 rounded-full flex items-center justify-center shadow-md">
+                                                        <Bell className="h-4 w-4 text-orange-700" />
+                                                    </div>
+                                                </div>
+                                                <div className="ml-4 flex-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-sm font-semibold text-orange-900">{n.title || 'Notification'}</h4>
+                                                        {n.created_at && (
+                                                            <span className="text-xs text-orange-600 bg-white px-2 py-1 rounded-full">
+                                                                {new Date(n.created_at).toLocaleString('fr-FR')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-orange-700 mt-2">{n.message || n.content || ''}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -1931,22 +1609,35 @@ export default function Dashboard({ section = 'overview' }) {
                                     {activeSettingsTab === 'profil' && (
                                         <div className="space-y-6">
                                             <h3 className="text-lg font-semibold text-gray-900 mb-4">Informations personnelles</h3>
+                                            {/* Lecture seule : ces champs affichent les VRAIES infos du compte
+                                                (métadonnées Supabase). Les rendre modifiables sans sauvegarde
+                                                réelle serait trompeur — l'édition viendra avec son enregistrement. */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
                                                     <input
                                                         type="text"
-                                                        defaultValue={userName || ''}
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                                        placeholder="Votre prénom"
+                                                        readOnly
+                                                        value={user?.user_metadata?.first_name || user?.user_metadata?.firstName || '—'}
+                                                        className="w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-700 rounded-lg"
                                                     />
                                                 </div>
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
                                                     <input
                                                         type="text"
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                                        placeholder="Votre nom"
+                                                        readOnly
+                                                        value={user?.user_metadata?.last_name || user?.user_metadata?.lastName || '—'}
+                                                        className="w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-700 rounded-lg"
+                                                    />
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">Email du compte</label>
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={user?.email || '—'}
+                                                        className="w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-700 rounded-lg"
                                                     />
                                                 </div>
                                             </div>

@@ -58,6 +58,21 @@ sur le staging (SQL editor — idempotente).
 5. Contre-cas : rejouer la notification depuis Paddle (bouton « resend ») →
    réponse `idempotent: true`, pas de prolongation.
 
+## Phase 5 — Résiliation en un clic (fonction `paddle-cancel`)  [TOI]
+Le bouton « Résilier mon abonnement » du site appelle cette fonction, qui annule
+VRAIMENT l'abonnement via l'API Paddle (prise d'effet en fin de période payée).
+1. Paddle sandbox → **Developer tools → Authentication → API keys** → crée une
+   **API key** (⚠️ SECRÈTE — jamais dans le chat ni dans le front).
+2. Dashboard staging → **Edge Functions → Secrets** : `PADDLE_API_KEY` = cette clé,
+   `PADDLE_ENV` = `sandbox`.
+3. Déployer (AVEC vérification JWT — donc SANS --no-verify-jwt) :
+```powershell
+npx supabase functions deploy paddle-cancel --project-ref vrouxqofmlbkxgznftja
+```
+4. Test : connecté avec un abonnement Paddle actif → Mon abonnement → « Résilier »
+   → toast de confirmation ; Paddle → Subscriptions → statut « scheduled to cancel » ;
+   à l'échéance, `paddle-webhook` reçoit subscription.canceled → `pro_clients.subscription_status='inactive'`.
+
 ## Passage en production (plus tard)
 Compte Paddle **live** (vérification d'identité de la société requise) → recréer
 catalogue + token + destination en live, `VITE_PADDLE_ENV=production`, secrets sur
