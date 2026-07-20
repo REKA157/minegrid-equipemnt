@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Package, Settings, Bell, User, LogOut, ChevronRight, Shield, Wallet, RefreshCw, Eye, MessageSquare, DollarSign, X, CreditCard, Gift, Save } from 'lucide-react';
 import PaddleCheckoutButton from '../components/PaddleCheckoutButton';
 import { PAID_PLANS, PLAN_RANK, getPaidPlan, normalizePlanId, planDisplayName, planPriceUsd } from '../config/plans';
+import { getMySubscription } from '../utils/api/subscription';
 import { MyTrustInline } from '../nextgen/integration/inline';
 import { getSellerMachines, logoutUser, getDashboardStats, getWeeklyActivityData, getOffers } from '../utils/api';
 import { supabaseClient as supabase } from '../utils/supabaseClient';
@@ -174,6 +175,40 @@ export default function Dashboard({ section = 'overview' }) {
             setIsFirstTimeEnterpriseDashboard(!getAccountItem(accountId, 'enterpriseDashboardConfigured'));
         };
         syncFromStorage();
+
+        // VÉRITÉ SERVEUR : l'abonnement réel vit dans pro_clients (activé par le
+        // webhook de paiement Paddle ou la RPC code promo). La mémoire locale
+        // ci-dessus n'est qu'un cache hérité — le serveur a TOUJOURS le dernier
+        // mot (paiement fait sur un autre appareil, activation webhook,
+        // résiliation…). Sans cette synchro, un abonné payé via Paddle voyait
+        // encore « Gratuit » sur cette page.
+        let cancelledSync = false;
+        const syncFromServer = async () => {
+            try {
+                const sub = await getMySubscription();
+                if (cancelledSync) return;
+                if (sub.isActive && sub.type) {
+                    setHasActiveSubscription(true);
+                    setSubscriptionType(normalizeSubscriptionType(sub.type));
+                    setHasEnterpriseSubscription(sub.type === 'enterprise');
+                } else {
+                    // Pas d'abonnement actif côté serveur : on ne laisse pas un
+                    // vieux drapeau localStorage prétendre le contraire.
+                    setHasActiveSubscription(false);
+                    setSubscriptionType('aucun');
+                    setHasEnterpriseSubscription(false);
+                }
+            } catch {
+                // Serveur injoignable : on conserve l'état local (meilleur effort).
+            }
+        };
+        void syncFromServer();
+        const handleSubscriptionRefresh = () => void syncFromServer();
+        window.addEventListener('subscriptionRefreshRequested', handleSubscriptionRefresh);
+        return () => {
+            cancelledSync = true;
+            window.removeEventListener('subscriptionRefreshRequested', handleSubscriptionRefresh);
+        };
     }, [accountId]);
 
     useEffect(() => {
