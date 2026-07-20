@@ -31,3 +31,19 @@ update public.pro_clients
 
 comment on table public.processed_paddle_events is
   'Idempotence des webhooks Paddle (event_id claimé une seule fois par paddle-webhook, service_role uniquement).';
+
+-- UN ABONNEMENT PAR UTILISATEUR : requis par l'upsert `onConflict: user_id` du
+-- webhook (sans contrainte unique, Postgres renvoie 42P10 et l'activation échoue
+-- en boucle — constaté sur le staging le 2026-07-20). On dédoublonne d'abord en
+-- gardant la ligne la plus récente (préviendra le cas prod), puis on pose l'index.
+delete from public.pro_clients p
+ where exists (
+   select 1
+     from public.pro_clients q
+    where q.user_id = p.user_id
+      and (q.updated_at > p.updated_at
+           or (q.updated_at = p.updated_at and q.id > p.id))
+ );
+
+create unique index if not exists pro_clients_user_id_key
+  on public.pro_clients (user_id);

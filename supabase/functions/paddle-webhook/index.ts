@@ -245,7 +245,19 @@ Deno.serve(async (req) => {
   } catch (err) {
     // Échec de traitement : on RETIRE le claim pour que Paddle puisse retenter.
     await supabaseAdmin.from('processed_paddle_events').delete().eq('event_id', eventId);
-    const message = err instanceof Error ? err.message : 'erreur activation';
+    // Les erreurs PostgREST sont des objets simples (pas des instances d'Error) :
+    // on sérialise pour que le journal Paddle et les logs montrent la vraie cause.
+    let message: string;
+    if (err instanceof Error) {
+      message = err.message;
+    } else {
+      try {
+        message = JSON.stringify(err);
+      } catch {
+        message = 'erreur activation';
+      }
+    }
+    console.error('[paddle-webhook] échec de traitement:', message);
     return new Response(`Erreur d'activation: ${message}`, { status: 500 });
   }
 
