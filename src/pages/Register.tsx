@@ -226,7 +226,8 @@ export default function Register({ initialType }: RegisterProps) {
       });
       const hasSession = Boolean(response?.session);
       localStorage.setItem('selectedSubscription', subscription);
-      if (response?.user) {
+      // Trace locale posée uniquement avec une vraie session (cf. handleSubmit).
+      if (hasSession && response?.user) {
         localStorage.setItem('user', JSON.stringify(response.user));
       }
 
@@ -277,15 +278,24 @@ export default function Register({ initialType }: RegisterProps) {
     if (formData.subscription === 'gratuit') {
       try {
         setLoading(true);
-        const { user } = await registerUser({
+        const response = await registerUser({
           ...formData,
           accountType: formData.accountType as 'client' | 'seller',
         });
-        localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('selectedSubscription', formData.subscription);
-        // Invité : on le renvoie finaliser son adhésion (il rejoint la société
-        // et hérite de son abonnement) ; sinon accès direct au tableau de bord.
-        window.location.hash = inviteMode ? '#accepter-invitation' : '#dashboard';
+
+        // La trace locale « user » n'est posée QUE si une vraie session existe :
+        // sinon la page #dashboard affichait « Vendeur connecté » à tort alors
+        // que le compte attendait encore la confirmation d'email.
+        if (response?.session && response?.user) {
+          localStorage.setItem('user', JSON.stringify(response.user));
+          // Invité : on le renvoie finaliser son adhésion (il rejoint la société
+          // et hérite de son abonnement) ; sinon accès direct au tableau de bord.
+          window.location.hash = inviteMode ? '#accepter-invitation' : '#dashboard';
+        } else {
+          toast('Compte créé ! Confirme ton email (lien envoyé), puis connecte-toi.');
+          window.location.hash = '#connexion';
+        }
       } catch (err: unknown) {
         toast('Erreur lors de l\'inscription : ' + getErrorMessage(err));
       } finally {

@@ -306,8 +306,14 @@ function AppContent() {
       case 'vendre':
         return <SellEquipment />;
 
+      // Session réelle exigée : sans cette garde, la page affichait « Vendeur
+      // connecté » à tort sur la seule foi d'une trace localStorage.
       case 'dashboard':
-        return <Dashboard section={pathParts[1]} />;
+        return (
+          <ProtectedRoute>
+            <Dashboard section={pathParts[1]} />
+          </ProtectedRoute>
+        );
 
       case 'financement':
         return <FinancingRequest />;
