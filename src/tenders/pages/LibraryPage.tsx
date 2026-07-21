@@ -39,6 +39,9 @@ export default function LibraryPage() {
   const [toDelete, setToDelete] = useState<string | null>(null);
 
   const editable = can(role, 'edit');
+  // Suppression réservée à l'administrateur (un rédacteur pouvait vider la
+  // bibliothèque partagée — incohérent avec la description de son rôle).
+  const canDelete = can(role, 'delete');
 
   const filtered = useMemo(() => {
     let list = [...library];
@@ -165,24 +168,24 @@ export default function LibraryPage() {
                     <Copy className="h-3.5 w-3.5" />
                   </button>
                   {editable && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setEditing({ ...item })}
-                        className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        title="Modifier"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setToDelete(item.id)}
-                        className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ ...item })}
+                      className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      title="Modifier"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setToDelete(item.id)}
+                      className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </div>

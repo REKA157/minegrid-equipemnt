@@ -21,13 +21,15 @@ import {
 } from '../components/ui';
 import { DEFAULT_GONOGO_CRITERIA } from '../lib/scoring';
 import type { AwardCriterion, RequiredDocument, Sector, MarketType, Tender } from '../types';
-import { MARKET_TYPE_LABELS, SECTOR_LABELS, nowIso, uid } from '../types';
+import { MARKET_TYPE_LABELS, SECTOR_LABELS, can, nowIso, uid } from '../types';
 import { toast } from '../../utils/toast';
+import { EmptyState } from '../components/ui';
 
 export default function TenderNew() {
   const navigate = useNavigate();
   const addTender = useTendersStore((s) => s.addTender);
   const userName = useTendersStore((s) => s.settings.currentUserName);
+  const role = useTendersStore((s) => s.settings.currentUserRole);
 
   const [title, setTitle] = useState('');
   const [reference, setReference] = useState('');
@@ -60,8 +62,15 @@ export default function TenderNew() {
       sector,
       marketType,
       status: 'en_analyse',
-      deadline: new Date(deadline).toISOString(),
-      estimatedAmount: amount ? Number(amount.replace(/[^\d.]/g, '')) : undefined,
+      // Défensif : le Wizard revalide toutes les étapes, mais on ne laisse
+      // jamais new Date('') jeter une exception silencieuse.
+      deadline: deadline ? new Date(deadline).toISOString() : nowIso(),
+      // Chiffres uniquement : points/espaces/virgules = séparateurs de milliers
+      // (l'ancien parsing donnait NaN pour « 24.500.000 » → « NaN MAD » affiché).
+      estimatedAmount: (() => {
+        const digits = amount.replace(/[^\d]/g, '');
+        return digits ? Number(digits) : undefined;
+      })(),
       currency,
       description: description.trim(),
       awardCriteria: criteria.filter((c) => c.label.trim()),
@@ -80,6 +89,24 @@ export default function TenderNew() {
     toast.success('Dossier créé. Prochaine étape : analyser le DCE.');
     navigate(`appels-offres/ao/${tender.id}/dce`);
   };
+
+  // Un rôle « lecteur » ne crée pas de dossier dans l'espace partagé de la
+  // société (la route reste accessible par URL directe — défense en profondeur).
+  if (!can(role, 'edit')) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <PageHeader
+          overline="Appels d'offres › Nouveau dossier"
+          title="Créer un dossier de réponse"
+          description="Création réservée aux rédacteurs et administrateurs."
+        />
+        <EmptyState
+          title="Votre rôle ne permet pas de créer un dossier"
+          message="Votre rôle actuel est en consultation seule. Demandez à votre administrateur (Équipe & rôles) un rôle rédacteur ou administrateur."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl">

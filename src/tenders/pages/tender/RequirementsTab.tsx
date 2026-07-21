@@ -192,11 +192,21 @@ export default function RequirementsTab({ tender }: { tender: Tender }) {
       return;
     }
     const doc = buildGrilleConformite(tender, company, settings.currentUserName);
-    await exportExcel(doc);
-    toast.success('Matrice de conformité exportée en Excel.');
+    try {
+      await exportExcel(doc);
+      toast.success('Matrice de conformité exportée en Excel.');
+    } catch {
+      toast.error("Échec de l'export Excel — réessayez.");
+    }
   };
 
   const generateResponseDoc = () => {
+    // Défense en profondeur : ce bouton était accessible au rôle « lecteur »
+    // (hors de la garde editable) et créait un document dans l'espace partagé.
+    if (!editable) {
+      toast.error('Votre rôle est en lecture seule.');
+      return;
+    }
     if (requirements.length === 0) {
       toast.error('Le référentiel est vide — ajoutez des exigences d\'abord.');
       return;
@@ -307,7 +317,11 @@ export default function RequirementsTab({ tender }: { tender: Tender }) {
           <SecondaryButton onClick={exportMatrix} disabled={requirements.length === 0}>
             <Download className="h-4 w-4" /> Matrice (Excel)
           </SecondaryButton>
-          <PrimaryButton onClick={generateResponseDoc} disabled={requirements.length === 0}>
+          <PrimaryButton
+            onClick={generateResponseDoc}
+            disabled={requirements.length === 0 || !editable}
+            title={!editable ? 'Votre rôle est en lecture seule — un rédacteur ou administrateur génère ce document.' : undefined}
+          >
             <FileText className="h-4 w-4" /> Générer la réponse point par point
           </PrimaryButton>
         </div>

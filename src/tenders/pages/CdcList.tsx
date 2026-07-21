@@ -14,7 +14,7 @@ import {
   PageHeader,
   PrimaryButton,
 } from '../components/ui';
-import { DOCUMENT_TYPE_LABELS, formatDate } from '../types';
+import { DOCUMENT_TYPE_LABELS, can, formatDate } from '../types';
 
 const CONSULTATION_TYPES = new Set([
   'cahier_des_charges',
@@ -26,6 +26,9 @@ const CONSULTATION_TYPES = new Set([
 export default function CdcList() {
   const navigate = useNavigate();
   const documents = useTendersStore((s) => s.documents);
+  // Création réservée aux rédacteurs/administrateurs (le rôle « lecteur »
+  // pouvait générer des documents dans l'espace partagé de la société).
+  const canCreate = can(useTendersStore((s) => s.settings.currentUserRole), 'edit');
   const cahiers = documents.filter((d) => CONSULTATION_TYPES.has(d.type));
 
   return (
@@ -35,9 +38,11 @@ export default function CdcList() {
         title="Cahiers des charges"
         description="Rédigez vos consultations : l'assistant vous pose les bonnes questions, l'application génère un document structuré et modifiable."
         action={
-          <PrimaryButton onClick={() => navigate('appels-offres/cahiers/nouveau')}>
-            <Plus className="h-4 w-4" /> Nouveau cahier des charges
-          </PrimaryButton>
+          canCreate ? (
+            <PrimaryButton onClick={() => navigate('appels-offres/cahiers/nouveau')}>
+              <Plus className="h-4 w-4" /> Nouveau cahier des charges
+            </PrimaryButton>
+          ) : undefined
         }
       />
 
@@ -47,9 +52,11 @@ export default function CdcList() {
           title="Aucun cahier des charges"
           message="Lancez l'assistant : type de projet, contexte, objectifs, périmètre, contraintes, livrables, planning, pénalités… À la fin, vous obtenez un document complet prêt à exporter."
           action={
-            <PrimaryButton onClick={() => navigate('appels-offres/cahiers/nouveau')}>
-              <Plus className="h-4 w-4" /> Lancer l'assistant
-            </PrimaryButton>
+            canCreate ? (
+              <PrimaryButton onClick={() => navigate('appels-offres/cahiers/nouveau')}>
+                <Plus className="h-4 w-4" /> Lancer l'assistant
+              </PrimaryButton>
+            ) : undefined
           }
         />
       ) : (

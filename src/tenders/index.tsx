@@ -43,7 +43,9 @@ export default function TendersApp() {
   const seedIfNeeded = useTendersStore((s) => s.seedIfNeeded);
 
   // Synchronise l'espace de travail avec la société (opt-in ; no-op en local).
-  useTendersSync();
+  // Le statut est AFFICHÉ (badge sidebar + bandeau d'échec) : une synchro en
+  // erreur silencieuse faisait perdre du travail sans prévenir.
+  const syncStatus = useTendersSync();
 
   // Injecte les données de démonstration au premier lancement — SAUF en mode
   // partagé (la synchro charge les vraies données de la société).
@@ -83,5 +85,5 @@ export default function TendersApp() {
     }
   };
 
-  return <TendersShell>{renderPage()}</TendersShell>;
+  return <TendersShell syncStatus={syncStatus}>{renderPage()}</TendersShell>;
 }

@@ -8,20 +8,24 @@
 
 import React, { useState } from 'react';
 import {
+  AlertTriangle,
   Building2,
   FileText,
   FolderOpen,
   Info,
   LayoutDashboard,
   Library,
+  Loader2,
   ScrollText,
   Settings,
   UserCog,
+  Users,
 } from 'lucide-react';
 import { useRouteParams } from '../../router';
 import { useTendersStore } from '../store/tendersStore';
 import { ROLE_LABELS } from '../types';
 import { isTendersSharedConfigured } from '../../utils/api/tendersWorkspace';
+import type { SyncStatus } from '../store/tendersSync';
 
 interface NavItem {
   /** Segment après appels-offres ('' = dashboard). */
@@ -44,7 +48,14 @@ const NAV: NavItem[] = [
   { segment: 'parametres', label: 'Paramètres', sub: 'IA, partage, données', icon: Settings },
 ];
 
-export function TendersShell({ children }: { children: React.ReactNode }) {
+export function TendersShell({
+  children,
+  syncStatus = 'local',
+}: {
+  children: React.ReactNode;
+  /** Statut de la synchro société (useTendersSync) — affiché à l'écran. */
+  syncStatus?: SyncStatus;
+}) {
   const { segments } = useRouteParams();
   const settings = useTendersStore((s) => s.settings);
   const tenders = useTendersStore((s) => s.tenders);
@@ -98,6 +109,32 @@ export function TendersShell({ children }: { children: React.ReactNode }) {
         <div className="border-t border-gray-100 px-5 py-4">
           <div className="text-sm font-medium text-gray-900">{settings.currentUserName}</div>
           <div className="text-xs text-gray-500">{ROLE_LABELS[settings.currentUserRole]}</div>
+          {/* Badge d'état de la synchro société (le statut n'était affiché nulle part). */}
+          {isTendersSharedConfigured() && (
+            <div
+              className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                syncStatus === 'partage'
+                  ? 'bg-green-50 text-green-700'
+                  : syncStatus === 'chargement'
+                    ? 'bg-gray-100 text-gray-500'
+                    : 'bg-amber-50 text-amber-700'
+              }`}
+            >
+              {syncStatus === 'partage' ? (
+                <>
+                  <Users className="h-3 w-3" /> Partagé avec la société
+                </>
+              ) : syncStatus === 'chargement' ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" /> Chargement…
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-3 w-3" /> Non partagé
+                </>
+              )}
+            </div>
+          )}
         </div>
       </aside>
 
@@ -123,6 +160,21 @@ export function TendersShell({ children }: { children: React.ReactNode }) {
 
       {/* Contenu */}
       <main className="min-w-0 flex-1 bg-gray-50 px-4 py-6 sm:px-6 lg:px-8">
+        {/* PERTE DE TRAVAIL ÉVITÉE : si la sauvegarde société échoue (réseau,
+            rôle société lecture seule…), on le DIT — avant, l'utilisateur
+            continuait d'éditer en croyant partager, et ses modifications
+            étaient écrasées au rechargement suivant. */}
+        {syncStatus === 'erreur' && (
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <span className="font-semibold">Vos modifications ne sont PAS partagées avec la société.</span>{' '}
+              La synchronisation a échoué (connexion ou droits insuffisants) : ce que vous éditez
+              maintenant restera sur ce poste et pourra être écrasé au prochain chargement.
+              Rechargez la page pour retenter, ou contactez votre administrateur.
+            </div>
+          </div>
+        )}
         {showDemoBanner && (
           <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />

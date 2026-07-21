@@ -94,6 +94,8 @@ export default function DocsTab({ tender }: { tender: Tender }) {
     try {
       await exportTenderZip(tender, docs, company);
       toast.success('Dossier final ZIP téléchargé (admin / technique / financier).');
+    } catch {
+      toast.error('Échec de la préparation du ZIP — réessayez.');
     } finally {
       setZipping(false);
     }

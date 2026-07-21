@@ -34,7 +34,7 @@ import type {
   Tender,
   TenderRequirement,
 } from '../types';
-import { SECTOR_LABELS, uid, nowIso } from '../types';
+import { SECTOR_LABELS, uid, nowIso, daysUntil } from '../types';
 import { computeGoNoGo } from '../lib/scoring';
 import { computeCoverageStats } from '../lib/requirements';
 
@@ -46,11 +46,12 @@ const RAW_AI_URL: string | undefined = import.meta.env.VITE_TENDERS_AI_URL;
 const RAW_AI_KEY: string | undefined = import.meta.env.VITE_TENDERS_AI_KEY;
 
 /**
- * Nom (slug) de l'Edge Function déployée sur Supabase. Déployée à la main
- * via le dashboard sous « renders-ai » — si vous la redéployez un jour sous
- * « tenders-ai », changez juste cette constante.
+ * Nom (slug) de l'Edge Function : ALIGNÉ sur le dossier du dépôt
+ * (supabase/functions/tenders-ai) et sur docs/TENDERS_OPERATIONS.md.
+ * L'ancien slug « renders-ai » (déploiement manuel historique) faisait
+ * échouer TOUS les appels IA en 404 silencieux après un déploiement standard.
  */
-const FUNCTION_SLUG = 'renders-ai';
+const FUNCTION_SLUG = 'tenders-ai';
 
 /** Résout le sentinel « supabase » vers l'Edge Function du projet. */
 function resolveEndpoint(): { url: string; key?: string } | null {
@@ -332,9 +333,12 @@ export interface GenerateDocumentInput {
  * Le mock assemble un document professionnel structuré à partir des
  * réponses de l'utilisateur (aucun contenu inventé sur les points clés).
  */
-export async function generateDocument(input: GenerateDocumentInput): Promise<DocSection[]> {
+// Renvoie aussi la PROVENANCE (vraie IA vs simulation) — cf. generateTechnicalMemo.
+export async function generateDocument(
+  input: GenerateDocumentInput,
+): Promise<{ sections: DocSection[]; simulated: boolean }> {
   const real = await callRealApi<{ sections: DocSection[] }>('generateDocument', input);
-  if (real) return real.sections;
+  if (real) return { sections: real.sections, simulated: false };
 
   await simulateLatency(1200);
   const { cdc } = input;
@@ -390,7 +394,7 @@ export async function generateDocument(input: GenerateDocumentInput): Promise<Do
       cdc.annexes || 'Liste des annexes à compléter (plans, inventaires, schémas, données existantes…).',
     ),
   );
-  return sections;
+  return { sections, simulated: true };
 }
 
 /**
@@ -398,15 +402,19 @@ export async function generateDocument(input: GenerateDocumentInput): Promise<Do
  * entreprise (références, équipe, matériel, certifications réelles de
  * l'utilisateur) et de l'analyse du DCE si disponible.
  */
+// La PROVENANCE (vraie IA vs simulation) est renvoyée par le service : le
+// composant ne doit plus la deviner via isAiConnected(), qui ne reflète que la
+// CONFIG — pas le succès réel de l'appel (404/quota → fallback mock silencieux
+// qui était alors étiqueté à tort comme production IA).
 export async function generateTechnicalMemo(
   tender: Tender,
   company: CompanyProfile,
-): Promise<DocSection[]> {
+): Promise<{ sections: DocSection[]; simulated: boolean }> {
   const real = await callRealApi<{ sections: DocSection[] }>('generateTechnicalMemo', {
     tender,
     company,
   });
-  if (real) return real.sections;
+  if (real) return { sections: real.sections, simulated: false };
 
   await simulateLatency(1600);
   const s = (title: string, content: string): DocSection => ({ id: uid('s'), title, content });
@@ -432,7 +440,7 @@ export async function generateTechnicalMemo(
   const reqStats = computeCoverageStats(tender.requirements);
   const imperatives = tender.requirements.filter((r) => r.level === 'imperatif');
 
-  return [
+  const sections: DocSection[] = [
     s(
       '1. Présentation de l\'entreprise',
       `${company.presentation}\n\nCertifications et qualifications : ${certifications || 'à renseigner dans la Base entreprise'}.` +
@@ -514,6 +522,7 @@ export async function generateTechnicalMemo(
       `${company.name} s'engage à mettre en œuvre l'ensemble des moyens décrits dans le présent mémoire pour la parfaite exécution du marché « ${tender.title} », dans le respect des délais, de la qualité et de la sécurité attendus par ${tender.buyer}.`,
     ),
   ];
+  return { sections, simulated: true };
 }
 
 /** Améliore/reformule une section de document. */
@@ -713,9 +722,9 @@ export async function scoreOpportunity(
 
   await simulateLatency(900);
 
-  const daysLeft = Math.round(
-    (new Date(tender.deadline).getTime() - Date.now()) / 86_400_000,
-  );
+  // Même calcul (normalisé à minuit) que le badge J-x et GoNoGoTab : sinon la
+  // pré-notation « délai » divergeait d'un jour selon l'heure de la journée.
+  const daysLeft = daysUntil(tender.deadline);
   const nonCompliant = tender.requirements.filter((r) => r.coverage === 'non_conforme').length;
   // Même convention que buildPiecesManquantes : une pièce générée dans
   // l'application (generatedDocId) est couverte même si non « disponible ».

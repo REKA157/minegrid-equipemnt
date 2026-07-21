@@ -128,7 +128,13 @@ export function DocumentEditorView({ doc }: { doc: GeneratedDocument }) {
               <Printer className="h-4 w-4" /> PDF
             </SecondaryButton>
             {hasTables && (
-              <SecondaryButton onClick={() => exportExcel(doc).then(() => toast.success('Export Excel téléchargé.'))}>
+              <SecondaryButton
+                onClick={() =>
+                  exportExcel(doc)
+                    .then(() => toast.success('Export Excel téléchargé.'))
+                    .catch(() => toast.error("Échec de l'export Excel — réessayez."))
+                }
+              >
                 <FileSpreadsheet className="h-4 w-4" /> Excel
               </SecondaryButton>
             )}

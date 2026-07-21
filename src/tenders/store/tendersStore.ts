@@ -59,7 +59,12 @@ interface TendersState {
 
   // --- Documents générés ---
   addDocument: (doc: GeneratedDocument) => void;
-  updateDocumentSections: (docId: string, sections: DocSection[]) => void;
+  /** meta optionnel : trace une entrée d'historique (ex. régénération) et met à jour le flag simulated. */
+  updateDocumentSections: (
+    docId: string,
+    sections: DocSection[],
+    meta?: { historyAction: string; author: string; simulated?: boolean },
+  ) => void;
   updateDocumentTitle: (docId: string, title: string) => void;
   setDocumentStatus: (docId: string, status: DocumentStatus, author: string) => void;
   deleteDocument: (docId: string) => void;
@@ -183,10 +188,21 @@ export const useTendersStore = create<TendersState>()(
       addDocument: (doc) =>
         set((s) => ({ documents: [doc, ...s.documents] })),
 
-      updateDocumentSections: (docId, sections) =>
+      updateDocumentSections: (docId, sections, meta) =>
         set((s) => ({
           documents: s.documents.map((d) =>
-            d.id === docId ? { ...d, sections, updatedAt: nowIso() } : d,
+            d.id === docId
+              ? {
+                  ...d,
+                  sections,
+                  updatedAt: nowIso(),
+                  // Sans meta (édition au fil de l'eau) : flag et historique inchangés.
+                  simulated: meta?.simulated ?? d.simulated,
+                  history: meta
+                    ? [...d.history, entry(meta.author, meta.historyAction)]
+                    : d.history,
+                }
+              : d,
           ),
         })),
 

@@ -11,9 +11,9 @@ import { useNavigate } from '../../router';
 import { useTendersStore } from '../store/tendersStore';
 import { generateDocument, isAiConnected } from '../ai/aiService';
 import { Wizard } from '../components/Wizard';
-import { Field, GuideBanner, PageHeader, Select, TextArea, TextInput } from '../components/ui';
+import { EmptyState, Field, GuideBanner, PageHeader, Select, TextArea, TextInput } from '../components/ui';
 import type { CahierDesChargesInput, GeneratedDocument, Sector } from '../types';
-import { EMPTY_CDC_INPUT, SECTOR_LABELS, nowIso, uid } from '../types';
+import { EMPTY_CDC_INPUT, SECTOR_LABELS, can, nowIso, uid } from '../types';
 import { toast } from '../../utils/toast';
 
 export default function CdcWizard() {
@@ -26,10 +26,29 @@ export default function CdcWizard() {
 
   const patch = (p: Partial<CahierDesChargesInput>) => setCdc((c) => ({ ...c, ...p }));
 
+  // Défense en profondeur (la route reste accessible par URL directe) : un rôle
+  // « lecteur » ne crée pas de document dans l'espace partagé de la société.
+  if (!can(settings.currentUserRole, 'edit')) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <PageHeader
+          overline="Appels d'offres › Cahiers des charges"
+          title="Assistant cahier des charges"
+          description="Création réservée aux rédacteurs et administrateurs."
+        />
+        <EmptyState
+          title="Votre rôle ne permet pas de créer un cahier des charges"
+          message="Votre rôle actuel est en consultation seule. Demandez à votre administrateur (Équipe & rôles) un rôle rédacteur ou administrateur."
+        />
+      </div>
+    );
+  }
+
   const finish = async () => {
     setGenerating(true);
     try {
-      const sections = await generateDocument({ kind: 'cahier_des_charges', cdc, company });
+      // `simulated` vient du service (succès réel de l'appel IA, pas la config).
+      const { sections, simulated } = await generateDocument({ kind: 'cahier_des_charges', cdc, company });
       const doc: GeneratedDocument = {
         id: uid('doc'),
         type: 'cahier_des_charges',
@@ -38,13 +57,13 @@ export default function CdcWizard() {
         status: 'brouillon',
         createdAt: nowIso(),
         updatedAt: nowIso(),
-        simulated: !isAiConnected(),
+        simulated,
         history: [
           {
             id: uid('h'),
             date: nowIso(),
             author: settings.currentUserName,
-            action: `Génération par l'assistant${isAiConnected() ? '' : ' (mode simulation)'}`,
+            action: `Génération par l'assistant${simulated ? ' (mode simulation)' : ''}`,
           },
         ],
       };

@@ -27,12 +27,14 @@ import {
   SecondaryButton,
   TenderStatusBadge,
 } from '../components/ui';
-import { daysUntil, formatDate } from '../types';
+import { can, daysUntil, formatDate } from '../types';
 
 export default function TendersDashboard() {
   const navigate = useNavigate();
   const tenders = useTendersStore((s) => s.tenders);
   const documents = useTendersStore((s) => s.documents);
+  // Création masquée pour le rôle « lecteur » (consultation seule).
+  const canCreate = can(useTendersStore((s) => s.settings.currentUserRole), 'edit');
 
   const active = tenders.filter(
     (t) => !['gagne', 'perdu', 'abandonne', 'depose'].includes(t.status),
@@ -90,14 +92,18 @@ export default function TendersDashboard() {
         title="Tableau de bord"
         description="Vue d'ensemble de vos dossiers. Commencez par les urgences ci-dessous, ou créez un nouveau dossier."
         action={
-          <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
-            <Plus className="h-4 w-4" /> Nouvel appel d'offres
-          </PrimaryButton>
+          canCreate ? (
+            <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
+              <Plus className="h-4 w-4" /> Nouvel appel d'offres
+            </PrimaryButton>
+          ) : undefined
         }
         secondaryAction={
-          <SecondaryButton onClick={() => navigate('appels-offres/cahiers/nouveau')}>
-            <ScrollText className="h-4 w-4" /> Créer un cahier des charges
-          </SecondaryButton>
+          canCreate ? (
+            <SecondaryButton onClick={() => navigate('appels-offres/cahiers/nouveau')}>
+              <ScrollText className="h-4 w-4" /> Créer un cahier des charges
+            </SecondaryButton>
+          ) : undefined
         }
       />
 
@@ -107,9 +113,11 @@ export default function TendersDashboard() {
           title="Aucun dossier pour l'instant"
           message="Créez votre premier appel d'offres pour dérouler le parcours complet : analyse du DCE, conformité, décision go/no-go, production des pièces et export du dossier."
           action={
-            <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
-              <Plus className="h-4 w-4" /> Créer mon premier dossier
-            </PrimaryButton>
+            canCreate ? (
+              <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
+                <Plus className="h-4 w-4" /> Créer mon premier dossier
+              </PrimaryButton>
+            ) : undefined
           }
         />
       ) : (

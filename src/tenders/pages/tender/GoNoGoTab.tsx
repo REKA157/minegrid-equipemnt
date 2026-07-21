@@ -99,7 +99,9 @@ export default function GoNoGoTab({ tender }: { tender: Tender }) {
           <SectionCard
             title="Notation des critères"
             action={
-              editable ? (
+              // Le VALIDATEUR aussi : sinon, sur un dossier jamais scoré, il ne
+              // pouvait ni calculer un score ni donc acter GO/NO-GO (impasse).
+              editable || canDecide ? (
                 <SecondaryButton onClick={autoScore} disabled={busy}>
                   <Sparkles className="h-4 w-4" />
                   {busy ? 'Calcul…' : 'Pré-noter automatiquement'}
@@ -136,7 +138,7 @@ export default function GoNoGoTab({ tender }: { tender: Tender }) {
                     max={5}
                     step={1}
                     value={c.score}
-                    disabled={!editable}
+                    disabled={!editable && !canDecide}
                     onChange={(e) => updateCriterion(c.id, Number(e.target.value))}
                     className="w-full accent-primary-600"
                   />
@@ -161,9 +163,13 @@ export default function GoNoGoTab({ tender }: { tender: Tender }) {
                 <ProgressBar
                   value={result.globalScore}
                   colorClass={
-                    result.globalScore >= 65
+                    // Couleur alignée sur la RECOMMANDATION (pas le score brut) :
+                    // 3 critères déterminants très faibles peuvent forcer « Ne pas
+                    // répondre » malgré un score ≥ 65 — barre verte + encadré rouge
+                    // se contredisaient à l'écran.
+                    result.recommendation === 'repondre'
                       ? 'bg-green-500'
-                      : result.globalScore >= 45
+                      : result.recommendation === 'prudence'
                         ? 'bg-amber-500'
                         : 'bg-red-500'
                   }

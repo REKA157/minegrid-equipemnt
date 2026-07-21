@@ -628,13 +628,18 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Jours restants avant une date (négatif si dépassée). */
+/**
+ * Jours restants avant une date (négatif si dépassée). La cible est lue en
+ * UTC (les échéances sont stockées à minuit UTC) et « aujourd'hui » en heure
+ * locale : comparaison jour-calendaire pur, sans dérive d'un jour pour les
+ * fuseaux à l'ouest de Greenwich.
+ */
 export function daysUntil(dateIso: string): number {
   const target = new Date(dateIso);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  const now = new Date();
+  const targetDay = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  const todayDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((targetDay - todayDay) / 86_400_000);
 }
 
 export function formatDate(dateIso?: string): string {
@@ -645,6 +650,7 @@ export function formatDate(dateIso?: string): string {
 }
 
 export function formatAmount(amount?: number, currency = 'MAD'): string {
-  if (amount === undefined || amount === null) return '—';
+  // NaN/Infinity inclus : plus jamais de « NaN MAD » à l'écran.
+  if (amount === undefined || amount === null || !Number.isFinite(amount)) return '—';
   return `${amount.toLocaleString('fr-FR')} ${currency}`;
 }

@@ -143,8 +143,20 @@ export async function exportExcel(doc: GeneratedDocument): Promise<void> {
   const tables = doc.sections.filter((sct) => sct.table);
   const sheetSections = tables.length > 0 ? tables : doc.sections;
 
+  // Dédoublonne les noms de feuilles : deux titres identiques (ou tronqués à
+  // l'identique) faisaient jeter « Worksheet name already exists » par ExcelJS.
+  const usedSheetNames = new Set<string>();
   sheetSections.forEach((section, i) => {
-    const rawName = section.title.replace(/[\\/*?:[\]]/g, ' ').slice(0, 28) || `Feuille ${i + 1}`;
+    const base =
+      section.title.replace(/[\\/*?:[\]]/g, ' ').replace(/^'+|'+$/g, '').trim().slice(0, 25) ||
+      `Feuille ${i + 1}`;
+    let rawName = base;
+    let n = 2;
+    while (usedSheetNames.has(rawName.toLowerCase())) {
+      rawName = `${base} (${n})`;
+      n += 1;
+    }
+    usedSheetNames.add(rawName.toLowerCase());
     const sheet = workbook.addWorksheet(rawName);
 
     if (section.table) {
@@ -227,10 +239,23 @@ export async function exportTenderZip(
     }
   };
 
+  // NOMS UNIQUES par dossier cible : deux documents au même titre (cas courant :
+  // régénération d'une même pièce) écrasaient silencieusement l'entrée dans le
+  // ZIP — et comme la boucle va du plus récent au plus ancien, c'était la
+  // version PÉRIMÉE qui restait dans le dossier final remis à l'acheteur.
+  const usedNames = new Map<object, Map<string, number>>();
   for (const doc of documents) {
     const html = documentToHtml(doc, company);
     const target = folderFor(doc) ?? root;
-    target.file(`${sanitizeFileName(doc.title)}.doc`, '﻿' + html);
+
+    const base = sanitizeFileName(doc.title);
+    const names = usedNames.get(target) ?? new Map<string, number>();
+    usedNames.set(target, names);
+    const count = (names.get(base) ?? 0) + 1;
+    names.set(base, count);
+    const name = count === 1 ? base : `${base}_${count}`;
+
+    target.file(`${name}.doc`, '﻿' + html);
 
     // Les documents à tableaux partent aussi en .xlsx dans le ZIP.
     if (doc.sections.some((sct) => sct.table)) {
@@ -247,7 +272,7 @@ export async function exportTenderZip(
         });
       sheet.getColumn(1).width = 40;
       const buffer = await workbook.xlsx.writeBuffer();
-      target.file(`${sanitizeFileName(doc.title)}.xlsx`, buffer);
+      target.file(`${name}.xlsx`, buffer);
     }
   }
 

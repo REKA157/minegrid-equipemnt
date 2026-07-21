@@ -55,6 +55,10 @@ export function useTendersSync(): SyncStatus {
   useEffect(() => {
     if (!isTendersSharedConfigured()) return;
     let cancelled = false;
+    // Photographie des dossiers présents AU MONTAGE : tout dossier apparu
+    // pendant le chargement (création terminée avant la fin de la RPC) sera
+    // GREFFÉ à l'hydratation au lieu d'être écrasé.
+    const idsAtMount = new Set(useTendersStore.getState().tenders.map((t) => t.id));
     (async () => {
       const res = await loadWorkspace();
       if (cancelled) return;
@@ -65,7 +69,8 @@ export function useTendersSync(): SyncStatus {
         const userId = await getCurrentUserId();
         // Rôle SOCIÉTÉ réel (owner/admin/manager/viewer) pour dériver le rôle AO
         // par défaut — jamais « admin » auto-déclaré.
-        const societeRole = (await getMyMemberScope()).role ?? null;
+        const scope = await getMyMemberScope();
+        const societeRole = scope.role ?? null;
         const roleAssignments = (ws.roleAssignments as RoleAssignment[] | undefined) ?? [];
         // HÉRITAGE DU RÔLE : si l'admin a attribué un rôle à mon compte, je
         // l'applique ; SINON je dérive du rôle société (moindre privilège :
@@ -74,22 +79,54 @@ export function useTendersSync(): SyncStatus {
         const mine = userId
           ? roleAssignments.find((a) => a.memberId === userId)
           : undefined;
+        const server = (ws.tenders as Tender[] | undefined) ?? [];
+        const serverIds = new Set(server.map((t) => t.id));
+        let mergedDuringLoad = false;
         hydrating.current = true;
-        useTendersStore.setState((s) => ({
-          seeded: true, // pas de démo en mode partagé
-          tenders: (ws.tenders as Tender[] | undefined) ?? [],
-          documents: (ws.documents as GeneratedDocument[] | undefined) ?? [],
-          library: (ws.library as LibraryItem[] | undefined) ?? s.library,
-          company: (ws.company as CompanyProfile | undefined) ?? s.company,
-          roleAssignments,
-          settings: {
-            ...s.settings,
-            ...(userId ? { currentUserId: userId } : {}),
-            currentUserRole: mine?.role ?? defaultTenderRole(societeRole),
-          },
-        }));
+        useTendersStore.setState((s) => {
+          // Course rare : dossier créé pendant le vol de loadWorkspace. Le
+          // cache local PRÉ-existant reste exclu (anti-pollution société).
+          const createdDuringLoad = s.tenders.filter(
+            (t) => !idsAtMount.has(t.id) && !serverIds.has(t.id),
+          );
+          mergedDuringLoad = createdDuringLoad.length > 0;
+          return {
+            seeded: true, // pas de démo en mode partagé
+            tenders: [...createdDuringLoad, ...server],
+            documents: (ws.documents as GeneratedDocument[] | undefined) ?? [],
+            library: (ws.library as LibraryItem[] | undefined) ?? s.library,
+            company: (ws.company as CompanyProfile | undefined) ?? s.company,
+            roleAssignments,
+            settings: {
+              ...s.settings,
+              ...(userId ? { currentUserId: userId } : {}),
+              // Signe les actions/décisions du vrai nom (attribué par l'admin)
+              // au lieu du « Utilisateur » par défaut.
+              ...(mine?.name ? { currentUserName: mine.name } : {}),
+              // Échec TRANSITOIRE de la détection du rôle société (roleKnown
+              // false) : on garde le rôle courant plutôt que de rétrograder
+              // silencieusement un propriétaire en « lecteur ».
+              currentUserRole:
+                mine?.role ??
+                (scope.roleKnown !== false
+                  ? defaultTenderRole(societeRole)
+                  : s.settings.currentUserRole),
+            },
+          };
+        });
         hydrating.current = false;
         ready.current = true; // ARME la sauvegarde seulement maintenant
+        if (mergedDuringLoad) {
+          // Écrit immédiatement le dossier greffé côté société.
+          const s = useTendersStore.getState();
+          void saveWorkspace({
+            tenders: s.tenders,
+            documents: s.documents,
+            library: s.library,
+            company: s.company,
+            roleAssignments: s.roleAssignments,
+          });
+        }
         setStatus('partage');
       } else {
         // 'local' (pas de société / pas connecté) OU 'error' (transitoire) :
@@ -105,23 +142,46 @@ export function useTendersSync(): SyncStatus {
   // 2. Sauvegarde à chaque changement (débounce) — seulement si armée.
   useEffect(() => {
     if (!isTendersSharedConfigured()) return;
-    const unsub = useTendersStore.subscribe((state) => {
+
+    const buildPayload = () => {
+      const s = useTendersStore.getState();
+      return {
+        tenders: s.tenders,
+        documents: s.documents,
+        library: s.library,
+        company: s.company,
+        roleAssignments: s.roleAssignments,
+      };
+    };
+
+    // FLUSH : envoie immédiatement une sauvegarde EN ATTENTE (démontage du
+    // module ou fermeture d'onglet). Sans lui, l'édition des 1,5 dernières
+    // secondes n'était jamais écrite côté société et disparaissait à la
+    // prochaine hydratation.
+    const flushPending = () => {
+      if (!saveTimer.current || !ready.current) return;
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      void saveWorkspace(buildPayload());
+    };
+
+    const unsub = useTendersStore.subscribe(() => {
       if (hydrating.current || !ready.current) return;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(async () => {
-        const ok = await saveWorkspace({
-          tenders: state.tenders,
-          documents: state.documents,
-          library: state.library,
-          company: state.company,
-          roleAssignments: state.roleAssignments,
-        });
+        saveTimer.current = null; // plus rien en attente
+        const ok = await saveWorkspace(buildPayload());
         setStatus(ok ? 'partage' : 'erreur');
       }, 1500);
     });
+
+    // Meilleur effort à la fermeture d'onglet (non garanti par le navigateur,
+    // mais couvre la grande majorité des cas).
+    window.addEventListener('pagehide', flushPending);
     return () => {
       unsub();
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      window.removeEventListener('pagehide', flushPending);
+      flushPending();
     };
   }, []);
 

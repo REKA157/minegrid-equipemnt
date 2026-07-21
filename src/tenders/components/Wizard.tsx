@@ -55,6 +55,18 @@ export function Wizard({
     }
     setError(null);
     if (isLast) {
+      // Les pastilles permettent de revenir modifier une étape déjà validée :
+      // on REVALIDE donc TOUTES les étapes avant de terminer, sinon une donnée
+      // effacée après coup (ex. date vidée) faisait planter la création en
+      // silence. On renvoie l'utilisateur sur la première étape invalide.
+      for (let i = 0; i < steps.length; i++) {
+        const m = steps[i].validate?.() ?? null;
+        if (m) {
+          setCurrent(i);
+          setError(m);
+          return;
+        }
+      }
       onFinish();
       return;
     }

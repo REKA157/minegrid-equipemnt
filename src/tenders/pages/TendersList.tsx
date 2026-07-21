@@ -19,7 +19,7 @@ import {
   TextInput,
 } from '../components/ui';
 import type { Tender, TenderStatus } from '../types';
-import { SECTOR_LABELS, TENDER_STATUS_LABELS, daysUntil, formatAmount } from '../types';
+import { SECTOR_LABELS, TENDER_STATUS_LABELS, can, daysUntil, formatAmount } from '../types';
 
 /**
  * Prochaine action conseillée — suit la logique centrale du module :
@@ -60,6 +60,7 @@ export default function TendersList() {
   const tenders = useTendersStore((s) => s.tenders);
   const currentUserName = useTendersStore((s) => s.settings.currentUserName);
   const currentUserId = useTendersStore((s) => s.settings.currentUserId);
+  const canCreate = can(useTendersStore((s) => s.settings.currentUserRole), 'edit');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenderStatus | 'tous' | 'actifs'>('actifs');
   const [mineOnly, setMineOnly] = useState(false);
@@ -105,9 +106,12 @@ export default function TendersList() {
         title="Mes dossiers"
         description="Retrouvez tous vos dossiers de réponse. La colonne « Prochaine action » vous dit quoi faire sur chacun."
         action={
-          <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
-            <Plus className="h-4 w-4" /> Nouvel appel d'offres
-          </PrimaryButton>
+          // Création masquée pour le rôle « lecteur » (consultation seule).
+          canCreate ? (
+            <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
+              <Plus className="h-4 w-4" /> Nouvel appel d'offres
+            </PrimaryButton>
+          ) : undefined
         }
       />
 
@@ -159,7 +163,7 @@ export default function TendersList() {
               : 'Modifiez votre recherche ou le filtre de statut pour retrouver vos dossiers.'
           }
           action={
-            tenders.length === 0 ? (
+            tenders.length === 0 && canCreate ? (
               <PrimaryButton onClick={() => navigate('appels-offres/nouveau')}>
                 <Plus className="h-4 w-4" /> Créer un dossier
               </PrimaryButton>

@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { FileText, RefreshCw, Sparkles } from 'lucide-react';
 import { useTendersStore, useTenderDocuments } from '../../store/tendersStore';
-import { generateTechnicalMemo, isAiConnected } from '../../ai/aiService';
+import { generateTechnicalMemo } from '../../ai/aiService';
 import { attachDocToPieces } from '../../lib/pieces';
 import { DocumentEditorView } from '../../components/DocumentEditorView';
 import { EmptyState, GuideBanner, PrimaryButton, SecondaryButton } from '../../components/ui';
@@ -30,9 +30,16 @@ export default function MemoTab({ tender }: { tender: Tender }) {
   const generate = async () => {
     setGenerating(true);
     try {
-      const sections = await generateTechnicalMemo(tender, company);
+      // `simulated` vient du SERVICE (succès réel de l'appel IA), plus de
+      // isAiConnected() qui ne reflétait que la config — un fallback silencieux
+      // (404/quota) était alors étiqueté à tort comme production IA.
+      const { sections, simulated } = await generateTechnicalMemo(tender, company);
       if (memo) {
-        updateDocumentSections(memo.id, sections);
+        updateDocumentSections(memo.id, sections, {
+          historyAction: `Régénération depuis les données du dossier${simulated ? ' (mode simulation)' : ''}`,
+          author: settings.currentUserName,
+          simulated,
+        });
         toast.success('Mémoire regénéré — vos modifications précédentes ont été remplacées.');
       } else {
         const doc: GeneratedDocument = {
@@ -44,13 +51,13 @@ export default function MemoTab({ tender }: { tender: Tender }) {
           status: 'brouillon',
           createdAt: nowIso(),
           updatedAt: nowIso(),
-          simulated: !isAiConnected(),
+          simulated,
           history: [
             {
               id: uid('h'),
               date: nowIso(),
               author: settings.currentUserName,
-              action: `Génération initiale${isAiConnected() ? '' : ' (mode simulation)'}`,
+              action: `Génération initiale${simulated ? ' (mode simulation)' : ''}`,
             },
           ],
         };
