@@ -89,8 +89,11 @@ export default function TenderOverview({ tender }: { tender: Tender }) {
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
+                        // Une seule famille de teintes (marque) : étapes passées en
+                        // orange doux, étape courante pleine, à venir en gris —
+                        // le vert était une 3e couleur décorative de plus.
                         done
-                          ? 'bg-green-500 text-white'
+                          ? 'bg-primary-100 text-primary-700'
                           : current
                             ? 'bg-primary-600 text-white'
                             : 'bg-gray-100 text-gray-400'
@@ -107,7 +110,7 @@ export default function TenderOverview({ tender }: { tender: Tender }) {
                     </span>
                   </div>
                   {i < TENDER_WORKFLOW.length - 1 && (
-                    <span className={`mx-2 h-px w-5 ${done ? 'bg-green-300' : 'bg-gray-200'}`} />
+                    <span className={`mx-2 h-px w-5 ${done ? 'bg-primary-200' : 'bg-gray-200'}`} />
                   )}
                 </li>
               );

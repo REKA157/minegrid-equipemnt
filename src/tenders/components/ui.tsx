@@ -296,14 +296,22 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 // Badges de statut
 // ---------------------------------------------------------------------------
 
+/**
+ * PALETTE SOBRE (ton pro, pas d'arc-en-ciel) — la couleur encode un SENS,
+ * pas une identité d'étape :
+ *   gris   = neutre / clos sans enjeu (brouillon, abandonné)
+ *   orange = dossier EN COURS (teinte marque, renforcée à l'approche du dépôt)
+ *   ambre  = attention requise (à compléter)
+ *   vert   = succès (gagné) · rouge = échec (perdu) — uniquement les issues.
+ */
 const TENDER_STATUS_STYLES: Record<TenderStatus, string> = {
-  brouillon: 'bg-gray-100 text-gray-700',
-  en_analyse: 'bg-blue-100 text-blue-800',
-  a_completer: 'bg-amber-100 text-amber-800',
-  en_redaction: 'bg-indigo-100 text-indigo-800',
-  en_validation: 'bg-purple-100 text-purple-800',
-  pret_a_deposer: 'bg-emerald-100 text-emerald-800',
-  depose: 'bg-teal-100 text-teal-800',
+  brouillon: 'bg-gray-100 text-gray-600',
+  en_analyse: 'bg-primary-50 text-primary-800',
+  a_completer: 'bg-amber-50 text-amber-800',
+  en_redaction: 'bg-primary-50 text-primary-800',
+  en_validation: 'bg-primary-50 text-primary-800',
+  pret_a_deposer: 'bg-primary-100 text-primary-800',
+  depose: 'bg-primary-100 text-primary-800',
   gagne: 'bg-green-100 text-green-800',
   perdu: 'bg-red-100 text-red-700',
   abandonne: 'bg-gray-200 text-gray-500',
@@ -321,9 +329,11 @@ export function TenderStatusBadge({ status }: { status: TenderStatus }) {
 
 export function CoverageBadge({ status }: { status: RequirementCoverage }) {
   const map: Record<RequirementCoverage, string> = {
+    // Vert/ambre/rouge = état de conformité (sémantique) ; « à traiter » est
+    // neutre — le bleu ajoutait une teinte décorative de plus pour rien.
     conforme: 'bg-green-100 text-green-800',
     partiel: 'bg-amber-100 text-amber-800',
-    a_traiter: 'bg-blue-100 text-blue-800',
+    a_traiter: 'bg-gray-100 text-gray-600',
     non_conforme: 'bg-red-100 text-red-700',
   };
   return (
@@ -348,8 +358,8 @@ export function LevelBadge({ level }: { level: RequirementLevel }) {
 
 export function DocStatusBadge({ status }: { status: DocumentStatus }) {
   const map: Record<DocumentStatus, { label: string; cls: string }> = {
-    brouillon: { label: 'Brouillon', cls: 'bg-gray-100 text-gray-700' },
-    en_validation: { label: 'En validation', cls: 'bg-purple-100 text-purple-800' },
+    brouillon: { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600' },
+    en_validation: { label: 'En validation', cls: 'bg-primary-50 text-primary-800' },
     valide: { label: 'Validé', cls: 'bg-green-100 text-green-800' },
   };
   const { label, cls } = map[status];
@@ -360,7 +370,11 @@ export function DocStatusBadge({ status }: { status: DocumentStatus }) {
   );
 }
 
-/** Échéance colorée selon l'urgence (rouge ≤ 3 j, ambre ≤ 10 j). */
+/**
+ * Échéance colorée selon l'URGENCE uniquement (rouge ≤ 3 j, ambre ≤ 10 j).
+ * Une échéance lointaine est NEUTRE, pas « verte » : le vert est réservé aux
+ * succès — une date à J-40 n'en est pas un.
+ */
 export function DeadlineBadge({ date }: { date: string }) {
   const days = daysUntil(date);
   const cls =
@@ -370,7 +384,7 @@ export function DeadlineBadge({ date }: { date: string }) {
         ? 'bg-red-100 text-red-700'
         : days <= 10
           ? 'bg-amber-100 text-amber-800'
-          : 'bg-green-100 text-green-800';
+          : 'bg-gray-100 text-gray-600';
   const label =
     days < 0
       ? `Échue (${formatDate(date)})`

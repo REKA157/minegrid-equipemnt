@@ -53,11 +53,13 @@ function initials(name: string, email?: string): string {
   return raw.toUpperCase();
 }
 
+// Palette sobre : le libellé suffit à distinguer les rôles — seule l'autorité
+// (admin) porte la teinte marque, le reste est neutre (fini bleu/émeraude).
 const ROLE_BADGE: Record<UserRole, string> = {
   admin: 'bg-primary-100 text-primary-800',
-  redacteur: 'bg-blue-100 text-blue-800',
-  validateur: 'bg-emerald-100 text-emerald-800',
-  lecteur: 'bg-gray-100 text-gray-700',
+  redacteur: 'bg-gray-100 text-gray-700',
+  validateur: 'bg-gray-100 text-gray-700',
+  lecteur: 'bg-gray-100 text-gray-500',
 };
 
 export default function TeamRolesPage() {
@@ -214,7 +216,8 @@ export default function TeamRolesPage() {
                           )}
                           <span
                             className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                              row.fromOrg ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                              // Information (provenance du compte), pas un succès : teinte marque, pas vert.
+                              row.fromOrg ? 'bg-primary-50 text-primary-800' : 'bg-gray-100 text-gray-600'
                             }`}
                           >
                             {row.fromOrg ? 'Compte société' : 'Ajout manuel'}
