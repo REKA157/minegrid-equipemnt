@@ -26,20 +26,9 @@ import { useMemberScope } from '../../hooks/useMemberScope';
 import { isInvitedMember } from '../../utils/api/memberScope';
 import { toast } from '../../utils/toast';
 
-/**
- * Repli « configuration technique » : masque par défaut les commandes
- * d'installation (à faire une seule fois) pour ne pas noyer l'utilisateur.
- */
-function TechnicalDetails({ children }: { children: React.ReactNode }) {
-  return (
-    <details className="mt-3 rounded-lg border border-gray-200 bg-gray-50/60">
-      <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-gray-700">
-        Configuration technique (installation — une seule fois)
-      </summary>
-      <div className="border-t border-gray-200 px-4 py-3 text-sm text-gray-600">{children}</div>
-    </details>
-  );
-}
+// Les procédures d'installation (clé IA, migrations, variables d'env) sont de la
+// documentation EXPLOITANT, pas du produit : retirées de l'interface, elles
+// vivent désormais dans docs/TENDERS_OPERATIONS.md.
 
 export default function SettingsPage() {
   const settings = useTendersStore((s) => s.settings);
@@ -136,42 +125,6 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <TechnicalDetails>
-            <p className="mb-2 font-medium text-gray-800">
-              Activer l'IA réelle — 3 étapes :
-            </p>
-            <ol className="mb-3 list-inside list-decimal space-y-1.5 text-sm">
-              <li>
-                Créez une clé API sur{' '}
-                <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">console.anthropic.com</code>{' '}
-                et enregistrez-la comme <strong>secret Supabase</strong> (jamais dans le code) :
-                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
-{`supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`}
-                </pre>
-              </li>
-              <li>
-                Déployez la fonction serveur (incluse dans le projet) :
-                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
-{`supabase functions deploy tenders-ai`}
-                </pre>
-              </li>
-              <li>
-                Activez côté application, dans{' '}
-                <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.env.local</code>, puis
-                redémarrez :
-                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
-{`VITE_TENDERS_AI_URL=supabase`}
-                </pre>
-              </li>
-            </ol>
-            <p className="text-xs text-gray-400">
-              ⚠ La clé Anthropic reste sur le serveur Supabase : ne la collez jamais dans un
-              chat, un fichier du site ou un dépôt. En production, ajoutez le secret{' '}
-              <code>TENDERS_AI_REQUIRE_AUTH=true</code> pour réserver l'IA aux utilisateurs
-              connectés (protège votre crédit API). En cas de panne ou de quota, l'application
-              retombe automatiquement sur la simulation — personne n'est bloqué.
-            </p>
-          </TechnicalDetails>
         </SectionCard>
 
         <SectionCard
@@ -203,32 +156,6 @@ export default function SettingsPage() {
             <UserCog className="h-4 w-4" />
             Attribuer un rôle à chaque salarié (Équipe & rôles) →
           </a>
-          <TechnicalDetails>
-            <p className="mb-2 font-medium text-gray-800">Activer le partage d'équipe :</p>
-            <ol className="mb-3 list-inside list-decimal space-y-1.5">
-              <li>
-                Déployer la migration de base de données (crée l'espace de travail partagé) :
-                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
-{`supabase db push`}
-                </pre>
-                <span className="text-xs text-gray-400">
-                  (applique <code>supabase/migrations/20260708160000_teamE_tender_workspace.sql</code>)
-                </span>
-              </li>
-              <li>
-                Activer côté application dans <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.env.local</code>, puis redémarrer :
-                <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-900 px-4 py-2 text-xs text-gray-100">
-{`VITE_TENDERS_SHARED=true`}
-                </pre>
-              </li>
-            </ol>
-            <p className="text-xs text-gray-400">
-              Le partage réutilise votre système d'équipe existant (invitations, rôles, sécurité
-              RLS). Chaque salarié doit être membre de la société (via un lien d'invitation) et
-              connecté. Les affectations (rédacteur, responsable) deviennent visibles par toute
-              l'équipe. En l'absence de connexion, l'app retombe automatiquement en mode local.
-            </p>
-          </TechnicalDetails>
         </SectionCard>
 
         <SectionCard
@@ -238,7 +165,15 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-600">
             {tenders.length} appel(s) d'offres · {documents.length} document(s) généré(s).
           </p>
-          {canManage ? (
+          {/* En mode PARTAGÉ, restaurer la démo écraserait l'espace de toute la
+              société (la sauvegarde synchronise vers la base) : bouton réservé
+              au mode local. */}
+          {isTendersSharedConfigured() ? (
+            <p className="mt-3 text-xs italic text-gray-400">
+              Mode partagé : la restauration des données de démonstration est désactivée
+              (elle remplacerait les dossiers de toute votre société).
+            </p>
+          ) : canManage ? (
             <>
               <div className="mt-3">
                 <SecondaryButton onClick={() => setConfirmReset(true)}>
