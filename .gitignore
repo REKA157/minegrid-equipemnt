@@ -38,6 +38,10 @@ cache/
 .env.*.local
 .env.staging
 services/monitor-service/.env
+# Sauvegardes d'env (contiennent les mêmes secrets que l'original)
+.env.bak*
+services/monitor-service/.env.bak*
+services/monitor-service/.env.*
 
 # Node
 node_modules/
