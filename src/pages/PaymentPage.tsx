@@ -102,7 +102,9 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
           </button>
           <h1 className="text-3xl font-bold text-gray-900">Finaliser votre abonnement</h1>
           <p className="text-gray-600 mt-2">
-            {subscription.name} - {subscription.price}/mois
+            {/* `price` contient déjà « /mois » (cf. src/config/plans.ts) — le
+                suffixe en dur affichait « 200 USD/mois/mois ». */}
+            {subscription.name} - {subscription.price}
           </p>
         </div>
 
@@ -155,7 +157,7 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
                 <div className="bg-gray-50 rounded-lg p-4">
                   <div className="flex justify-between font-semibold">
                     <span>Abonnement {subscription.name}</span>
-                    <span>{subscription.price}/mois</span>
+                    <span>{subscription.price}</span>
                   </div>
                 </div>
                 <PaddleCheckoutButton
@@ -232,7 +234,7 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span>Abonnement {subscription.name}</span>
-                      <span className="font-medium">{subscription.price}/mois</span>
+                      <span className="font-medium">{subscription.price}</span>
                     </div>
                     {promoValid && (
                       <div className="flex justify-between text-green-600">
