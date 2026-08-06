@@ -85,14 +85,19 @@ interface ClaudeJsonCall {
 }
 
 async function claudeJson<T>({ system, content, schema, maxTokens = 16000 }: ClaudeJsonCall): Promise<T> {
-  const response = await anthropic.messages.create({
+  // STREAMING OBLIGATOIRE : avec un max_tokens élevé (16 000), le SDK refuse un
+  // appel non streamé (« Streaming is strongly recommended… ») et renvoie une
+  // erreur 500 — la génération du mémoire retombait alors silencieusement sur
+  // la simulation, en production comprise (constaté le 2026-08-03).
+  // `.stream()` + `finalMessage()` garde exactement le même résultat JSON.
+  const response = await anthropic.messages.stream({
     model: MODEL,
     max_tokens: maxTokens,
     thinking: { type: 'adaptive' },
     system,
     messages: [{ role: 'user', content }],
     output_config: { format: { type: 'json_schema', schema } },
-  });
+  }).finalMessage();
 
   if (response.stop_reason === 'refusal') {
     throw new Error('La requête a été refusée par les garde-fous du modèle.');

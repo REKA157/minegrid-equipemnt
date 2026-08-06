@@ -12,6 +12,25 @@ export default defineConfig({
   server: {
     // PORT env (utilisé par les outils de preview) prime, sinon 5173.
     port: Number(process.env.PORT) || 5173,
+    /**
+     * Relais IA — DÉVELOPPEMENT UNIQUEMENT (ignoré par `vite build`).
+     *
+     * L'Edge Function IA déployée n'autorise en CORS que le domaine de
+     * production : un appel direct depuis http://localhost:* est bloqué par le
+     * navigateur. Le serveur de dev relaie donc la requête (pas de CORS entre
+     * serveurs), ce qui permet de tester l'IA réelle en local SANS toucher à la
+     * configuration de production ni dupliquer la clé Anthropic.
+     *
+     * Activation : VITE_TENDERS_AI_URL=/ia-appels-offres (+ VITE_TENDERS_AI_KEY).
+     */
+    proxy: {
+      '/ia-appels-offres': {
+        target: 'https://tnfbggrftmtxpgbcwqzo.supabase.co',
+        changeOrigin: true,
+        secure: true,
+        rewrite: () => '/functions/v1/renders-ai',
+      },
+    },
   },
   optimizeDeps: {
     // lucide-react expose des centaines d'icones : l'exclure du pre-bundling
