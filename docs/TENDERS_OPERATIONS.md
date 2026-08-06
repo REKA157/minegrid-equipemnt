@@ -18,7 +18,17 @@ et ont donc été retirées du produit (2026-07-20) pour vivre ici.
 3. Côté application (`.env.local` / `.env.staging`), puis redémarrer :
    ```
    VITE_TENDERS_AI_URL=supabase
+   VITE_TENDERS_AI_FUNCTION=tenders-ai
    ```
+
+⚠️ **Nom de la fonction — état réel (vérifié 2026-08-03).** En PRODUCTION
+(`tnfbggrftmtxpgbcwqzo`) la fonction est publiée sous **`renders-ai`**
+(déploiement manuel via le dashboard), pas `tenders-ai`. Le front utilise donc
+`renders-ai` par défaut. Deux options :
+- garder l'existant → ne rien poser (`VITE_TENDERS_AI_FUNCTION` vide) ;
+- redéployer proprement sous `tenders-ai` → poser `VITE_TENDERS_AI_FUNCTION=tenders-ai`
+  puis supprimer l'ancienne `renders-ai` du dashboard.
+Vérifier après coup avec le bouton « Tester la connexion » (Paramètres du module).
 
 ⚠ En production, ajouter le secret `TENDERS_AI_REQUIRE_AUTH=true` pour réserver
 l'IA aux utilisateurs connectés (protège le crédit API). En cas de panne ou de

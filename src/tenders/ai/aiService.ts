@@ -46,12 +46,17 @@ const RAW_AI_URL: string | undefined = import.meta.env.VITE_TENDERS_AI_URL;
 const RAW_AI_KEY: string | undefined = import.meta.env.VITE_TENDERS_AI_KEY;
 
 /**
- * Nom (slug) de l'Edge Function : ALIGNÉ sur le dossier du dépôt
- * (supabase/functions/tenders-ai) et sur docs/TENDERS_OPERATIONS.md.
- * L'ancien slug « renders-ai » (déploiement manuel historique) faisait
- * échouer TOUS les appels IA en 404 silencieux après un déploiement standard.
+ * Nom (slug) de l'Edge Function IA.
+ *
+ * ⚠️ RÉALITÉ DU DÉPLOIEMENT (vérifié 2026-08-03) : en PRODUCTION la fonction est
+ * publiée sous « renders-ai » (déploiement manuel historique via le dashboard) —
+ * c'est donc la valeur par défaut, sinon les appels IA tombent en 404 et
+ * retombent en simulation. Le dossier du dépôt s'appelle `tenders-ai` : si tu
+ * redéploies un jour sous ce nom (cf. docs/TENDERS_OPERATIONS.md), il suffit de
+ * poser VITE_TENDERS_AI_FUNCTION=tenders-ai — aucun code à toucher.
  */
-const FUNCTION_SLUG = 'tenders-ai';
+const FUNCTION_SLUG =
+  String(import.meta.env.VITE_TENDERS_AI_FUNCTION ?? '').trim() || 'renders-ai';
 
 /** Résout le sentinel « supabase » vers l'Edge Function du projet. */
 function resolveEndpoint(): { url: string; key?: string } | null {
