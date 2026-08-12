@@ -61,3 +61,7 @@ MineGrid-*.zip
 
 # Etat, logs et preuves temporaires de la boucle de remediation
 .remediation/
+
+.env
+.env.*
+.env.production
