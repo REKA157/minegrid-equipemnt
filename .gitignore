@@ -53,6 +53,11 @@ dist/
 *.code-workspace
 # Artefact de build (site zippé pour Hostinger) — ne pas versionner
 minegrid-site.zip
+# Archives d'audit générées (volumineuses, reconstructibles)
+MineGrid-*.zip
 
 # Outillage local Claude Code (launch.json avec chemins machine)
 .claude/
+
+# Etat, logs et preuves temporaires de la boucle de remediation
+.remediation/

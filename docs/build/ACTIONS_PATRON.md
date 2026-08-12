@@ -6,6 +6,27 @@ Mis à jour : 2026-08-03.
 
 ---
 
+## 0. 🔒 AVANT TOUT : appliquer la migration `p25` (3 min)
+
+**Pourquoi** : trois défauts trouvés le 12 août, dont un **trou de sécurité** — n'importe quel compte
+connecté pouvait se déclarer propriétaire de n'importe quelle société (et lire ses devis, documents,
+appels d'offres… tout en héritant gratuitement de son abonnement). Les deux autres touchent l'argent :
+un client Enterprise ne pouvait inviter personne, et un abonné Premium à 20 $ pouvait offrir son
+abonnement à un nombre illimité de collègues.
+
+**À faire d'abord**, parce que téléverser le site publie la clé publique de la base : aujourd'hui le
+défaut n'est pas atteignable, après le téléversement il le serait.
+
+1. Ouvrir le fichier **`.audit/APPLY_P25_ORG_HARDENING.sql`** (dans le dossier de travail)
+2. Tout sélectionner, tout copier
+3. Supabase → projet **prod** (`tnfbggrftmtxpgbcwqzo`) → **SQL Editor** → coller → **Run**
+4. Refaire la même chose sur le projet **staging** (`vrouxqofmlbkxgznftja`)
+
+Attendu : « Success. No rows returned ». Le fichier est rejouable sans risque (on peut le relancer).
+Prouvé avant livraison sur une vraie base Postgres : 11 contre-cas, plus les 20 harnais du projet.
+
+---
+
 ## 1. 🚨 Remettre le site en ligne (5 min) — LE BLOQUANT N°1
 
 **Pourquoi** : le site déployé appelle une base de données supprimée → **personne ne peut se connecter**.
@@ -66,5 +87,5 @@ les classent en spam — or c'est par là que passent **les confirmations d'insc
 
 ## Ordre conseillé
 
-**1 → 2 → 4 → 3** : la remise en ligne débloque tout le reste ; Paddle live peut avancer en parallèle
-puisque le délai dépend de Paddle, pas de toi.
+**0 → 1 → 2 → 4 → 3** : le verrou de sécurité d'abord, puis la remise en ligne qui débloque tout le
+reste ; Paddle live peut avancer en parallèle puisque le délai dépend de Paddle, pas de toi.
