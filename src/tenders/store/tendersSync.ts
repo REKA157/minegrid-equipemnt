@@ -39,9 +39,14 @@ import {
 } from '../../utils/api/tendersWorkspace';
 import { getMyMemberScope } from '../../utils/api/memberScope';
 
-export type SyncStatus = 'local' | 'chargement' | 'partage' | 'erreur';
+// 'conflit' (MG-M07) : un autre membre a modifie l'espace entre notre lecture
+// et notre ecriture. L'interface doit proposer un rechargement plutot que
+// d'ecraser silencieusement.
+export type SyncStatus = 'local' | 'chargement' | 'partage' | 'erreur' | 'conflit';
 
 export function useTendersSync(): SyncStatus {
+  // Version de l'espace partage telle que ce client l'a lue (MG-M07).
+  const currentVersion = useRef<number | null>(null);
   const [status, setStatus] = useState<SyncStatus>(
     isTendersSharedConfigured() ? 'chargement' : 'local',
   );
@@ -170,8 +175,20 @@ export function useTendersSync(): SyncStatus {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(async () => {
         saveTimer.current = null; // plus rien en attente
-        const ok = await saveWorkspace(buildPayload());
-        setStatus(ok ? 'partage' : 'erreur');
+        // MG-M07 — saveWorkspace renvoie desormais un resultat detaille.
+        // Un conflit de version signifie qu'un autre membre a modifie l'espace :
+        // on NE reessaie PAS en ecrasant, on signale. Ecraser reproduirait
+        // exactement la perte de donnees que le verrou corrige.
+        const res = await saveWorkspace(buildPayload(), currentVersion.current ?? undefined);
+        if (res.ok) {
+          currentVersion.current = res.version;
+          setStatus('partage');
+        } else if (res.reason === 'version_conflict') {
+          currentVersion.current = res.currentVersion;
+          setStatus('conflit');
+        } else {
+          setStatus('erreur');
+        }
       }, 1500);
     });
 

@@ -79,6 +79,42 @@ export default function PaddleCheckoutButton({
       return;
     }
 
+    // MG-H10 — Si un abonnement Paddle est DEJA actif, ouvrir un checkout
+    // creerait une SECONDE souscription : double facturation. On tente d'abord
+    // un changement de prix atomique cote serveur (proration Paddle). Le front
+    // ne decide pas : `paddle-upgrade` repond `needs_checkout` s'il n'y a rien
+    // a modifier, et c'est seulement alors qu'on ouvre le checkout.
+    try {
+      const { data: up } = await supabase.functions.invoke('paddle-upgrade', {
+        body: {
+          plan: plan.internalId,
+          // Idempotence : un double-clic ou un retry reseau ne facture qu'une fois.
+          idempotency_key: `upg-${user.id}-${plan.internalId}`,
+        },
+      });
+      if (up?.ok && up?.upgraded) {
+        setState('waiting');
+        const activated = await waitForActivation();
+        window.dispatchEvent(new Event('subscriptionRefreshRequested'));
+        setState('idle');
+        if (activated) {
+          onSuccess();
+        } else {
+          onError(
+            "Changement de formule enregistré — l'activation prend plus de temps que prévu. " +
+              'Rechargez la page dans une minute ; aucun second débit ne sera fait.',
+          );
+        }
+        return;
+      }
+      // up.needs_checkout (ou reponse absente) -> premiere souscription :
+      // on poursuit vers le checkout normal ci-dessous.
+    } catch {
+      // Fonction indisponible : on ne bloque pas une PREMIERE souscription.
+      // Le risque de double abonnement ne concerne que les clients deja abonnes,
+      // pour lesquels l'appel ci-dessus aurait repondu.
+    }
+
     try {
       await openPlanCheckout({
         paddlePriceId: plan.paddlePriceId,

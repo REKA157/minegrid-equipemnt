@@ -1,0 +1,158 @@
+// Edge Function `paddle-upgrade` — changement de formule ATOMIQUE (MG-H10).
+//
+// CONSTAT
+//   Le parcours d'upgrade ouvrait un NOUVEL abonnement Paddle via
+//   PaddleCheckoutButton, sans annuler ni proratiser l'ancien. Un client deja
+//   abonne se retrouvait avec DEUX souscriptions actives, donc double
+//   facturation. Le code le reconnaissait explicitement en commentaire
+//   (« sera géré côté Paddle avant la prod »).
+//
+// CORRECTIF
+//   On n'ouvre plus de second abonnement : on MODIFIE l'abonnement existant via
+//   PATCH /subscriptions/{id} avec proration. Paddle recalcule le montant au
+//   prorata et conserve UNE seule souscription. S'il n'existe aucun abonnement
+//   Paddle actif, on renvoie `needs_checkout` et le front ouvre un checkout
+//   normal — c'est alors une premiere souscription, pas un upgrade.
+//
+// INVARIANT VISE
+//   A tout instant, un utilisateur a AU PLUS une subscription Paddle active.
+//
+// Secrets requis : PADDLE_API_KEY, PADDLE_ENV, et la table de correspondance
+// plan interne -> price_id Paddle (PADDLE_PRICE_MAP, JSON).
+// Aucun secret n'est expose au front.
+import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+
+const supabaseAdmin = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+);
+const supabaseAuth = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+);
+
+const PADDLE_API_BASE =
+  (Deno.env.get('PADDLE_ENV') ?? 'sandbox') === 'production'
+    ? 'https://api.paddle.com'
+    : 'https://sandbox-api.paddle.com';
+const PADDLE_API_KEY = Deno.env.get('PADDLE_API_KEY') ?? '';
+
+// plan interne -> price_id Paddle. Cote serveur uniquement : un price_id
+// fourni par le client permettrait de s'abonner au tarif de son choix.
+function priceIdForPlan(plan: string): string | null {
+  let map: Record<string, string> = {};
+  try {
+    map = JSON.parse(Deno.env.get('PADDLE_PRICE_MAP') ?? '{}');
+  } catch {
+    return null;
+  }
+  return map[plan] ?? null;
+}
+
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin') ?? '';
+  const allowed = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',')
+    .map((o) => o.trim()).filter(Boolean);
+  return {
+    'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0] ?? '',
+    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
+
+function json(req: Request, body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+  });
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(req, { ok: false, reason: 'method' }, 405);
+
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return json(req, { ok: false, reason: 'auth' }, 401);
+  }
+  const jwt = authHeader.replace('Bearer ', '').trim();
+  const { data: userData, error: userError } = await supabaseAuth.auth.getUser(jwt);
+  if (userError || !userData.user) {
+    return json(req, { ok: false, reason: 'auth' }, 401);
+  }
+
+  let body: { plan?: string; idempotency_key?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return json(req, { ok: false, reason: 'bad_request' }, 400);
+  }
+  if (!body.plan) return json(req, { ok: false, reason: 'plan_required' }, 400);
+
+  const priceId = priceIdForPlan(body.plan);
+  if (!priceId) return json(req, { ok: false, reason: 'unknown_plan' }, 400);
+
+  if (!PADDLE_API_KEY) {
+    console.error('[paddle-upgrade] PADDLE_API_KEY manquante');
+    return json(req, { ok: false, reason: 'not_configured' }, 500);
+  }
+
+  // Abonnement du COMPTE APPELANT uniquement.
+  const { data: row, error: rowError } = await supabaseAdmin
+    .from('pro_clients')
+    .select('paddle_subscription_id, payment_method, subscription_status')
+    .eq('user_id', userData.user.id)
+    .maybeSingle();
+
+  if (rowError) {
+    console.error('[paddle-upgrade] lecture pro_clients:', rowError.message);
+    return json(req, { ok: false, reason: 'server' }, 500);
+  }
+
+  // Aucun abonnement Paddle en cours : ce n'est pas un upgrade mais une
+  // premiere souscription. Le front ouvre un checkout classique.
+  const active = row?.subscription_status &&
+    ['active', 'trialing', 'past_due'].includes(row.subscription_status);
+  if (!row || row.payment_method !== 'paddle' || !row.paddle_subscription_id || !active) {
+    return json(req, { ok: true, needs_checkout: true });
+  }
+
+  // ---- CHANGEMENT DE PRIX AVEC PRORATION -----------------------------------
+  // C'est le coeur du correctif : on modifie l'abonnement EXISTANT.
+  // `proration_billing_mode: prorated_immediately` facture immediatement la
+  // difference au prorata. Aucune seconde souscription n'est creee.
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${PADDLE_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+  // Idempotence : un double clic ou un retry reseau ne doit pas facturer deux fois.
+  if (body.idempotency_key) headers['Paddle-Idempotency-Key'] = body.idempotency_key;
+
+  const resp = await fetch(
+    `${PADDLE_API_BASE}/subscriptions/${row.paddle_subscription_id}`,
+    {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        items: [{ price_id: priceId, quantity: 1 }],
+        proration_billing_mode: 'prorated_immediately',
+      }),
+    },
+  );
+
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '');
+    // Abonnement annule entre-temps : on bascule vers un checkout neuf plutot
+    // que d'echouer, mais on ne cree jamais un second abonnement ACTIF.
+    if (resp.status === 400 && detail.includes('subscription_update_when_canceled')) {
+      return json(req, { ok: true, needs_checkout: true, reason: 'subscription_canceled' });
+    }
+    console.error(`[paddle-upgrade] API Paddle ${resp.status}: ${detail.slice(0, 500)}`);
+    return json(req, { ok: false, reason: 'paddle_error' }, 502);
+  }
+
+  // L'etat d'abonnement fait foi cote webhook : on ne l'ecrit pas ici pour
+  // eviter deux sources de verite. Le webhook `paddle-webhook` recevra
+  // subscription.updated et mettra pro_clients a jour.
+  return json(req, { ok: true, upgraded: true, plan: body.plan });
+});

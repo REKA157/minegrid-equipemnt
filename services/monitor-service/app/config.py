@@ -51,6 +51,10 @@ class Settings(BaseSettings):
 
     # Widgets IA : limite de requêtes / minute / utilisateur (anti-surcharge & coût LLM)
     ai_widget_max_per_minute: int = 120
+    # MG-H09 : plafond DEDIE au chemin d'enrichissement projet, bien plus lourd
+    # (et plus couteux) qu'un widget. Reutiliser les 120/min des widgets laissait
+    # 7200 appels LLM/heure/utilisateur : insuffisant contre le DoS economique.
+    ai_project_enrich_max_per_minute: int = 12
     # Cache court du payload LLM agrégé (insights+reco+predictions partagés même construction)
     payload_cache_ttl_sec: float = 45.0
 

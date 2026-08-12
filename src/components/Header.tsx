@@ -5,7 +5,6 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useMemberScope } from '../hooks/useMemberScope';
 import { isInvitedMember } from '../utils/api/memberScope';
 import { hasEnterprise } from '../utils/api/subscription';
-import { recordSessionLogout } from '../utils/api/sessions';
 import { trackEvent } from '../utils/analytics';
 import {
   Search,
@@ -33,10 +32,10 @@ import {
   ScrollText,
 } from 'lucide-react';
 
-import supabaseClient from '../utils/supabaseClient';
 import CurrencySelector from './CurrencySelector';
 import { categories, iconMap } from '../data/categories';
 import { getAccountItem } from '../utils/accountLocalStorage';
+import { logoutUser } from '../utils/api/auth';
 
 const servicesMenu = [
   { label: 'Financement', section: 'financement', icon: Wallet },
@@ -505,8 +504,9 @@ const Header = () => {
                     )}
                     <button
                       onClick={async () => {
-                        await recordSessionLogout();
-                        await supabaseClient.auth.signOut();
+                        // MG-M04 — passe par logoutUser() : journalisation,
+                        // signOut ET purge du stockage local en un seul endroit.
+                        await logoutUser();
                         window.location.hash = '#';
                       }}
                       className="flex w-full text-left items-center px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600"
@@ -685,8 +685,8 @@ const Header = () => {
                 <button
                   type="button"
                   onClick={async () => {
-                    await recordSessionLogout();
-                    await supabaseClient.auth.signOut();
+                    // MG-M04 — voir ci-dessus : un seul chemin de deconnexion.
+                    await logoutUser();
                     closeMobileMenu();
                     window.location.hash = '#';
                   }}

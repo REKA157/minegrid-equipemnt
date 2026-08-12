@@ -1,4 +1,10 @@
-"""Tests require_paid_user_or_admin — pas de fallback si pro_clients absent."""
+"""Tests require_paid_user_or_admin.
+
+MG-M06 — L'entitlement passe desormais par la RPC `get_effective_subscription_for`
+(POST), source d'autorite partagee avec la plateforme, et non plus par une lecture
+directe de `pro_clients` (GET). Cette RPC applique l'heritage d'organisation et
+l'expiration, deux regles que la lecture directe ignorait.
+"""
 
 from __future__ import annotations
 
@@ -45,12 +51,26 @@ def _mock_pro_clients_response(*, status_code: int, json_body=None, text: str = 
     return res
 
 
-def _patch_http_client(get_return: MagicMock) -> MagicMock:
+def _patch_http_client(post_return: MagicMock) -> MagicMock:
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=get_return)
+    # La RPC est appelee en POST : mocker `get` laisserait passer un test vert
+    # sur un appel qui n'a plus lieu.
+    mock_client.post = AsyncMock(return_value=post_return)
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
     return mock_client
+
+
+def _rpc_row(*, is_active: bool, sub_type: str = "pro",
+             status: str = "active", source: str = "self") -> list[dict]:
+    """Forme de reponse de get_effective_subscription_for : toujours une ligne."""
+    return [{
+        "is_active": is_active,
+        "subscription_type": sub_type,
+        "subscription_status": status,
+        "ends_at": None,
+        "source": source,
+    }]
 
 
 @pytest.fixture(autouse=True)
@@ -86,7 +106,10 @@ def test_pro_clients_empty_list_denies_access():
     with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
-                _mock_pro_clients_response(status_code=200, json_body=[]),
+                _mock_pro_clients_response(
+                    status_code=200,
+                    json_body=_rpc_row(is_active=False, status="none"),
+                ),
             )
             with pytest.raises(HTTPException) as exc:
                 asyncio.run(_require_paid())
@@ -99,12 +122,7 @@ def test_pro_clients_active_subscription_allows_access():
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
                     status_code=200,
-                    json_body=[
-                        {
-                            "subscription_type": "pro",
-                            "subscription_status": "active",
-                        },
-                    ],
+                    json_body=_rpc_row(is_active=True, sub_type="pro"),
                 ),
             )
             result = asyncio.run(_require_paid())
@@ -117,12 +135,8 @@ def test_pro_clients_inactive_subscription_denies_access():
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
                     status_code=200,
-                    json_body=[
-                        {
-                            "subscription_type": "pro",
-                            "subscription_status": "cancelled",
-                        },
-                    ],
+                    json_body=_rpc_row(is_active=False, sub_type="pro",
+                                       status="cancelled"),
                 ),
             )
             with pytest.raises(HTTPException) as exc:
@@ -134,10 +148,56 @@ def test_pro_clients_http_error_returns_503():
     with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             mock_client = AsyncMock()
-            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("down"))
+            mock_client.post = AsyncMock(side_effect=httpx.ConnectError("down"))
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
             client_cls.return_value = mock_client
             with pytest.raises(HTTPException) as exc:
                 asyncio.run(_require_paid())
     assert exc.value.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# MG-M06 — les deux divergences que la lecture directe de pro_clients causait.
+# ---------------------------------------------------------------------------
+
+def test_org_member_inherits_owner_subscription():
+    """FAUX REFUS corrige : un membre dont l'organisation paie doit passer.
+
+    Ce membre n'a AUCUNE ligne `pro_clients` a son nom ; l'ancienne requete
+    directe le refusait alors qu'il est ayant droit.
+    """
+    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(
+                _mock_pro_clients_response(
+                    status_code=200,
+                    json_body=_rpc_row(is_active=True, sub_type="pro", source="org"),
+                ),
+            )
+            result = asyncio.run(_require_paid())
+    assert result is True
+
+
+def test_expired_subscription_denies_access():
+    """FAUX ACCES corrige : un abonnement expire ne doit plus ouvrir l'acces.
+
+    La ligne reste `status = 'active'` mais sa date de fin est depassee ;
+    l'ancienne verification ne testait jamais l'expiration. La RPC tranche via
+    `is_active`.
+    """
+    expired = [{
+        "is_active": False,
+        "subscription_type": "pro",
+        "subscription_status": "active",
+        "ends_at": "2020-01-01T00:00:00+00:00",
+        "source": "self",
+    }]
+    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(
+                _mock_pro_clients_response(status_code=200, json_body=expired),
+            )
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(_require_paid())
+    assert exc.value.status_code == 403

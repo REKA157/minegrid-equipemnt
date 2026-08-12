@@ -16,10 +16,58 @@ logging.basicConfig(
 )
 
 
+async def _verify_schema_is_current() -> None:
+    """Verifie que la base est a la derniere revision Alembic.
+
+    En developpement (MONITOR_AUTO_MIGRATE=1), applique les migrations pour
+    garder un demarrage sans ceremonie. En dehors, on ne fait que constater :
+    migrer automatiquement en production est une course entre workers.
+    """
+    import os
+    from alembic import command
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg = Config(os.path.join(root, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(root, "alembic"))
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+
+    if os.environ.get("MONITOR_AUTO_MIGRATE") == "1":
+        command.upgrade(cfg, "head")
+        return
+
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+
+    def _current(conn):
+        return MigrationContext.configure(conn).get_current_revision()
+
+    async with engine.begin() as conn:
+        current = await conn.run_sync(_current)
+
+    if current != head:
+        raise RuntimeError(
+            f"Schema non migre : base a la revision {current!r}, attendu {head!r}. "
+            "Executez `alembic upgrade head` avant de demarrer le service."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # MG-M11 — `create_all` a ete RETIRE du demarrage.
+    #
+    # Il creait les tables manquantes mais n'appliquait JAMAIS d'evolution :
+    # une colonne ajoutee, un type modifie, une contrainte ajoutee n'etaient
+    # jamais propages. Le schema derivait silencieusement, sans historique ni
+    # possibilite de rollback, et la restauration n'etait pas reproductible.
+    #
+    # Les migrations Alembic font desormais foi. Elles ne sont PAS jouees au
+    # demarrage : avec plusieurs workers, chacun tenterait de migrer en
+    # parallele. Elles s'appliquent au deploiement (`alembic upgrade head`).
+    # Ici on se contente de VERIFIER, et de refuser de demarrer sur un schema
+    # non migre plutot que de servir du trafic sur une base incoherente.
+    await _verify_schema_is_current()
     start_scheduler()
     yield
     stop_scheduler()

@@ -1,6 +1,7 @@
 import type { RegisterData } from './types';
 import supabase from '../supabaseClient';
 import { recordSessionLogout } from './sessions';
+import { purgeLocalUserData } from '../scopedStorage';
 
 // -------------------- AUTH --------------------
 
@@ -41,6 +42,11 @@ export async function logoutUser() {
   // Enregistre la déconnexion AVANT signOut (après, auth.uid() est null).
   await recordSessionLogout();
   await supabase.auth.signOut();
+  // MG-M04 — Purge des données applicatives locales. Sans elle, le compte
+  // suivant sur le même navigateur relit les PII, devis et rôles du précédent.
+  // Appelée APRÈS signOut : le SDK gère ses propres clés `sb-*`, que la purge
+  // laisse volontairement intactes.
+  purgeLocalUserData();
 }
 
 export async function getCurrentUser() {

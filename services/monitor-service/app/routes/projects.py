@@ -1,18 +1,20 @@
 from __future__ import annotations
 from uuid import UUID
 from decimal import Decimal
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.auth import require_user_or_admin
+from app.auth import require_user_or_admin, require_paid_user_or_admin, get_current_user
+from app.ai_rate_limit import check_ai_widget_rate_limit
 from app.models import Project
 from app.schemas import ProjectOut, ProjectDetailOut, ProjectListOut, EquipmentNeedOut
 from app.rules.engine import compute_equipment_needs
 from app.llm.enrichment import enrich_project, compare_project_methods
-from app.config import get_settings
+from app.config import get_settings, Settings
+from app.auth import bearer_scheme
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -22,6 +24,45 @@ _NON_MACHINE_TITLE_KEYWORDS = {
     "restauration", "fourniture", "produits", "pharmaceutique", "médical",
     "medica", "sport", "articles artistiques", "services courants",
 }
+
+
+# ---------------------------------------------------------------------------
+# MG-H09 - Garde entitlement sur TOUT chemin LLM.
+#
+# AVANT : `GET /projects/{id}?ai=true&force_ai=true` n'exigeait que
+#         require_user_or_admin. N'importe quel JWT Supabase valide declenchait
+#         donc un appel LLM facturable, sans quota ni rate limit - alors que les
+#         widgets IA equivalents, eux, exigeaient un compte payant.
+#         Consequence : contournement du premium et DoS economique par simple
+#         boucle GET.
+# APRES : le paywall + le rate limit s'appliquent AVANT tout appel LLM.
+#
+# Choix : la garde est evaluee DANS le handler et non en Depends, afin que le
+# detail projet reste accessible aux comptes gratuits. Seul l'enrichissement IA
+# est payant - on ferme la fuite sans degrader la fonctionnalite gratuite.
+# ---------------------------------------------------------------------------
+async def _enforce_llm_entitlement(request: Request, settings: Settings) -> None:
+    """Verifie formule payante + quota. Leve 401/402/403/429 le cas echeant."""
+    credentials = await bearer_scheme(request)
+
+    # 1) Entitlement : admin par token, sinon formule payante active.
+    await require_paid_user_or_admin(
+        credentials=credentials,
+        x_admin_token=request.headers.get("X-Admin-Token"),
+        settings=settings,
+    )
+
+    # 2) Quota : meme plafond que les widgets IA. Un compte payant ne doit pas
+    #    pouvoir boucler indefiniment sur un endpoint LLM non borne.
+    try:
+        user_id = await get_current_user(credentials=credentials, settings=settings)
+    except HTTPException:
+        # Acces admin par X-Admin-Token : pas de JWT utilisateur a limiter.
+        return
+    check_ai_widget_rate_limit(
+        f"project-enrich:{user_id}",
+        max_per_minute=settings.ai_project_enrich_max_per_minute,
+    )
 
 
 @router.get("", response_model=ProjectListOut)
@@ -78,6 +119,7 @@ async def list_projects(
 @router.get("/{project_id}", response_model=ProjectDetailOut)
 async def get_project(
     project_id: UUID,
+    request: Request,
     ai: bool = Query(False, description="Enrichir les besoins machines via IA"),
     force_ai: bool = Query(False, description="Forcer le recalcul IA même si des besoins existent"),
     db: AsyncSession = Depends(get_db),
@@ -100,6 +142,8 @@ async def get_project(
 
     settings = get_settings()
     if ai and settings.llm_provider.lower() != "none":
+        # MG-H09 : paywall + quota AVANT tout appel LLM facturable.
+        await _enforce_llm_entitlement(request, settings)
         # Par défaut : enrichir seulement si aucun besoin en base (évite d'écraser
         # une analyse déjà stockée à chaque ouverture du détail). `force_ai=true`
         # force un recalcul LLM (admin / bouton explicite).
@@ -147,8 +191,9 @@ async def get_project(
 @router.get("/{project_id}/analysis-compare")
 async def get_project_analysis_compare(
     project_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    _user_ok: bool = Depends(require_user_or_admin),
+    _paid_ok: bool = Depends(require_paid_user_or_admin),
 ):
     """
     Compare extraction déterministe AO vs estimation LLM pour un projet.
@@ -168,4 +213,6 @@ async def get_project_analysis_compare(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Projet non trouvé")
+    # MG-H09 : cet endpoint appelle systematiquement le LLM -> quota obligatoire.
+    await _enforce_llm_entitlement(request, get_settings())
     return await compare_project_methods(project)

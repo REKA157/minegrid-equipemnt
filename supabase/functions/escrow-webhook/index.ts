@@ -13,22 +13,10 @@ const supabase = createClient(
 );
 const WEBHOOK_SECRET = Deno.env.get('ESCROW_WEBHOOK_SECRET') ?? '';
 
-type EscrowStatus =
-  | 'created' | 'funded' | 'inspection_passed' | 'delivered'
-  | 'released' | 'refunded' | 'disputed' | 'cancelled';
-
-const TRANSITIONS: Record<EscrowStatus, EscrowStatus[]> = {
-  created: ['funded', 'cancelled'],
-  funded: ['inspection_passed', 'disputed', 'refunded', 'cancelled'],
-  inspection_passed: ['delivered', 'disputed', 'refunded'],
-  delivered: ['released', 'disputed'],
-  disputed: ['released', 'refunded'],
-  released: [], refunded: [], cancelled: [],
-};
-const EVENT_TARGET: Record<string, EscrowStatus> = {
-  funded: 'funded', inspection_passed: 'inspection_passed', delivery_confirmed: 'delivered',
-  released: 'released', refunded: 'refunded', dispute_opened: 'disputed', cancelled: 'cancelled',
-};
+// MG-H08 : la table de transitions locale a ete SUPPRIMEE. Elle constituait une
+// seconde source de verite, desynchronisable de la base, et autorisait
+// `disputed -> released`. La machine d'etats vit desormais uniquement dans
+// `public._escrow_transition_allowed`.
 
 async function verifySignature(rawBody: string, signature: string): Promise<boolean> {
   if (!WEBHOOK_SECRET || !signature) return false;
@@ -53,52 +41,43 @@ Deno.serve(async (req) => {
     return json({ error: 'Signature invalide' }, 400);
   }
 
-  let evt: { escrow_id?: string; event_type?: string; provider_ref?: string; payload?: unknown };
+  let evt: {
+    escrow_id?: string; event_type?: string; provider_ref?: string; payload?: unknown;
+    event_id?: string; provider_event_id?: string; amount?: number; currency?: string;
+    buyer_id?: string; seller_id?: string;
+  };
   try { evt = JSON.parse(raw); } catch { return json({ error: 'JSON invalide' }, 400); }
   if (!evt.escrow_id || !evt.event_type) return json({ error: 'escrow_id et event_type requis' }, 400);
 
-  const { data: tx, error } = await supabase
-    .from('escrow_transactions').select('id, status').eq('id', evt.escrow_id).single();
-  if (error || !tx) return json({ error: 'Transaction introuvable' }, 404);
-
-  const target = EVENT_TARGET[evt.event_type];
-  if (!target) return json({ error: 'Événement inconnu' }, 400);
-
-  // Idempotence : si déjà à l'état cible, on accuse réception sans rejouer.
-  if (tx.status === target) return json({ received: true, idempotent: true });
-
-  if (!TRANSITIONS[tx.status as EscrowStatus]?.includes(target)) {
-    return json({ error: `Transition ${tx.status} -> ${target} interdite` }, 409);
-  }
-
-  // Transition ATOMIQUE et CONDITIONNELLE (verrou optimiste) : on n'applique le
-  // changement QUE si le statut source est TOUJOURS celui qu'on a lu. Les PSP
-  // livrent en at-least-once : sans cette garde, deux livraisons concurrentes
-  // liraient le même statut, passeraient la garde de transition, et écriraient
-  // toutes deux (TOCTOU) -> double-fire d'events, voire remboursement + libération
-  // simultanés. `.eq('status', tx.status)` + `.select()` = seule la 1re livraison
-  // qui fait AVANCER l'état gagne ; les autres ne modifient 0 ligne.
-  const { data: updated, error: uErr } = await supabase
-    .from('escrow_transactions')
-    .update({ status: target, provider_ref: evt.provider_ref ?? null, updated_at: new Date().toISOString() })
-    .eq('id', evt.escrow_id)
-    .eq('status', tx.status)
-    .select('id');
-  if (uErr) return json({ error: uErr.message }, 500);
-
-  // 0 ligne affectée = une autre livraison a déjà fait avancer l'état entre notre
-  // lecture et notre écriture. On ne rejoue PAS (pas de 2e event, pas de double effet).
-  if (!updated || updated.length === 0) {
-    return json({ received: true, idempotent: true, note: 'statut déjà avancé (course évitée)' });
-  }
-
-  // Journal append-only : n'est écrit QUE pour la livraison qui a réellement
-  // appliqué la transition (donc pas de doublon d'event sous rejeu concurrent).
-  await supabase.from('escrow_events').insert({
-    escrow_id: evt.escrow_id, event_type: evt.event_type, payload: evt.payload ?? {},
+  // MG-H08 — La coherence financiere n'est plus arbitree ici mais en base, via
+  // `apply_escrow_event` (service_role). Cette fonction reste responsable de la
+  // signature ; la base impose montant, devise, parties, machine d'etats et
+  // release_conditions. Un seul chemin d'ecriture = un seul jeu de garanties,
+  // valable aussi pour tout autre appelant (script, correction manuelle).
+  const { data: result, error: rpcErr } = await supabase.rpc('apply_escrow_event', {
+    p_escrow_id: evt.escrow_id,
+    p_event_type: evt.event_type,
+    p_provider_event_id: evt.event_id ?? evt.provider_event_id ?? null,
+    p_amount: evt.amount ?? null,
+    p_currency: evt.currency ?? null,
+    p_buyer_id: evt.buyer_id ?? null,
+    p_seller_id: evt.seller_id ?? null,
+    p_provider_ref: evt.provider_ref ?? null,
+    p_payload: evt.payload ?? {},
   });
 
-  return json({ received: true, status: target });
+  if (rpcErr) {
+    const msg = rpcErr.message ?? '';
+    // Incoherence financiere ou transition illegale : 409, pas 500. Le PSP ne
+    // doit pas rejouer indefiniment un evenement structurellement invalide.
+    if (/mismatch|illegal_transition|release_conditions_not_met|unknown_event_type/.test(msg)) {
+      return json({ error: msg }, 409);
+    }
+    if (/escrow_not_found/.test(msg)) return json({ error: msg }, 404);
+    return json({ error: msg }, 500);
+  }
+
+  return json(result ?? { received: true });
 });
 
 function json(body: unknown, status = 200): Response {

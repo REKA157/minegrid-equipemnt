@@ -126,8 +126,10 @@ export default function ProSubscription() {
       ) : activeRank > PLAN_RANK[plan.internalId] ? (
         includedBadge
       ) : (
-        // NB : « Passer à » ouvre un NOUVEL abonnement Paddle ; l'upgrade propre
-        // (proration + annulation de l'ancien) sera géré côté Paddle avant la prod.
+        // MG-H10 — « Passer à » ne cree plus de second abonnement : le bouton
+        // tente d'abord un changement de prix atomique avec proration
+        // (Edge Function `paddle-upgrade`) et ne retombe sur un checkout que
+        // s'il n'existe aucune souscription Paddle active.
         <PaddleCheckoutButton
           planId={plan.internalId}
           label={

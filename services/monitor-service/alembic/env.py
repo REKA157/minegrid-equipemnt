@@ -13,6 +13,18 @@ from app import models  # noqa: F401 — register all models
 
 target_metadata = Base.metadata
 
+from app.config import get_settings
+
+# MG-M11 — L'URL de connexion vient de la CONFIGURATION applicative, pas du
+# `sqlalchemy.url` code en dur dans alembic.ini. Sans cela, une migration
+# lancee en staging ou en production s'appliquerait silencieusement a la base
+# de developpement indiquee dans le fichier ini — ou echouerait selon ce qui
+# ecoute sur le port. La cible des migrations et celle de l'application ont
+# desormais la meme source de verite.
+_settings = get_settings()
+if getattr(_settings, "database_url", None):
+    config.set_main_option("sqlalchemy.url", _settings.database_url)
+
 
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")

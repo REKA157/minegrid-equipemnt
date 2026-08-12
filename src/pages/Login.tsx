@@ -3,6 +3,7 @@ import { Mail, Lock, ChevronRight } from 'lucide-react';
 import { loginUser } from '../utils/api';
 import { toast } from '../utils/toast';
 import supabase from '../utils/supabaseClient';
+import { setSessionPersistence } from '../utils/supabaseClient';
 const TEMP_ACCESS_CODE = (import.meta.env.VITE_MONITOR_TEMP_ACCESS_CODE || '').trim();
 
 export default function Login() {
@@ -25,6 +26,10 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // MG-L03 — Le choix de l'utilisateur est applique AVANT la connexion :
+      // le SDK ecrit la session des le retour de loginUser, donc le poser
+      // apres serait trop tard pour la premiere ecriture.
+      setSessionPersistence(rememberMe);
       const { user, session } = await loginUser(email, password);
       if (!session) { throw new Error("La session est manquante après la connexion.");
       }

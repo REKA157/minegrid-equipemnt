@@ -177,23 +177,26 @@ async def require_paid_user_or_admin(
         raise HTTPException(status_code=503, detail="Supabase non configuré")
 
     base = settings.supabase_url.rstrip("/")
-    url = (
-        f"{base}/rest/v1/pro_clients"
-        f"?select=subscription_type,subscription_status"
-        f"&user_id=eq.{user_id}"
-        f"&order=created_at.desc"
-        f"&limit=20"
-    )
+    # MG-M06 — On interroge la source d'autorite PARTAGEE plutot que la table
+    # `pro_clients` en direct. La requete directe ignorait deux regles que la
+    # base applique deja :
+    #   - l'heritage d'organisation (un membre beneficie de l'abonnement du
+    #     proprietaire, sans ligne `pro_clients` a son nom) -> faux refus;
+    #   - l'expiration (`subscription_end`), jamais testee ici -> faux acces
+    #     pour un abonnement termine mais reste en statut 'active'.
+    # Deux sources de verite donnaient deux reponses ; il n'y en a plus qu'une.
+    url = f"{base}/rest/v1/rpc/get_effective_subscription_for"
 
     headers = {
         "apikey": settings.supabase_service_role_key,
         "Authorization": f"Bearer {settings.supabase_service_role_key}",
         "Accept": "application/json",
+        "Content-Type": "application/json",
     }
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, headers=headers)
+            res = await client.post(url, headers=headers, json={"p_user_id": user_id})
     except httpx.HTTPError as e:
         logger.error("Paid check Supabase request failed: %s", e)
         raise HTTPException(status_code=503, detail="Erreur Supabase")
@@ -209,21 +212,21 @@ async def require_paid_user_or_admin(
     except Exception:
         rows = None
 
+    # La RPC renvoie TOUJOURS exactement une ligne : is_active tranche.
     valid_row = None
-    if isinstance(rows, list):
-        for candidate in rows:
-            if not isinstance(candidate, dict):
-                continue
-            c_type = candidate.get("subscription_type")
-            c_status = candidate.get("subscription_status")
-            if (
-                isinstance(c_type, str)
-                and isinstance(c_status, str)
-                and c_status.lower() in {"active", "trialing", "paid"}
-                and _PAID_SUBSCRIPTION_TYPES.issuperset({c_type.lower()})
-            ):
-                valid_row = candidate
-                break
+    if isinstance(rows, list) and rows:
+        row = rows[0]
+    elif isinstance(rows, dict):
+        row = rows
+    else:
+        row = None
+
+    if isinstance(row, dict) and row.get("is_active") is True:
+        c_type = row.get("subscription_type")
+        # Le niveau de formule reste filtre cote service : toutes les formules
+        # actives n'ouvrent pas forcement le Monitor.
+        if isinstance(c_type, str) and _PAID_SUBSCRIPTION_TYPES.issuperset({c_type.lower()}):
+            valid_row = row
 
     sub_type = (valid_row or {}).get("subscription_type")
     sub_status = (valid_row or {}).get("subscription_status")
