@@ -12,9 +12,14 @@ import RequirePlatformAdmin from './RequirePlatformAdmin';
  */
 
 const isPlatformAdmin = vi.fn();
+const getSession = vi.fn();
 
 vi.mock('../utils/api/platformAdmin', () => ({
   isPlatformAdmin: () => isPlatformAdmin(),
+}));
+
+vi.mock('../utils/supabaseClient', () => ({
+  default: { auth: { getSession: () => getSession() } },
 }));
 
 const SECRET = 'Liste des abonnes';
@@ -27,7 +32,11 @@ function monter() {
   );
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Par défaut : une session existe (cas d'un compte connecté mais sans droits).
+  getSession.mockResolvedValue({ data: { session: { user: { id: 'u-1' } } } });
+});
 
 describe('RequirePlatformAdmin — refus par défaut', () => {
   it('administrateur reconnu : le contenu s’affiche', async () => {
@@ -63,6 +72,27 @@ describe('RequirePlatformAdmin — refus par défaut', () => {
     isPlatformAdmin.mockResolvedValue(undefined as unknown as boolean);
     monter();
     await waitFor(() => expect(screen.getByText(/Page introuvable/i)).toBeTruthy());
+    expect(screen.queryByText(SECRET)).toBeNull();
+  });
+
+  // Ajouté après un diagnostic qui a pris cinq allers-retours : le refus muet ne
+  // distinguait pas « pas connecté » de « connecté sans droits ».
+  it("AUCUNE session : la page propose « Se connecter » (une 404 qui le propose n'apprend rien)", async () => {
+    isPlatformAdmin.mockResolvedValue(false);
+    getSession.mockResolvedValue({ data: { session: null } });
+    monter();
+    await waitFor(() => expect(screen.getByText(/Se connecter/i)).toBeTruthy());
+    expect(screen.getByText(/Page introuvable/i)).toBeTruthy();
+    expect(screen.queryByText(SECRET)).toBeNull();
+  });
+
+  it("session PRÉSENTE mais sans droits : AUCUN indice, pas même « Se connecter »", async () => {
+    isPlatformAdmin.mockResolvedValue(false);
+    getSession.mockResolvedValue({ data: { session: { user: { id: 'u-2' } } } });
+    monter();
+    await waitFor(() => expect(screen.getByText(/Page introuvable/i)).toBeTruthy());
+    // Sinon un compte connecté deduirait que l'adresse existe et que d'autres y accedent.
+    expect(screen.queryByText(/Se connecter/i)).toBeNull();
     expect(screen.queryByText(SECRET)).toBeNull();
   });
 });
