@@ -17,8 +17,8 @@
 // INVARIANT VISE
 //   A tout instant, un utilisateur a AU PLUS une subscription Paddle active.
 //
-// Secrets requis : PADDLE_API_KEY, PADDLE_ENV, et la table de correspondance
-// plan interne -> price_id Paddle (PADDLE_PRICE_MAP, JSON).
+// Secrets requis : PADDLE_API_KEY, PADDLE_ENV, PADDLE_PRICE_PRO_50USD,
+// PADDLE_PRICE_PREMIUM_20USD, PADDLE_PRICE_ENTERPRISE_200USD, ALLOWED_ORIGINS.
 // Aucun secret n'est expose au front.
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 
@@ -37,16 +37,18 @@ const PADDLE_API_BASE =
     : 'https://sandbox-api.paddle.com';
 const PADDLE_API_KEY = Deno.env.get('PADDLE_API_KEY') ?? '';
 
-// plan interne -> price_id Paddle. Cote serveur uniquement : un price_id
-// fourni par le client permettrait de s'abonner au tarif de son choix.
+// plan interne -> price_id Paddle, lu depuis les secrets DEJA en place
+// (PADDLE_PRICE_PRO_50USD, etc.). On evite un PADDLE_PRICE_MAP qui dupliquerait
+// ces valeurs : deux sources de verite pour un meme prix finissent par diverger.
+// Cote serveur uniquement : un price_id fourni par le client permettrait de
+// s'abonner au tarif de son choix.
 function priceIdForPlan(plan: string): string | null {
-  let map: Record<string, string> = {};
-  try {
-    map = JSON.parse(Deno.env.get('PADDLE_PRICE_MAP') ?? '{}');
-  } catch {
-    return null;
-  }
-  return map[plan] ?? null;
+  const map: Record<string, string | undefined> = {
+    pro: Deno.env.get('PADDLE_PRICE_PRO_50USD'),
+    premium: Deno.env.get('PADDLE_PRICE_PREMIUM_20USD'),
+    enterprise: Deno.env.get('PADDLE_PRICE_ENTERPRISE_200USD'),
+  };
+  return map[plan.toLowerCase()] ?? null;
 }
 
 function corsHeaders(req: Request): Record<string, string> {
@@ -55,7 +57,9 @@ function corsHeaders(req: Request): Record<string, string> {
     .map((o) => o.trim()).filter(Boolean);
   return {
     'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0] ?? '',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
+    // Le SDK Supabase ajoute x-client-info et apikey a chaque appel : sans eux
+    // dans cette liste, le navigateur refuse la requete au stade du preflight.
+    'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 }

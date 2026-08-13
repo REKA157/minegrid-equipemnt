@@ -87,6 +87,35 @@ reproduits dans le navigateur avant d'être corrigés :
 **12 tests** ajoutés (`authLink`, `urls`, `useAuthLinkReturn` — dont le test de parcours qui manquait :
 « l'écran doit rester quittable ») ; **404/404** au total. Vérifié dans le navigateur à chaque étape.
 
+### 💸 Changement de formule : double facturation (MG-H10) — corrigé, preuve côté code faite
+
+**Le défaut** : un client déjà abonné qui changeait de formule voyait s'ouvrir un **second**
+abonnement Paddle au lieu de voir le premier modifié. Il payait deux fois.
+
+**Le correctif** : `supabase/functions/paddle-upgrade/index.ts` — `PATCH /subscriptions/{id}` avec
+`proration_billing_mode: prorated_immediately`. L'abonnement existant est modifié, aucun second
+n'est créé. Prix lus côté serveur (un `price_id` fourni par le client permettrait de choisir son tarif).
+
+**Trou trouvé en écrivant la preuve** : le front retombait sur le paiement normal dès que
+`paddle-upgrade` échouait — fonction non déployée, erreur Paddle 502, réseau coupé. Or
+`functions.invoke` **ne lève pas** sur un statut d'erreur : il le range dans `error`, que le code
+ignorait. Un 502 passait donc pour « rien à faire » et ouvrait un checkout : le double abonnement
+revenait par la porte de service. Corrigé : le front demande d'abord au **serveur** si un accès est
+actif ; si oui, il n'ouvre **jamais** de checkout, sauf autorisation explicite du serveur
+(`needs_checkout` — cas d'un code promo ou d'un accès hérité, où il n'y a rien à dupliquer).
+
+**Ce qui est prouvé** (`src/components/PaddleCheckoutButton.test.tsx`, 6 cas) : un second abonnement
+ne peut naître que d'un checkout ; le test montre qu'aucun checkout n'est ouvert quand un accès est
+déjà actif, dans les quatre situations (succès, erreur serveur, fonction injoignable, double-clic).
+**Vérifié par mutation** : rejoué sur le code d'avant correctif, il **échoue** (3 cas) — il prouve
+donc bien quelque chose.
+
+**Ce qui n'est PAS encore prouvé** : l'état réel chez Paddle (proration, montant, unicité). Cela
+exige la clé API. Script fourni : `.audit/verifier-un-seul-abonnement.mjs` — compter les abonnements
+actifs avant/après un changement de formule ; attendu **exactement 1**, au nouveau prix, **même
+identifiant** qu'avant. Tant que ce relevé n'est pas fait, le correctif est écrit et testé, pas prouvé
+en conditions réelles.
+
 ### 🚨 Le paquet de production peut être construit contre la MAUVAISE base — garde-fou posé
 
 Le 2026-08-12, un `npm run build` a produit un paquet branché sur la base de **staging**, sans le

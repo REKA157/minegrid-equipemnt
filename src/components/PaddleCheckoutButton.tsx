@@ -79,20 +79,41 @@ export default function PaddleCheckoutButton({
       return;
     }
 
-    // MG-H10 — Si un abonnement Paddle est DEJA actif, ouvrir un checkout
-    // creerait une SECONDE souscription : double facturation. On tente d'abord
-    // un changement de prix atomique cote serveur (proration Paddle). Le front
-    // ne decide pas : `paddle-upgrade` repond `needs_checkout` s'il n'y a rien
-    // a modifier, et c'est seulement alors qu'on ouvre le checkout.
-    try {
-      const { data: up } = await supabase.functions.invoke('paddle-upgrade', {
-        body: {
-          plan: plan.internalId,
-          // Idempotence : un double-clic ou un retry reseau ne facture qu'une fois.
-          idempotency_key: `upg-${user.id}-${plan.internalId}`,
-        },
-      });
-      if (up?.ok && up?.upgraded) {
+    // MG-H10 — INVARIANT : un client a AU PLUS un abonnement Paddle actif.
+    //
+    // Une seconde souscription ne peut naître que d'un checkout. On distingue
+    // donc les deux situations avant d'en ouvrir un, en interrogeant le SERVEUR
+    // (get_effective_subscription), jamais le navigateur :
+    //
+    //  - aucun accès actif  -> première souscription : checkout, rien à dupliquer ;
+    //  - accès déjà actif   -> changement de formule : on passe par
+    //    `paddle-upgrade`, qui MODIFIE l'abonnement existant (proration). Ici, en
+    //    cas d'échec, on N'OUVRE PAS de checkout : mieux vaut un client qui
+    //    réessaie qu'un client débité deux fois. Seul le serveur peut lever
+    //    l'interdit, en répondant `needs_checkout` (accès actif SANS abonnement
+    //    Paddle : code promo, ou abonnement hérité de sa société).
+    const dejaActif = (await getMySubscription()).isActive;
+
+    if (dejaActif) {
+      let up: { ok?: boolean; upgraded?: boolean; needs_checkout?: boolean } | null = null;
+      try {
+        const reponse = await supabase.functions.invoke('paddle-upgrade', {
+          body: {
+            plan: plan.internalId,
+            // Idempotence : un double-clic ou un retry reseau ne facture qu'une fois.
+            idempotency_key: `upg-${user.id}-${plan.internalId}`,
+          },
+        });
+        // `invoke` ne lève pas sur un statut d'erreur : il le renvoie dans `error`.
+        // Sans cette lecture, un 502 passait pour un « rien à faire » et le code
+        // enchaînait sur un checkout — exactement le double abonnement à éviter.
+        if (reponse.error) throw reponse.error;
+        up = reponse.data;
+      } catch {
+        up = null;
+      }
+
+      if (up?.ok && up.upgraded) {
         setState('waiting');
         const activated = await waitForActivation();
         window.dispatchEvent(new Event('subscriptionRefreshRequested'));
@@ -107,12 +128,19 @@ export default function PaddleCheckoutButton({
         }
         return;
       }
-      // up.needs_checkout (ou reponse absente) -> premiere souscription :
-      // on poursuit vers le checkout normal ci-dessous.
-    } catch {
-      // Fonction indisponible : on ne bloque pas une PREMIERE souscription.
-      // Le risque de double abonnement ne concerne que les clients deja abonnes,
-      // pour lesquels l'appel ci-dessus aurait repondu.
+
+      if (!up?.ok || !up.needs_checkout) {
+        // Échec franc : on refuse plutôt que de risquer une seconde souscription.
+        setState('idle');
+        onError(
+          "Nous n'avons pas pu modifier votre formule. Votre abonnement actuel reste " +
+            "en place et aucun second prélèvement n'a été fait. Réessayez dans quelques " +
+            'minutes, ou écrivez à contact@minegrid.ma.',
+        );
+        return;
+      }
+      // up.needs_checkout : le serveur confirme qu'il n'y a aucun abonnement
+      // Paddle à modifier -> le checkout ci-dessous ne peut rien dupliquer.
     }
 
     try {
