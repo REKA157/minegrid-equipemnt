@@ -65,3 +65,5 @@ MineGrid-*.zip
 .env
 .env.*
 .env.production
+# Sauvegardes de .env.local (contiennent les memes cles)
+.env.local.avant-*

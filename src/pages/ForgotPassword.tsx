@@ -5,21 +5,50 @@ import { getResetPasswordUrl } from '../config/urls';
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
+  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleReset = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: getResetPasswordUrl(), // URL dynamique basée sur le port actuel
-    });
+    setMessage('');
+    setIsError(false);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: getResetPasswordUrl(),
+      });
 
-    if (error) {
-      setMessage('❌ Erreur : ' + error.message);
-    } else {
-      setMessage('✅ Un email de réinitialisation a été envoyé.');
+      if (error) {
+        // Le quota d'envoi est la cause la plus frequente : on le nomme
+        // explicitement plutot que d'afficher un message technique opaque.
+        const rateLimited = /rate limit|too many/i.test(error.message);
+        setIsError(true);
+        setMessage(
+          rateLimited
+            ? "Trop de demandes en peu de temps. Patientez quelques minutes avant de réessayer."
+            : `L'envoi a échoué : ${error.message}`,
+        );
+        return;
+      }
+
+      // Supabase confirme avoir ACCEPTE la demande — pas que le message est
+      // arrive. On ne promet donc pas une reception, et on indique quoi faire
+      // si rien n'arrive.
+      setSent(true);
+      setMessage(
+        "Si un compte existe pour cette adresse, un lien de réinitialisation vient d'être envoyé. " +
+          "Pensez à vérifier vos courriers indésirables.",
+      );
+    } catch (e) {
+      // Sans ce catch, une coupure reseau laissait le bouton bloque sur
+      // « Envoi en cours... » indefiniment.
+      setIsError(true);
+      setMessage(
+        "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.",
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
@@ -39,11 +68,23 @@ export default function ForgotPassword() {
         <button
           onClick={handleReset}
           disabled={loading || !email}
-          className={`w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded ${loading || !email ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           {loading ? 'Envoi en cours...' : 'Envoyer le lien'}
         </button>
-        {message && <p className="mt-4 text-sm text-gray-700">{message}</p>}
+
+        {message && (
+          <p className={`mt-4 text-sm ${isError ? 'text-red-700' : 'text-gray-700'}`}>
+            {message}
+          </p>
+        )}
+
+        {sent && (
+          <p className="mt-3 text-xs text-gray-500">
+            Rien reçu après quelques minutes ? Réessayez, ou contactez-nous à
+            contact@minegrid.ma pour une réinitialisation manuelle.
+          </p>
+        )}
       </div>
     </div>
   );

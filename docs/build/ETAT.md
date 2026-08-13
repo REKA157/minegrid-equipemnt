@@ -48,6 +48,42 @@ fonction `renders-ai` est de toute façon en panne : erreur 500 par manque de st
 | B3 | **Aucune console d'administration** | Assistant | Spec rédigée le 2026-08-12 (3 analyses parallèles) → à valider → implémentation |
 | B4 | **Migration `p25` à appliquer** (sécurité + argent, voir ci-dessous) | Patron | Coller `.audit/APPLY_P25_ORG_HARDENING.sql` dans l'éditeur SQL Supabase — **prod ET staging** |
 
+### 🔑 « Mot de passe oublié » : ne fonctionnait pas du tout — corrigé le 2026-08-12
+
+**Cause racine**, établie par un appel direct au service d'authentification (aucun e-mail envoyé) :
+le service **remplace le fragment** (`#…`) de l'URL de retour par ses propres paramètres.
+
+```
+redirect_to = https://minegrid-equipement.com/#update-password
+-> Location:  https://minegrid-equipement.com/#error=access_denied&error_code=otp_expired…
+              (le « #update-password » a disparu)
+redirect_to = https://minegrid-equipement.com/?type=recovery
+-> Location:  https://minegrid-equipement.com/?type=recovery#error=…   (la query survit)
+```
+
+L'application étant routée par le fragment, **le lien ramenait sur la page d'accueil** : l'écran
+« définir un nouveau mot de passe » était inatteignable. Personne ne pouvait récupérer son compte.
+Deuxième défaut au même endroit : `UpdatePassword` lisait les jetons à la main dans un format
+(`#page?access_token=…`) que le service ne produit **jamais**.
+
+Correction : marqueur déplacé dans la query (`?type=recovery`), capture de l'URL au tout premier
+chargement (`src/utils/authLink.ts`, importé en tête de `main.tsx`), écran réécrit (attente réelle de
+la session, confirmation du mot de passe, message clair si le lien a expiré au lieu d'un retour
+silencieux à l'accueil). **8 tests** ajoutés (`authLink.test.ts`, `urls.test.ts`) ; **400/400** au total.
+Vérifié dans le navigateur : lien périmé → message explicite ; lien valide → formulaire, garde-fous actifs.
+
+### 🚨 Le paquet de production peut être construit contre la MAUVAISE base — garde-fou posé
+
+Le 2026-08-12, un `npm run build` a produit un paquet branché sur la base de **staging**, sans le
+moindre avertissement : Vite charge `.env.local` **aussi** pour `vite build`, et ce fichier de
+développement écrase `.env`. Un tel paquet mis en ligne = aucun compte, aucune annonce.
+
+- `scripts/verifier-bundle.mjs` s'exécute désormais **automatiquement après chaque build**
+  (`postbuild`) : il refuse le paquet s'il ne contient pas la base de production, s'il contient une
+  base de test, un secret, ou une URL de retour à fragment. Testé sur le paquet fautif : **refusé**.
+- `.env.local` : les deux lignes fautives sont mises en commentaire (sauvegarde `.env.local.avant-2026-08-12`).
+  Pour travailler sur staging : `npm run dev -- --mode staging`, jamais `.env.local`.
+
 ### 🔒 Trois défauts trouvés le 2026-08-12 en préparant la console — corrigés (migration `p25`)
 
 Découverts en lisant le code, **chacun vérifié dans les fichiers avant correction**, puis prouvés
