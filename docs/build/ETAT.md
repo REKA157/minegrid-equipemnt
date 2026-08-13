@@ -105,6 +105,20 @@ un **seul** endroit (`PaddleCheckoutButton.tsx:147`), lui-même utilisé par les
 paiement (`PaymentPage`, `ProSubscription`). Aucune fonction serveur ne fait de `POST /subscriptions`.
 La porte est unique, et elle est gardée.
 
+**Exposition réelle : nulle en production.** Relevé le 2026-08-13 en appelant chaque fonction :
+
+| Fonction | Production | Staging |
+|---|---|---|
+| `paddle-upgrade` | **non déployée** | déployée |
+| `paddle-cancel` | **non déployée** | déployée |
+| `paddle-webhook` | **non déployée** | déployée |
+| `tenders-ai` | **non déployée** (seule l'ancienne `renders-ai` existe) | non déployée |
+
+Toute la chaîne de paiement vit **uniquement sur staging / bac à sable**. En production, aucun jeton
+client Paddle n'est embarqué : le bouton « S'abonner » affiche le message honnête « paiement pas
+encore configuré ». **Personne n'a donc jamais pu être débité en production, ni une fois ni deux.**
+D'éventuels doublons ne peuvent exister qu'en bac à sable, où ils ne coûtent rien.
+
 **Le correctif** : `supabase/functions/paddle-upgrade/index.ts` — `PATCH /subscriptions/{id}` avec
 `proration_billing_mode: prorated_immediately`. L'abonnement existant est modifié, aucun second
 n'est créé. Prix lus côté serveur (un `price_id` fourni par le client permettrait de choisir son tarif).

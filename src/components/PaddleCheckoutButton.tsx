@@ -22,6 +22,37 @@ const ACTIVATION_POLL_ATTEMPTS = 20;
 const ACTIVATION_POLL_INTERVAL_MS = 2000;
 
 /**
+ * Traduit le refus renvoyé par `paddle-upgrade` en une phrase actionnable.
+ *
+ * `functions.invoke` range la réponse d'erreur dans `error.context` (la Response
+ * brute) : sans la lire, un échec ne laisse qu'un « 502 Bad Gateway » dans la
+ * console, et rien à l'écran pour savoir quoi corriger — constaté en test le
+ * 2026-08-13. Les codes cités sont ceux de Paddle, purement techniques.
+ */
+async function motifPaddle(erreur: unknown): Promise<string> {
+  const contexte = (erreur as { context?: { json?: () => Promise<unknown> } })?.context;
+  if (!contexte?.json) return '';
+  let corps: { paddle_code?: string; reason?: string } | null = null;
+  try {
+    corps = (await contexte.json()) as typeof corps;
+  } catch {
+    return '';
+  }
+  const code = corps?.paddle_code ?? '';
+
+  if (/locked|pending_changes|processing/i.test(code)) {
+    return "Un changement est déjà en cours sur votre abonnement (une résiliation programmée, par exemple) : annulez-le d'abord depuis « Mon abonnement ».";
+  }
+  if (/not_found/i.test(code)) {
+    return "Votre abonnement est introuvable chez notre prestataire de paiement.";
+  }
+  if (corps?.reason === 'not_configured') {
+    return "Le changement de formule n'est pas encore activé sur cet environnement.";
+  }
+  return code ? `(motif technique : ${code})` : '';
+}
+
+/**
  * Bouton de paiement par carte via Paddle (remplaçant de StripePaymentForm).
  * Ouvre le checkout hébergé Paddle (overlay), puis attend l'activation serveur.
  */
@@ -96,6 +127,7 @@ export default function PaddleCheckoutButton({
 
     if (dejaActif) {
       let up: { ok?: boolean; upgraded?: boolean; needs_checkout?: boolean } | null = null;
+      let motif = '';
       try {
         const reponse = await supabase.functions.invoke('paddle-upgrade', {
           body: {
@@ -107,7 +139,13 @@ export default function PaddleCheckoutButton({
         // `invoke` ne lève pas sur un statut d'erreur : il le renvoie dans `error`.
         // Sans cette lecture, un 502 passait pour un « rien à faire » et le code
         // enchaînait sur un checkout — exactement le double abonnement à éviter.
-        if (reponse.error) throw reponse.error;
+        if (reponse.error) {
+          // Le corps de la réponse porte le code d'erreur de Paddle. Sans le
+          // lire, l'échec n'apparaît que sous forme d'un « 502 » dans la console
+          // du navigateur, et personne ne sait quoi corriger.
+          motif = await motifPaddle(reponse.error);
+          throw reponse.error;
+        }
         up = reponse.data;
       } catch {
         up = null;
@@ -134,8 +172,9 @@ export default function PaddleCheckoutButton({
         setState('idle');
         onError(
           "Nous n'avons pas pu modifier votre formule. Votre abonnement actuel reste " +
-            "en place et aucun second prélèvement n'a été fait. Réessayez dans quelques " +
-            'minutes, ou écrivez à contact@minegrid.ma.',
+            "en place et aucun second prélèvement n'a été fait." +
+            (motif ? ` ${motif}` : '') +
+            ' Réessayez dans quelques minutes, ou écrivez à contact@minegrid.ma.',
         );
         return;
       }

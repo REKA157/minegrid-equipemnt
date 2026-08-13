@@ -57,6 +57,28 @@ Après coup, l'ancienne fonction `renders-ai` peut être supprimée du dashboard
 
 ---
 
+## 2 bis. Clore le dossier « double facturation » (30 secondes, sur le bac à sable)
+
+**Pourquoi** : le correctif du changement de formule est écrit et testé, mais l'état réel chez Paddle
+n'a jamais été relevé. Le registre d'audit lui-même dit « pas de test PSP réel ». Aucun risque :
+c'est une lecture seule, sur le bac à sable, et rien n'est modifié.
+
+```powershell
+$env:PADDLE_API_KEY = "ta_cle_SANDBOX"
+$env:PADDLE_ENV = "sandbox"
+cd "C:\Users\Public\projets\SITE_MINEGRID_EQUIPEMENT_COVER\SITE_MINEGRID_EQUIPEMENT_cover 1"
+node .audit/verifier-un-seul-abonnement.mjs test@minegrid.ma
+```
+
+Le script liste les abonnements et conclut. Pour la preuve complète : le lancer, puis changer de
+formule sur le site de staging (port 5199), puis le relancer. Attendu : **exactement 1** abonnement
+actif, au **nouveau prix**, avec le **même identifiant** qu'avant (un identifiant différent voudrait
+dire qu'un second abonnement a été créé).
+
+⚠️ La clé se pose dans la fenêtre PowerShell, **jamais dans un fichier du projet ni dans le chat**.
+
+---
+
 ## 3. Pouvoir encaisser : compte Paddle « live » (délai externe)
 
 **Pourquoi** : aujourd'hui seul le bac à sable fonctionne. Aucun vrai paiement n'est possible.
@@ -66,6 +88,20 @@ Après coup, l'ancienne fonction `renders-ai` peut être supprimée du dashboard
 2. Une fois approuvé, refaire côté **live** ce qui a été fait en sandbox (runbook `.audit/PADDLE_SETUP.md`) :
    catalogue 3 produits (20/50/200 USD), jeton client, destination de notification, clé API.
 3. Me transmettre les **3 identifiants de prix `pri_…`** (publics) : je bascule la configuration et je rebuild.
+4. **Déployer les trois fonctions de paiement en production** — elles n'existent aujourd'hui que sur
+   staging (vérifié le 2026-08-13). Sans elles : pas d'activation après paiement, pas de résiliation,
+   pas de changement de formule.
+
+   ```powershell
+   $env:SUPABASE_ACCESS_TOKEN = "sbp_ton_jeton"
+   cd "C:\Users\Public\projets\SITE_MINEGRID_EQUIPEMENT_COVER\SITE_MINEGRID_EQUIPEMENT_cover 1"
+   npx supabase functions deploy paddle-webhook --project-ref tnfbggrftmtxpgbcwqzo --no-verify-jwt
+   npx supabase functions deploy paddle-cancel  --project-ref tnfbggrftmtxpgbcwqzo
+   npx supabase functions deploy paddle-upgrade --project-ref tnfbggrftmtxpgbcwqzo
+   ```
+
+   ⚠️ `--no-verify-jwt` **uniquement** pour le webhook (Paddle n'a pas de compte utilisateur ; sa
+   signature est vérifiée dans le code). Les deux autres doivent rester protégées par le jeton.
 
 ---
 

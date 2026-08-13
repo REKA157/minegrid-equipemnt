@@ -75,7 +75,7 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
       onSuccess();
       window.location.hash = planHomeHash(data.subscription_type);
     } catch {
-      toast("Erreur lors de l'activation de l'abonnement.");
+      toast.error("Erreur lors de l'activation de l'abonnement.");
     }
   };
 
@@ -163,11 +163,11 @@ export default function PaymentPage({ subscription, userData, onSuccess, onBack 
                 <PaddleCheckoutButton
                   planId={paidPlanId}
                   onSuccess={() => {
-                    toast('✅ Paiement confirmé. Abonnement activé.');
+                    toast.success('Paiement confirmé. Abonnement activé.');
                     onSuccess();
                   }}
                   onError={(message) => {
-                    toast(message || 'Erreur lors du paiement');
+                    toast.error(message || 'Erreur lors du paiement');
                   }}
                 />
               </div>

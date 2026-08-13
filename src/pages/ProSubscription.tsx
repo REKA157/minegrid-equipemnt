@@ -54,31 +54,31 @@ export default function ProSubscription() {
   const redeemPromo = async () => {
     const code = promoCode.trim();
     if (!code) {
-      toast('Entrez un code promo.');
+      toast.info('Entrez un code promo.');
       return;
     }
     setPromoLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        toast('Connectez-vous pour utiliser un code promo.');
+        toast.info('Connectez-vous pour utiliser un code promo.');
         window.location.hash = '#connexion';
         return;
       }
       const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code });
       if (error) {
-        toast('Impossible de valider le code pour le moment. Réessayez.');
+        toast.error('Impossible de valider le code pour le moment. Réessayez.');
         return;
       }
       if (!data?.ok) {
-        toast(`❌ ${data?.error || 'Code promo invalide'}`);
+        toast.error(String(data?.error || 'Code promo invalide'));
         return;
       }
       window.dispatchEvent(new Event('subscriptionRefreshRequested'));
-      toast('✅ Abonnement activé grâce au code promo !');
+      toast.success('Abonnement activé grâce au code promo !');
       goToPlanHome(String(data.subscription_type ?? ''));
     } catch {
-      toast("Erreur lors de l'activation de l'abonnement.");
+      toast.error("Erreur lors de l'activation de l'abonnement.");
     } finally {
       setPromoLoading(false);
     }
@@ -138,10 +138,12 @@ export default function ProSubscription() {
               : `S'abonner — ${plan.priceUsd} USD/mois`
           }
           onSuccess={() => {
-            toast('✅ Paiement confirmé. Votre abonnement est actif !');
+            toast.success('Paiement confirmé. Votre abonnement est actif !');
             goToPlanHome(plan.internalId);
           }}
-          onError={(message) => toast(message)}
+          // Type EXPLICITE : ici on SAIT que c'est un echec. Laisser deviner a fait
+          // afficher un refus sous un bandeau vert « Succes » le 2026-08-13.
+          onError={(message) => toast.error(message)}
         />
       )}
     </div>

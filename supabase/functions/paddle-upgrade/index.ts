@@ -151,8 +151,24 @@ Deno.serve(async (req) => {
     if (resp.status === 400 && detail.includes('subscription_update_when_canceled')) {
       return json(req, { ok: true, needs_checkout: true, reason: 'subscription_canceled' });
     }
-    console.error(`[paddle-upgrade] API Paddle ${resp.status}: ${detail.slice(0, 500)}`);
-    return json(req, { ok: false, reason: 'paddle_error' }, 502);
+
+    // Le CODE d'erreur de Paddle est renvoye au front. Sans lui, un echec
+    // n'apparaissait que sous la forme d'un « 502 Bad Gateway » dans la console
+    // du navigateur : impossible de savoir quoi corriger sans ouvrir les
+    // journaux Supabase. Ce code est purement technique (« subscription_locked_
+    // pending_changes »...), il ne divulgue ni cle ni donnee client.
+    let paddleCode = '';
+    try {
+      paddleCode = String(JSON.parse(detail)?.error?.code ?? '');
+    } catch {
+      /* corps non JSON : on garde le statut seul */
+    }
+    console.error(`[paddle-upgrade] API Paddle ${resp.status} (${paddleCode}): ${detail.slice(0, 500)}`);
+    return json(
+      req,
+      { ok: false, reason: 'paddle_error', paddle_status: resp.status, paddle_code: paddleCode },
+      502,
+    );
   }
 
   // L'etat d'abonnement fait foi cote webhook : on ne l'ecrit pas ici pour

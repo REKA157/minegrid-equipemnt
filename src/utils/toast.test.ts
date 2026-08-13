@@ -4,11 +4,18 @@ import { toast } from './toast';
 
 /**
  * Tests du helper toast. Valident :
- *  - inference automatique du type (success par defaut, error si
- *    mot-cle d'erreur dans le message)
- *  - API `.success`, `.error`, `.warning`, `.info` route vers le bon
- *    niveau
- *  - le message et le titre par defaut sont corrects
+ *  - inference automatique du type : error si mot-cle d'erreur, success si
+ *    marqueur de reussite explicite, INFO dans tous les autres cas ;
+ *  - API `.success`, `.error`, `.warning`, `.info` route vers le bon niveau ;
+ *  - le message et le titre par defaut sont corrects.
+ *
+ * CHANGEMENT DE REGLE, 2026-08-13 — l'inference ne conclut PLUS « succes » par
+ * defaut. Un refus de changement de formule (« Nous n'avons pas pu modifier
+ * votre formule... ») s'etait affiche sous un bandeau VERT intitule « Succes »,
+ * faute de contenir un mot-cle d'erreur : l'utilisateur pouvait croire son
+ * changement effectue. Le cas par defaut est desormais `info`, qui ne ment
+ * jamais. Le premier test ci-dessous porte donc l'attente INVERSE de sa version
+ * d'origine — c'est voulu.
  */
 
 describe('toast', () => {
@@ -28,10 +35,24 @@ describe('toast', () => {
     vi.restoreAllMocks();
   });
 
-  it('toast(msg) sans mot-cle => succes', () => {
+  it('toast(msg) sans mot-cle => INFO (et surtout jamais « succes »)', () => {
     toast('Machine publiee');
-    expect(successSpy).toHaveBeenCalledWith('Succes', 'Machine publiee');
+    expect(infoSpy).toHaveBeenCalledWith('Information', 'Machine publiee');
+    expect(successSpy).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("le refus reel du 2026-08-13 ne doit PAS passer pour un succes", () => {
+    toast(
+      "Nous n'avons pas pu modifier votre formule. Votre abonnement actuel reste " +
+        "en place et aucun second prelevement n'a ete fait.",
+    );
+    expect(successSpy).not.toHaveBeenCalled();
+  });
+
+  it('un marqueur de reussite explicite reste un succes', () => {
+    toast('✅ Paiement confirme. Votre abonnement est actif !');
+    expect(successSpy).toHaveBeenCalled();
   });
 
   it("toast(msg) avec 'erreur' => error", () => {
