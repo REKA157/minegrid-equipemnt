@@ -45,7 +45,7 @@ function readParams(source: string): URLSearchParams {
  */
 const snapshot = (() => {
   if (typeof window === 'undefined') {
-    return { recovery: false, error: null as AuthLinkError | null };
+    return { recovery: false, error: null as AuthLinkError | null, credential: false };
   }
 
   const query = readParams(window.location.search);
@@ -61,12 +61,33 @@ const snapshot = (() => {
     ? { code, description: fragment.get('error_description') ?? '' }
     : null;
 
-  return { recovery, error };
+  // PREUVE que la page vient bien d'un lien e-mail et non d'une adresse tapée à
+  // la main : le service dépose un jeton (parcours implicite) ou un code
+  // d'échange (parcours PKCE). Sans cette preuve, `?type=recovery` seul
+  // permettrait à quiconque trouve une session ouverte sur un poste partagé de
+  // changer le mot de passe sans le connaître.
+  const credential = Boolean(fragment.get('access_token')) || Boolean(query.get('code'));
+
+  return { recovery, error, credential };
 })();
 
 /** Vrai si la page a été ouverte depuis un lien de réinitialisation de mot de passe. */
 export function isPasswordRecoveryLink(): boolean {
   return snapshot.recovery;
+}
+
+/**
+ * Vrai si la page a été ouverte depuis N'IMPORTE QUEL lien e-mail
+ * d'authentification — y compris un lien périmé, qui n'arrive qu'avec une
+ * erreur et mérite une explication plutôt qu'un retour muet à l'accueil.
+ */
+export function isAuthLinkReturn(): boolean {
+  return snapshot.recovery || snapshot.error !== null;
+}
+
+/** Vrai si le lien portait bien un jeton (ou un code) émis par le service. */
+export function hasAuthLinkCredential(): boolean {
+  return snapshot.credential;
 }
 
 /** L'erreur portée par le lien e-mail (lien périmé, déjà utilisé…), sinon `null`. */

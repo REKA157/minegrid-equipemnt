@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import supabase from '../utils/supabaseClient';
-import { getAuthLinkError, describeAuthLinkError, clearAuthLinkTraces } from '../utils/authLink';
-import { getLoginUrl } from '../config/urls';
+import {
+  getAuthLinkError,
+  describeAuthLinkError,
+  clearAuthLinkTraces,
+  hasAuthLinkCredential,
+  isPasswordRecoveryLink,
+} from '../utils/authLink';
+import { navigate } from '../router';
 
 /**
  * Écran « définir un nouveau mot de passe », atteint depuis le lien e-mail.
@@ -13,8 +19,14 @@ import { getLoginUrl } from '../config/urls';
  */
 
 const LONGUEUR_MINIMALE = 8;
-/** Au-delà, c'est que le lien n'a pas ouvert de session : inutile d'attendre plus. */
-const DELAI_SESSION_MS = 8000;
+/**
+ * Délai d'attente de la session ouverte par le lien.
+ * Généreux À DESSEIN : un délai court accusait le lien d'avoir expiré alors que
+ * c'était la connexion qui traînait — message faux, et l'utilisateur redemandait
+ * un lien pour rien, jusqu'à épuiser le quota d'envoi. Le libellé reste d'ailleurs
+ * prudent : on dit qu'on n'arrive pas à vérifier, pas que le lien est mort.
+ */
+const DELAI_SESSION_MS = 30000;
 
 type Etat = 'verification' | 'pret' | 'invalide' | 'enregistre';
 
@@ -40,43 +52,64 @@ export default function UpdatePassword() {
   const [enregistrement, setEnregistrement] = useState(false);
 
   useEffect(() => {
-    // Lien périmé ou déjà utilisé : le service l'a dit dans l'URL, inutile d'attendre.
-    const erreurLien = getAuthLinkError();
-    if (erreurLien) {
-      setErreur(describeAuthLinkError(erreurLien));
-      setEtat('invalide');
-      clearAuthLinkTraces();
-      return;
-    }
-
     let resolu = false;
-    const accepter = () => {
-      if (resolu) return;
-      resolu = true;
-      setEtat('pret');
-      // L'URL a joué son rôle : on la nettoie pour qu'un rechargement ne
-      // ramène pas cet écran indéfiniment.
+
+    /**
+     * Le lien a livré ce qu'il avait à livrer : on efface ses traces de la barre
+     * d'adresse ET on repasse la main au routeur du site (`#update-password`).
+     * Sans ce second geste, l'écran resterait affiché quoi que l'utilisateur
+     * clique ensuite — c'est le piège constaté le 2026-08-12.
+     */
+    const rendreLaMainAuRouteur = () => {
       clearAuthLinkTraces();
+      navigate('update-password', { replace: true });
     };
 
-    // La détection du lien par le SDK est asynchrone : la session peut arriver
-    // avant OU après ce montage. On couvre les deux cas.
+    const terminer = (nouvelEtat: Etat, message?: string) => {
+      if (resolu) return;
+      resolu = true;
+      if (message) setErreur(message);
+      setEtat(nouvelEtat);
+      rendreLaMainAuRouteur();
+    };
+
+    // 1. Lien périmé ou déjà utilisé : le service l'a écrit dans l'URL.
+    const erreurLien = getAuthLinkError();
+    if (erreurLien) {
+      terminer('invalide', describeAuthLinkError(erreurLien));
+      return undefined;
+    }
+
+    // 2. Sécurité : `?type=recovery` tapé à la main, sans jeton, sur un poste où
+    //    une session est restée ouverte. Sans ce contrôle, n'importe qui pourrait
+    //    changer le mot de passe du compte sans le connaître — et en verrouiller
+    //    le propriétaire dehors. Un vrai lien porte toujours un jeton.
+    if (!hasAuthLinkCredential()) {
+      terminer(
+        'invalide',
+        isPasswordRecoveryLink()
+          ? "Cette adresse ne contient pas de lien valide. Pour changer votre mot de passe, ouvrez le lien reçu par e-mail."
+          : "Ce lien n'a pas pu être vérifié. Demandez-en un nouveau depuis la page « Mot de passe oublié ».",
+      );
+      return undefined;
+    }
+
+    // 3. La détection du lien par le SDK est asynchrone : la session peut arriver
+    //    avant OU après ce montage. On couvre les deux cas.
     const { data: abonnement } = supabase.auth.onAuthStateChange(
       (_evenement: string, session: unknown) => {
-        if (session) accepter();
+        if (session) terminer('pret');
       },
     );
     supabase.auth.getSession().then(({ data }: { data: { session: unknown } }) => {
-      if (data?.session) accepter();
+      if (data?.session) terminer('pret');
     });
 
     const minuteur = setTimeout(() => {
-      if (!resolu) {
-        setErreur(
-          "Ce lien n'a pas ouvert de session. Il a probablement expiré ou a déjà servi : demandez-en un nouveau.",
-        );
-        setEtat('invalide');
-      }
+      terminer(
+        'invalide',
+        "Nous n'arrivons pas à vérifier ce lien. Vérifiez votre connexion internet, ou demandez un nouveau lien s'il date de plus d'une heure.",
+      );
     }, DELAI_SESSION_MS);
 
     return () => {
@@ -127,15 +160,18 @@ export default function UpdatePassword() {
       <Cadre>
         <h2 className="text-2xl font-bold text-gray-900 mb-3">Lien inutilisable</h2>
         <p className="text-sm text-gray-700 mb-6">{erreur}</p>
-        <a
-          href="#mot-de-passe-oublie"
+        <button
+          onClick={() => navigate('mot-de-passe-oublie')}
           className="block w-full text-center bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded"
         >
           Demander un nouveau lien
-        </a>
-        <a href="#connexion" className="block mt-3 text-center text-sm text-gray-600 hover:underline">
+        </button>
+        <button
+          onClick={() => navigate('connexion')}
+          className="block w-full mt-3 text-center text-sm text-gray-600 hover:underline"
+        >
           Retour à la connexion
-        </a>
+        </button>
       </Cadre>
     );
   }
@@ -148,7 +184,7 @@ export default function UpdatePassword() {
           Votre nouveau mot de passe est enregistré. Vous pouvez l'utiliser dès maintenant.
         </p>
         <button
-          onClick={() => window.location.replace(getLoginUrl())}
+          onClick={() => navigate('connexion')}
           className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded"
         >
           Aller à la connexion

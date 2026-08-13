@@ -19,14 +19,24 @@ export default function ForgotPassword() {
       });
 
       if (error) {
-        // Le quota d'envoi est la cause la plus frequente : on le nomme
-        // explicitement plutot que d'afficher un message technique opaque.
-        const rateLimited = /rate limit|too many/i.test(error.message);
+        // Le quota d'envoi est la cause la plus frequente. On le reconnait
+        // d'abord sur le CODE renvoye par le serveur (429 / code d'erreur) et
+        // seulement en dernier recours sur le texte anglais : une reformulation
+        // cote Supabase suffisait a faire retomber l'utilisateur sur un message
+        // technique en anglais, qu'il prenait pour une panne du site.
+        const statut = (error as { status?: number }).status;
+        const code = String((error as { code?: string }).code ?? '');
+        const rateLimited =
+          statut === 429 ||
+          /rate.?limit|too_many/i.test(code) ||
+          /rate limit|too many/i.test(error.message);
+
         setIsError(true);
         setMessage(
           rateLimited
             ? "Trop de demandes en peu de temps. Patientez quelques minutes avant de réessayer."
-            : `L'envoi a échoué : ${error.message}`,
+            : "L'envoi n'a pas pu aboutir. Réessayez dans un instant ; si cela persiste, " +
+                'écrivez à contact@minegrid.ma.',
         );
         return;
       }

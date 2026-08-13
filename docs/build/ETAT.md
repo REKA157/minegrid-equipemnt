@@ -69,8 +69,23 @@ Deuxième défaut au même endroit : `UpdatePassword` lisait les jetons à la ma
 Correction : marqueur déplacé dans la query (`?type=recovery`), capture de l'URL au tout premier
 chargement (`src/utils/authLink.ts`, importé en tête de `main.tsx`), écran réécrit (attente réelle de
 la session, confirmation du mot de passe, message clair si le lien a expiré au lieu d'un retour
-silencieux à l'accueil). **8 tests** ajoutés (`authLink.test.ts`, `urls.test.ts`) ; **400/400** au total.
-Vérifié dans le navigateur : lien périmé → message explicite ; lien valide → formulaire, garde-fous actifs.
+silencieux à l'accueil).
+
+**Puis un audit à 34 agents a trouvé 16 défauts — dont 3 BLOQUANTS dans cette correction même**,
+reproduits dans le navigateur avant d'être corrigés :
+
+| # | Défaut | Correction |
+|---|---|---|
+| Piège | L'écran était piloté par un instantané **figé** testé avant le routeur. Une fois affiché, **plus aucun lien ne fonctionnait** (menu, « Aller à la connexion »…) : le routeur par fragment ne fait qu'un re-rendu, jamais un rechargement. Seul F5 en sortait. | `src/hooks/useAuthLinkReturn.ts` : un **état** rendu au routeur à la première navigation |
+| Cul-de-sac | Sur lien périmé — le cas le plus fréquent — le bouton « Demander un nouveau lien » ne menait nulle part | Navigation par le routeur interne, plus d'ancres mortes |
+| Adresse collante | `?type=recovery` restait dans la barre d'adresse quand aucune session ne s'ouvrait : rechargement, retour arrière ou favori ramenaient indéfiniment sur l'écran d'échec | Nettoyage à chaque sortie |
+| Sécurité | `?type=recovery` tapé à la main sur un poste où une session était restée ouverte donnait le formulaire : on pouvait changer le mot de passe **sans le connaître** et verrouiller le titulaire dehors | Un jeton émis par le service est désormais exigé |
+| Délai | 8 s d'attente accusaient à tort le lien d'avoir expiré sur connexion lente | 30 s + libellé prudent (« nous n'arrivons pas à vérifier ») |
+| Quota | Le refus pour excès d'envois n'était reconnu que sur deux formulations anglaises | Reconnu sur le code HTTP 429 / le code d'erreur |
+| Coquille | L'écran s'affichait au milieu du menu et du pied de page du site | Coquille masquée |
+
+**12 tests** ajoutés (`authLink`, `urls`, `useAuthLinkReturn` — dont le test de parcours qui manquait :
+« l'écran doit rester quittable ») ; **404/404** au total. Vérifié dans le navigateur à chaque étape.
 
 ### 🚨 Le paquet de production peut être construit contre la MAUVAISE base — garde-fou posé
 
@@ -104,6 +119,9 @@ et les **20 harnais du projet passent** (aucune régression).
 | A2 | **Délivrabilité e-mail** (SPF/DKIM absents ?) | Patron | Sans ces enregistrements DNS, les confirmations d'inscription risquent le spam chez Gmail/Outlook |
 | A3 | **Édition simultanée AO** (dernière écriture gagnante) | Assistant | Verrouillage optimiste — évolution, non bloquante à 1 utilisateur |
 | A4 | **Export Word = HTML renommé .doc** | Assistant | Avertissement à l'ouverture dans Word — confort |
+| A5 | **Aucune vérification d'adresse e-mail à l'inscription** | **Décision patron** | Le modèle « Confirmez votre inscription » existe mais n'est jamais envoyé : n'importe qui peut créer un compte avec l'adresse d'un tiers. Sur une place de marché portant annonces, devis et dossiers, c'est une usurpation possible. Soit activer la confirmation dans Supabase, soit l'assumer explicitement dans `docs/decisions/` |
+| A6 | **Liste des URLs de retour absente du dépôt** (`supabase/config.toml`) | Patron + Assistant | La liste blanche vit uniquement dans le tableau de bord Supabase : invisible, non versionnée, divergente entre prod et staging (staging accepte `localhost`, pas la prod → le parcours n'y est pas reproductible à l'identique) |
+| A7 | **Route par chemin `/update-password`** | Patron | Le `.htaccess` part bien dans le paquet (vérifié) ; reste à confirmer que la réécriture est active chez l'hébergeur. Non bloquant : le parcours ne passe plus par ce chemin |
 
 ---
 

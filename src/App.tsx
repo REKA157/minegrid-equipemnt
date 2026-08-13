@@ -28,7 +28,7 @@ import ChatWidget from './components/ChatWidget';
 import FinancingRequest from './pages/FinancingRequest';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireSubscription from './components/RequireSubscription';
-import { isPasswordRecoveryLink } from './utils/authLink';
+import { useAuthLinkReturn } from './hooks/useAuthLinkReturn';
 import type { SubscriptionType } from './utils/api/subscription';
 import { ADMIN_SOURCES_ENABLED } from './services/monitorApi';
 
@@ -194,17 +194,21 @@ function AppContent() {
   useExchangeRates();
   const { scope, loading: scopeLoading } = useMemberScope();
 
+  // Retour d'un lien e-mail (mot de passe oublié, lien périmé). Le marqueur est
+  // dans la QUERY (`?type=recovery`) : le service d'authentification écrase le
+  // fragment de l'URL de retour (cf. src/utils/authLink.ts), le routeur par hash
+  // ne peut donc pas le voir. C'est un ÉTAT, pas un instantané figé : sans cela
+  // l'utilisateur reste bloqué sur l'écran, tout lien devenant sans effet.
+  const retourDeLienEmail = useAuthLinkReturn();
+
   const currentRoute = pathParts[0] ?? '';
   const showFooter =
     !APP_ONLY_ROUTES.has(currentRoute) &&
+    !retourDeLienEmail &&
     window.location.pathname !== '/update-password';
 
   const renderContent = () => {
-    // Retour d'un lien « mot de passe oublié ». Le marqueur est dans la QUERY
-    // (`?type=recovery`) et non dans le fragment : le service d'authentification
-    // écrase le fragment de l'URL de retour (cf. src/utils/authLink.ts). Ce test
-    // passe donc AVANT le routage par hash, qui verrait ici la page d'accueil.
-    if (isPasswordRecoveryLink() || window.location.pathname === '/update-password') {
+    if (retourDeLienEmail || window.location.pathname === '/update-password') {
       return <UpdatePassword />;
     }
 

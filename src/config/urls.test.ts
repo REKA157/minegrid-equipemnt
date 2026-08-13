@@ -24,9 +24,11 @@ describe("getResetPasswordUrl — URL de retour du lien « mot de passe oublié 
   });
 
   it('utilise le domaine public quand on développe en local', () => {
+    // VITE_PRODUCTION_URL est explicitement posé ici : sinon le test dépendrait
+    // du .env.local de la machine, et changerait de résultat d'un poste à l'autre.
+    vi.stubEnv('VITE_PRODUCTION_URL', 'https://minegrid-equipement.com');
     poserUrl('http://localhost:5188/#mot-de-passe-oublie');
-    const url = getResetPasswordUrl();
-    expect(url.startsWith('http://localhost')).toBe(false);
-    expect(url).toContain('?type=recovery');
+    expect(getResetPasswordUrl()).toBe('https://minegrid-equipement.com/?type=recovery');
+    vi.unstubAllEnvs();
   });
 });
