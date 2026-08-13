@@ -92,6 +92,19 @@ reproduits dans le navigateur avant d'être corrigés :
 **Le défaut** : un client déjà abonné qui changeait de formule voyait s'ouvrir un **second**
 abonnement Paddle au lieu de voir le premier modifié. Il payait deux fois.
 
+⚠️ **Statut exact du constat, pour ne pas se raconter d'histoires.** MG-H10 vient du registre
+`docs/audit-final/16-vulnerability-register.md`, coté **HIGH / PROBABLE** — pas « confirmé ». Son
+champ preuve dit mot pour mot : « commentaire et flux checkout observés ; **pas de test PSP réel** »,
+et « non exécuté sans sandbox Paddle autorisée ». Autrement dit : **le chemin de code est établi**
+(relu et vérifié ligne à ligne), **le dommage réel ne l'est pas**. Aucun relevé de doublon effectif
+n'existe dans nos traces — ni trois abonnements, ni 600 $/mois. Le nombre d'abonnements réellement
+créés en double reste inconnu tant que `.audit/verifier-un-seul-abonnement.mjs` n'a pas tourné.
+
+**Périmètre vérifié** : un abonnement Paddle ne peut naître que de `openPlanCheckout`, appelé depuis
+un **seul** endroit (`PaddleCheckoutButton.tsx:147`), lui-même utilisé par les deux seules pages de
+paiement (`PaymentPage`, `ProSubscription`). Aucune fonction serveur ne fait de `POST /subscriptions`.
+La porte est unique, et elle est gardée.
+
 **Le correctif** : `supabase/functions/paddle-upgrade/index.ts` — `PATCH /subscriptions/{id}` avec
 `proration_billing_mode: prorated_immediately`. L'abonnement existant est modifié, aucun second
 n'est créé. Prix lus côté serveur (un `price_id` fourni par le client permettrait de choisir son tarif).
