@@ -28,6 +28,7 @@ import ChatWidget from './components/ChatWidget';
 import FinancingRequest from './pages/FinancingRequest';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireSubscription from './components/RequireSubscription';
+import RequirePlatformAdmin from './components/RequirePlatformAdmin';
 import { useAuthLinkReturn } from './hooks/useAuthLinkReturn';
 import type { SubscriptionType } from './utils/api/subscription';
 import { ADMIN_SOURCES_ENABLED } from './services/monitorApi';
@@ -51,6 +52,7 @@ const paidRoute = (level: SubscriptionType, element: React.ReactNode): React.Rea
   </ProtectedRoute>
 );
 
+const AdminConsole = lazy(() => import('./pages/admin/AdminConsole'));
 const SellEquipment = lazy(() => import('./pages/SellEquipment'));
 const ProSubscription = lazy(() => import('./pages/ProSubscription'));
 const ProDashboard = lazy(() => import('./pages/ProDashboard'));
@@ -152,6 +154,7 @@ const APP_ONLY_ROUTES = new Set<string>([
   'demo-entreprise',
   'appels-offres',
   'accepter-invitation',
+  'admin',
 ]);
 
 // Espaces soumis à l'AFFECTATION du membre (cf. useMemberScope).
@@ -308,6 +311,17 @@ function AppContent() {
 
       case 'update-password':
         return <UpdatePassword />;
+
+      // Console d'administration de la plateforme (equipe MineGrid).
+      // La garde refuse par defaut et affiche « page introuvable » : un visiteur
+      // n'apprend pas que cette adresse existe. La securite reste en base : chaque
+      // fonction serveur revérifie l'identite de son cote.
+      case 'admin':
+        return (
+          <RequirePlatformAdmin>
+            <AdminConsole />
+          </RequirePlatformAdmin>
+        );
 
       case 'blog':
         return <Blog postId={pathParts[1]} />;
