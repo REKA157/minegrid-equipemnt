@@ -46,7 +46,7 @@ fonction `renders-ai` est de toute façon en panne : erreur 500 par manque de st
 | B1 | **Site en ligne cassé** : le bundle déployé appelle une base Supabase **supprimée** (`gvbtydxkvuwrxawkxiyv`) → aucune connexion possible pour personne | Patron | Correctif prêt : `minegrid-site.zip` **reconstruit le 2026-08-12**, vérifié 8 points + essai réel → à téléverser dans `public_html` (Hostinger) |
 | B2 | **Aucun encaissement possible** : Paddle n'existe qu'en bac à sable | Patron | Ouvrir un compte **Paddle live** (vérification société, registre de commerce). Délai externe : plusieurs jours |
 | B3 | **Aucune console d'administration** | Assistant | Spec rédigée le 2026-08-12 (3 analyses parallèles) → à valider → implémentation |
-| B4 | **Migration `p25` à appliquer** (sécurité + argent, voir ci-dessous) | Patron | Coller `.audit/APPLY_P25_ORG_HARDENING.sql` dans l'éditeur SQL Supabase — **prod ET staging** |
+| ~~B4~~ | ~~Migration `p25`~~ — ✅ **APPLIQUÉE le 2026-08-13 sur prod ET staging** | — | Vérifié depuis l'extérieur : `ensure_my_organization` (refuse un anonyme), `org_seat_limit` (=1 par défaut) et `org_seats_used` répondent sur les deux bases. La suppression de la règle et les révocations étant en tête du script, leur exécution est acquise |
 
 ### 🔑 « Mot de passe oublié » : ne fonctionnait pas du tout — corrigé le 2026-08-12
 
