@@ -45,8 +45,36 @@ fonction `renders-ai` est de toute façon en panne : erreur 500 par manque de st
 |---|---|---|---|
 | B1 | **Site en ligne cassé** : le bundle déployé appelle une base Supabase **supprimée** (`gvbtydxkvuwrxawkxiyv`) → aucune connexion possible pour personne | Patron | Correctif prêt : `minegrid-site.zip` **reconstruit le 2026-08-12**, vérifié 8 points + essai réel → à téléverser dans `public_html` (Hostinger) |
 | B2 | **Aucun encaissement possible** : Paddle n'existe qu'en bac à sable | Patron | Ouvrir un compte **Paddle live** (vérification société, registre de commerce). Délai externe : plusieurs jours |
-| B3 | **Aucune console d'administration** | Assistant | Spec rédigée le 2026-08-12 (3 analyses parallèles) → à valider → implémentation |
+| B3 | **Console d'administration** — 🟢 **construite, en cours de déploiement** | Patron (SQL) | Voir la section dédiée ci-dessous |
 | ~~B4~~ | ~~Migration `p25`~~ — ✅ **APPLIQUÉE le 2026-08-13 sur prod ET staging** | — | Vérifié depuis l'extérieur : `ensure_my_organization` (refuse un anonyme), `org_seat_limit` (=1 par défaut) et `org_seats_used` répondent sur les deux bases. La suppression de la règle et les révocations étant en tête du script, leur exécution est acquise |
+
+### 🛠️ Console d'administration (B3) — construite les 13 et 14 août
+
+Adresse `#admin`, cinq onglets. **Chargement paresseux** : 6 ko à part, aucun poids pour les visiteurs.
+
+| Étape | Contenu | Preuves | Appliquée ? |
+|---|---|---|---|
+| **p26** | Compte administrateur réel : table, `is_platform_admin()`, journal infalsifiable, nomination/révocation | 12 contre-cas | ✅ prod **et** staging |
+| **p27** | Écran Abonnés + 4 gestes (prolonger, palier, suspendre, réactiver) | 13 contre-cas | ❌ **ni prod ni staging** |
+| **p28** | Boîte Contact + codes promo | 9 contre-cas | ❌ **ni prod ni staging** |
+
+**Ce que la base garantit** (chaque ligne a son contre-cas) : la liste des administrateurs est
+invisible aux clients, même en lecture · une révocation coupe l'accès immédiatement · le journal
+résiste à `UPDATE`, `DELETE` et `TRUNCATE` **même en superutilisateur** · personne ne peut se nommer
+soi-même · le dernier administrateur ne peut pas être retiré · aucun geste sans motif écrit.
+
+**La garde `RequirePlatformAdmin`** est un composant neuf : refus par défaut (chargement, absence de
+session, erreur réseau, réponse inattendue). Un visiteur non autorisé voit « page introuvable », pas
+« accès refusé ». Un lien « Se connecter » n'apparaît **que** s'il n'y a aucune session.
+
+**Trois pièges de chiffres désamorcés** : le palier passe par `planDisplayName()` (codes croisés en
+base) · un abonnement expiré encore marqué « active » n'est pas compté parmi les actifs, et l'écran
+le signale · aucun total d'argent n'est calculé, mais un compteur donne les actifs **sans trace de
+paiement**.
+
+**Reste pour finir la console** : registre des paiements (rien n'est historisé aujourd'hui — le
+chiffre d'affaires du premier mois serait perdu), retrait d'une annonce du catalogue, et les écrans
+repoussés de la spec (santé de la place de marché, signalements, incidents).
 
 ### 🔑 « Mot de passe oublié » : ne fonctionnait pas du tout — corrigé le 2026-08-12
 
@@ -228,5 +256,22 @@ Runbooks : `.audit/PADDLE_SETUP.md` · `docs/TENDERS_OPERATIONS.md` · `.audit/S
 
 ## Prochaine action
 
-1. **Patron** : téléverser `minegrid-site.zip` (débloque tout le reste) puis déployer `tenders-ai`.
-2. **Assistant** : livrer la spec de la console d'administration → validation → implémentation.
+**Patron**, dans l'ordre :
+1. Appliquer `.audit/APPLY_P27_ADMIN_ABONNES.sql` puis `.audit/APPLY_P28_CONTACT_PROMO.sql` —
+   **staging d'abord**, prod ensuite. Sans elles, les onglets Abonnés, Messages et Codes promo
+   affichent une erreur.
+2. Créer le compte administrateur **en production** (il n'existe qu'en staging).
+3. Téléverser `minegrid-site.zip` (débloque la connexion pour tous les visiteurs).
+4. Déployer les fonctions : `paddle-upgrade` (correctif du changement de palier) et `tenders-ai`.
+   ⚠️ La CLI ne relit pas les identifiants de `supabase login` sur cette machine (CLI 2.113.0,
+   gestionnaire d'identifiants Windows) : passer par `$env:SUPABASE_ACCESS_TOKEN`.
+
+**Assistant** : registre des paiements (le plus urgent — rien n'est historisé), puis retrait
+d'annonce du catalogue.
+
+## En attente, sans blocage
+
+- Jetons Supabase : 6 existants, dont 2 jamais utilisés et 1 expiré. Ménage à faire (chacun est une
+  clé permanente vers tout le compte). Vérifié : aucune automatisation du dépôt ne les consomme.
+- Le 502 de `paddle-upgrade` : traité à l'aveugle par le correctif du 2026-08-14 (levée du
+  changement programmé), **à confirmer** une fois la fonction redéployée.

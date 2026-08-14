@@ -220,6 +220,130 @@ export async function setSubscriptionStatus(
   return versResultat(data);
 }
 
+/* ------------------------------------------------------------------ */
+/* Boîte de réception Contact                                           */
+/* ------------------------------------------------------------------ */
+
+export type StatutMessage = 'new' | 'read' | 'replied' | 'archived';
+
+export interface MessageContact {
+  id: string;
+  date: string;
+  nom: string;
+  email: string;
+  societe: string | null;
+  sujet: string;
+  message: string;
+  service: string | null;
+  statut: StatutMessage;
+}
+
+export async function listContactMessages(
+  statut: StatutMessage | 'tous' = 'tous',
+  limite = 100,
+): Promise<MessageContact[]> {
+  const { data, error } = await supabase.rpc('admin_list_contact_messages', {
+    p_statut: statut,
+    p_limite: limite,
+  });
+  if (error) throw new Error(error.message);
+  return (Array.isArray(data) ? data : []).map((l: Record<string, unknown>) => ({
+    id: String(l.id ?? ''),
+    date: String(l.created_at ?? ''),
+    nom: String(l.name ?? ''),
+    email: String(l.email ?? ''),
+    societe: (l.company as string) ?? null,
+    sujet: String(l.subject ?? ''),
+    message: String(l.message ?? ''),
+    service: (l.service as string) ?? null,
+    statut: (l.status as StatutMessage) ?? 'new',
+  }));
+}
+
+export async function contactUnreadCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_contact_unread_count');
+  if (error) return 0;
+  return Number(data ?? 0);
+}
+
+export async function setContactStatus(id: string, statut: StatutMessage): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_contact_status', {
+    p_id: id,
+    p_statut: statut,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/* ------------------------------------------------------------------ */
+/* Codes promo                                                          */
+/* ------------------------------------------------------------------ */
+
+export interface CodePromo {
+  id: string;
+  code: string;
+  plan: string;
+  jours: number;
+  maxUses: number;
+  usesCount: number;
+  expireLe: string | null;
+  actif: boolean;
+  /** Croise actif, échéance ET quota — le seul drapeau `actif` mentirait. */
+  utilisable: boolean;
+}
+
+export async function listPromoCodes(): Promise<CodePromo[]> {
+  const { data, error } = await supabase.rpc('admin_list_promo_codes');
+  if (error) throw new Error(error.message);
+  return (Array.isArray(data) ? data : []).map((l: Record<string, unknown>) => ({
+    id: String(l.id ?? ''),
+    code: String(l.code ?? ''),
+    plan: String(l.subscription_type ?? ''),
+    jours: Number(l.duration_days ?? 0),
+    maxUses: Number(l.max_uses ?? 0),
+    usesCount: Number(l.uses_count ?? 0),
+    expireLe: (l.expires_at as string) ?? null,
+    actif: Boolean(l.active),
+    utilisable: Boolean(l.utilisable),
+  }));
+}
+
+export async function createPromoCode(
+  code: string,
+  plan: string,
+  jours: number,
+  maxUses: number,
+  motif: string,
+  expireLe: string | null = null,
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_create_promo_code', {
+    p_code: code,
+    p_plan: plan,
+    p_jours: jours,
+    p_max_uses: maxUses,
+    p_expire: expireLe,
+    p_reason: motif,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function setPromoActive(id: string, actif: boolean, motif: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_promo_active', {
+    p_id: id,
+    p_active: actif,
+    p_reason: motif,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function promoRedemptions(id: string): Promise<{ email: string; date: string }[]> {
+  const { data, error } = await supabase.rpc('admin_promo_redemptions', { p_id: id });
+  if (error) throw new Error(error.message);
+  return (Array.isArray(data) ? data : []).map((l: Record<string, unknown>) => ({
+    email: String(l.email ?? ''),
+    date: String(l.redeemed_at ?? ''),
+  }));
+}
+
 export interface ActionJournal {
   date: string;
   acteur: string;
