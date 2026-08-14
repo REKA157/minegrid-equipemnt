@@ -344,6 +344,57 @@ export async function promoRedemptions(id: string): Promise<{ email: string; dat
   }));
 }
 
+/* ------------------------------------------------------------------ */
+/* Registre des paiements                                               */
+/* ------------------------------------------------------------------ */
+
+export interface Paiement {
+  date: string;
+  email: string;
+  plan: string;
+  /** EN CENTIMES, tel que Paddle le renvoie. Diviser par 100 pour afficher. */
+  montantCentimes: number | null;
+  devise: string;
+  evenement: string;
+  reference: string | null;
+}
+
+export interface StatsPaiements {
+  moisCentimes: number;
+  moisNombre: number;
+  totalCentimes: number;
+  totalNombre: number;
+  /** Liste des devises présentes. Plusieurs -> ne pas additionner. */
+  devises: string;
+}
+
+export async function listPayments(limite = 50): Promise<Paiement[]> {
+  const { data, error } = await supabase.rpc('admin_list_payments', { p_limite: limite });
+  if (error) throw new Error(error.message);
+  return (Array.isArray(data) ? data : []).map((l: Record<string, unknown>) => ({
+    date: String(l.occurred_at ?? ''),
+    email: String(l.email ?? ''),
+    plan: String(l.plan ?? ''),
+    montantCentimes: l.amount_cents === null ? null : Number(l.amount_cents),
+    devise: String(l.currency ?? 'USD'),
+    evenement: String(l.event_type ?? ''),
+    reference: (l.reference as string) ?? null,
+  }));
+}
+
+export async function getPaymentStats(): Promise<StatsPaiements> {
+  const { data, error } = await supabase.rpc('admin_payment_stats');
+  if (error) throw new Error(error.message);
+  const l = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined;
+  return {
+    moisCentimes: Number(l?.encaisse_mois_cents ?? 0),
+    moisNombre: Number(l?.paiements_mois ?? 0),
+    totalCentimes: Number(l?.encaisse_total_cents ?? 0),
+    totalNombre: Number(l?.paiements_total ?? 0),
+    devises: String(l?.devises ?? 'USD'),
+  };
+}
+
 export interface ActionJournal {
   date: string;
   acteur: string;

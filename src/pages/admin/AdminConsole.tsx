@@ -5,24 +5,26 @@ import AdminSubscribers from './AdminSubscribers';
 import AdminAccess from './AdminAccess';
 import AdminContact from './AdminContact';
 import AdminPromo from './AdminPromo';
+import AdminPayments from './AdminPayments';
 import AdminJournal from './AdminJournal';
 
 /**
  * Coquille de la console d'administration de la plateforme.
  *
- * Cinq onglets, dans l'ordre d'usage réel : les abonnés d'abord (l'écran ouvert
- * dix fois par jour), puis les messages reçus, les codes promo, les accès, et
- * le journal en dernier.
+ * Six onglets, dans l'ordre d'usage réel : les abonnés d'abord (l'écran ouvert
+ * dix fois par jour), puis les paiements, les messages reçus, les codes promo,
+ * les accès, et le journal en dernier.
  *
  * Les onglets ne sont qu'un confort d'affichage : chaque fonction serveur
  * revérifie l'identité de l'appelant, et la garde `RequirePlatformAdmin` protège
  * déjà la route. Rien ici n'accorde de droit.
  */
 
-type Onglet = 'abonnes' | 'messages' | 'promo' | 'acces' | 'journal';
+type Onglet = 'abonnes' | 'paiements' | 'messages' | 'promo' | 'acces' | 'journal';
 
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: 'abonnes', libelle: 'Abonnés' },
+  { cle: 'paiements', libelle: 'Paiements' },
   { cle: 'messages', libelle: 'Messages' },
   { cle: 'promo', libelle: 'Codes promo' },
   { cle: 'acces', libelle: 'Accès' },
@@ -84,6 +86,7 @@ export default function AdminConsole() {
       </nav>
 
       {onglet === 'abonnes' && <AdminSubscribers />}
+      {onglet === 'paiements' && <AdminPayments />}
       {onglet === 'messages' && <AdminContact />}
       {onglet === 'promo' && <AdminPromo />}
       {onglet === 'acces' && <AdminAccess />}

@@ -103,6 +103,47 @@ interface ActivateParams {
   periodEndsAt: string | null;
 }
 
+/**
+ * Historise l'encaissement dans `subscription_payments` (p29).
+ *
+ * POURQUOI SÉPARÉMENT DE L'ACTIVATION
+ *   `pro_clients` ne garde que l'ÉTAT COURANT : chaque webhook écrase le
+ *   précédent. Sans ce registre, douze mois de paiements ne laissent qu'une
+ *   ligne — celle du dernier. Un chiffre d'affaires qu'on n'a jamais écrit ne se
+ *   reconstitue pas après coup.
+ *
+ * POURQUOI L'ÉCHEC N'INTERROMPT PAS L'ACTIVATION
+ *   Entre « le client a payé mais l'historique manque une ligne » et « le client
+ *   a payé et n'a pas son accès », le second est bien pire. On enregistre donc
+ *   l'incident dans les journaux et on laisse l'activation se poursuivre.
+ *
+ * L'unicité de `paddle_transaction_id` absorbe les relivraisons de Paddle.
+ */
+async function recordPayment(
+  params: ActivateParams,
+  eventType: string,
+  occurredAt: string | null,
+): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin.from('subscription_payments').insert({
+      user_id: params.userId,
+      paddle_transaction_id: params.transactionId,
+      paddle_subscription_id: params.subscriptionId,
+      event_type: eventType,
+      plan: params.planId,
+      amount_cents: params.amountCents,
+      occurred_at: occurredAt ?? new Date().toISOString(),
+    });
+    // 23505 = doublon sur paddle_transaction_id : c'est une relivraison, donc le
+    // comportement ATTENDU. Ce n'est pas une anomalie à signaler.
+    if (error && error.code !== '23505') {
+      console.error('[paddle-webhook] registre des paiements:', error.message);
+    }
+  } catch (e) {
+    console.error('[paddle-webhook] registre des paiements (exception):', e);
+  }
+}
+
 async function activateSubscription(params: ActivateParams): Promise<void> {
   const now = new Date();
   const end = params.periodEndsAt
@@ -203,7 +244,7 @@ Deno.serve(async (req) => {
         const grandTotal = txn.details?.totals?.grand_total;
         const amountCents =
           typeof grandTotal === 'string' && grandTotal !== '' ? Number(grandTotal) : null;
-        await activateSubscription({
+        const params = {
           userId,
           planId: plan,
           amountCents: Number.isFinite(amountCents as number) ? (amountCents as number) : null,
@@ -211,7 +252,15 @@ Deno.serve(async (req) => {
           subscriptionId: typeof txn.subscription_id === 'string' ? txn.subscription_id : null,
           periodEndsAt:
             typeof txn.billing_period?.ends_at === 'string' ? txn.billing_period.ends_at : null,
-        });
+        };
+        await activateSubscription(params);
+        // Historisation APRÈS l'activation : l'accès du client prime sur la
+        // comptabilité, et un échec ici ne doit jamais lui coûter son abonnement.
+        await recordPayment(
+          params,
+          eventType,
+          typeof txn.billed_at === 'string' ? txn.billed_at : null,
+        );
       }
     } else if (eventType === 'subscription.canceled') {
       // Fin d'abonnement effective (Paddle émet cet événement quand la résiliation
