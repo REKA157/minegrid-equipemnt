@@ -121,19 +121,88 @@ Deno.serve(async (req) => {
     return json(req, { ok: true, needs_checkout: true });
   }
 
-  // ---- CHANGEMENT DE PRIX AVEC PRORATION -----------------------------------
-  // C'est le coeur du correctif : on modifie l'abonnement EXISTANT.
-  // `proration_billing_mode: prorated_immediately` facture immediatement la
-  // difference au prorata. Aucune seconde souscription n'est creee.
   const headers: Record<string, string> = {
     Authorization: `Bearer ${PADDLE_API_KEY}`,
     'Content-Type': 'application/json',
   };
   // Idempotence : un double clic ou un retry reseau ne doit pas facturer deux fois.
   if (body.idempotency_key) headers['Paddle-Idempotency-Key'] = body.idempotency_key;
+  const abonnementUrl = `${PADDLE_API_BASE}/subscriptions/${row.paddle_subscription_id}`;
 
+  // ---- ETAT REEL DE L'ABONNEMENT CHEZ PADDLE -------------------------------
+  // On regarde AVANT de modifier. Paddle refuse en effet de changer le prix d'un
+  // abonnement qui porte un changement programme (une resiliation, une mise en
+  // pause) ou qui est deja en pause : la demande echoue alors avec un « 502 »
+  // cote client, sans que personne sache pourquoi. Constate sur staging le
+  // 2026-08-14, apres qu'un test de resiliation eut laisse une annulation
+  // programmee sur l'abonnement.
+  let resiliationAnnulee = false;
+  let abonnementRepris = false;
+
+  const etatResp = await fetch(abonnementUrl, { headers });
+  if (etatResp.status === 404) {
+    // L'abonnement n'existe plus chez Paddle : il n'y a rien a dupliquer, donc
+    // un checkout neuf est legitime.
+    return json(req, { ok: true, needs_checkout: true, reason: 'subscription_absente' });
+  }
+  if (!etatResp.ok) {
+    const detail = await etatResp.text().catch(() => '');
+    console.error(`[paddle-upgrade] lecture abonnement ${etatResp.status}: ${detail.slice(0, 400)}`);
+    return json(req, { ok: false, reason: 'paddle_error', paddle_status: etatResp.status }, 502);
+  }
+
+  const etat = await etatResp.json().catch(() => ({}));
+  const statut: string = etat?.data?.status ?? '';
+  const changementProgramme = etat?.data?.scheduled_change ?? null;
+
+  if (statut === 'canceled') {
+    return json(req, { ok: true, needs_checkout: true, reason: 'subscription_canceled' });
+  }
+
+  // 1. Lever le changement programme, s'il y en a un. Un client qui choisit une
+  //    nouvelle formule veut manifestement rester : on annule donc la
+  //    resiliation prevue — mais on le REMONTE, pour que l'ecran le dise. Une
+  //    resiliation annulee sans prevenir serait une mauvaise surprise.
+  if (changementProgramme?.action) {
+    const leverResp = await fetch(abonnementUrl, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ scheduled_change: null }),
+    });
+    if (!leverResp.ok) {
+      const detail = await leverResp.text().catch(() => '');
+      console.error(`[paddle-upgrade] levee du changement programme ${leverResp.status}: ${detail.slice(0, 400)}`);
+      return json(
+        req,
+        { ok: false, reason: 'scheduled_change_locked', paddle_status: leverResp.status },
+        502,
+      );
+    }
+    resiliationAnnulee = changementProgramme.action === 'cancel';
+  }
+
+  // 2. Reprendre un abonnement en pause : on ne peut pas changer le prix d'un
+  //    abonnement suspendu.
+  if (statut === 'paused') {
+    const repriseResp = await fetch(`${abonnementUrl}/resume`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ effective_from: 'immediately' }),
+    });
+    if (!repriseResp.ok) {
+      const detail = await repriseResp.text().catch(() => '');
+      console.error(`[paddle-upgrade] reprise ${repriseResp.status}: ${detail.slice(0, 400)}`);
+      return json(req, { ok: false, reason: 'resume_failed', paddle_status: repriseResp.status }, 502);
+    }
+    abonnementRepris = true;
+  }
+
+  // ---- CHANGEMENT DE PRIX AVEC PRORATION -----------------------------------
+  // C'est le coeur du correctif : on modifie l'abonnement EXISTANT.
+  // `proration_billing_mode: prorated_immediately` facture immediatement la
+  // difference au prorata. Aucune seconde souscription n'est creee.
   const resp = await fetch(
-    `${PADDLE_API_BASE}/subscriptions/${row.paddle_subscription_id}`,
+    abonnementUrl,
     {
       method: 'PATCH',
       headers,
@@ -174,5 +243,14 @@ Deno.serve(async (req) => {
   // L'etat d'abonnement fait foi cote webhook : on ne l'ecrit pas ici pour
   // eviter deux sources de verite. Le webhook `paddle-webhook` recevra
   // subscription.updated et mettra pro_clients a jour.
-  return json(req, { ok: true, upgraded: true, plan: body.plan });
+  //
+  // `resiliation_annulee` / `abonnement_repris` ne sont pas decoratifs : ce sont
+  // des effets de bord REELS sur le contrat du client, que l'ecran doit annoncer.
+  return json(req, {
+    ok: true,
+    upgraded: true,
+    plan: body.plan,
+    resiliation_annulee: resiliationAnnulee,
+    abonnement_repris: abonnementRepris,
+  });
 });

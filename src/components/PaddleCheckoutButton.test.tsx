@@ -94,6 +94,24 @@ describe('PaddleCheckoutButton — au plus UN abonnement Paddle actif', () => {
     expect(openPlanCheckout).not.toHaveBeenCalled();
   });
 
+  it("résiliation programmée levée au passage : l'utilisateur en est AVERTI", async () => {
+    // Paddle refuse de changer le prix d'un abonnement portant une résiliation
+    // programmée ; la fonction la lève d'abord. C'est un changement réel du
+    // contrat — il doit être annoncé, jamais silencieux.
+    getMySubscription.mockResolvedValue(ABONNE);
+    invoke.mockResolvedValue({
+      data: { ok: true, upgraded: true, resiliation_annulee: true },
+      error: null,
+    });
+
+    const { onError, onSuccess } = monter();
+    await cliquer();
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(String(onError.mock.calls[0]?.[0])).toMatch(/résiliation programmée a été annulée/i);
+    expect(openPlanCheckout).not.toHaveBeenCalled();
+  });
+
   it("paddle-upgrade renvoie une erreur : on REFUSE plutôt que d'ouvrir un second abonnement", async () => {
     getMySubscription.mockResolvedValue(ABONNE);
     // `functions.invoke` ne lève pas sur un 502 : il le rend dans `error`.

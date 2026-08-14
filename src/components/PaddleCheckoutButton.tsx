@@ -126,7 +126,13 @@ export default function PaddleCheckoutButton({
     const dejaActif = (await getMySubscription()).isActive;
 
     if (dejaActif) {
-      let up: { ok?: boolean; upgraded?: boolean; needs_checkout?: boolean } | null = null;
+      let up: {
+        ok?: boolean;
+        upgraded?: boolean;
+        needs_checkout?: boolean;
+        resiliation_annulee?: boolean;
+        abonnement_repris?: boolean;
+      } | null = null;
       let motif = '';
       try {
         const reponse = await supabase.functions.invoke('paddle-upgrade', {
@@ -152,6 +158,16 @@ export default function PaddleCheckoutButton({
       }
 
       if (up?.ok && up.upgraded) {
+        // Effets de bord RÉELS sur le contrat : annuler une résiliation
+        // programmée sans le dire serait une mauvaise surprise au relevé suivant.
+        if (up.resiliation_annulee) {
+          onError(
+            'À noter : votre résiliation programmée a été annulée, puisque vous changez de formule. ' +
+              'Votre abonnement se poursuivra normalement.',
+          );
+        } else if (up.abonnement_repris) {
+          onError('À noter : votre abonnement, qui était en pause, a été repris.');
+        }
         setState('waiting');
         const activated = await waitForActivation();
         window.dispatchEvent(new Event('subscriptionRefreshRequested'));
