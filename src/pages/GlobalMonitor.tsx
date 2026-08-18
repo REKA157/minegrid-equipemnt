@@ -117,6 +117,13 @@ export default function GlobalMonitor() {
       let message: string;
       if (!MONITOR_CONFIGURED) {
         message = 'Radar non configuré sur cet environnement.';
+      } else if (statut === '401' && /[Tt]oken .*(requis|invalide)/.test(detail)) {
+        // Le radar distingue « pas de jeton » de « pas d'abonnement ». Confondre
+        // les deux envoyait l'utilisateur vérifier son abonnement alors qu'il
+        // lui suffisait de se reconnecter — constaté le 2026-08-18 sur staging.
+        message =
+          'Vous n’êtes pas connecté, ou votre session a expiré. ' +
+          'Reconnectez-vous, puis rechargez cette page.';
       } else if (statut === '401' || statut === '403') {
         message =
           "Accès au Radar refusé : il est réservé aux formules Pro et supérieures. " +
