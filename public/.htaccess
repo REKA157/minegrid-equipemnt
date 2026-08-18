@@ -8,3 +8,21 @@
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]
 </IfModule>
+
+# =====================================================================
+# EN-TETES DE SECURITE (SEC-HEADERS / R-07)
+# ---------------------------------------------------------------------
+# Le fichier public/_headers est au format Netlify : Apache (Hostinger) NE LE
+# LIT PAS. Les protections annoncees (clickjacking, HSTS, CSP...) n'etaient donc
+# PAS servies en production. On les porte ici, ou elles sont reellement appliquees.
+# CSP : connect-src couvre Supabase ; frame-src/script-src couvrent Paddle (le
+# PSP reellement utilise) ; a resserrer une fois les domaines figes.
+# =====================================================================
+<IfModule mod_headers.c>
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(self), microphone=(), camera=()"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.paddle.com https://sandbox-cdn.paddle.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://*.hstgr.cloud https://nominatim.openstreetmap.org; frame-src https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+</IfModule>

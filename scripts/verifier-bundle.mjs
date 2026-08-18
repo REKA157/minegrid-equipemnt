@@ -79,6 +79,21 @@ for (const { motif, nom } of MOTIFS_INTERDITS) {
   }
 }
 
+// Fichiers de test ou de débogage servis publiquement. `public/` est recopié
+// tel quel dans le paquet : un script oublié là se retrouve en ligne, à une
+// adresse devinable. Trouvé le 2026-08-15 : `test-reactivation.js`, orphelin
+// depuis un an, exposait les anciennes clés d'abonnement du navigateur.
+const suspects = fichiers.filter((f) =>
+  /(^|[\\/])(test|debug|tmp|temp|old|copie|backup)[-_.]/i.test(f.split(/[\\/]/).pop()),
+);
+if (suspects.length > 0) {
+  erreurs.push(
+    `Fichier(s) de test/débogage dans le paquet public : ${suspects
+      .map((f) => f.split(/[\\/]/).pop())
+      .join(', ')}.\n      Ils seront servis en ligne à une adresse devinable. À sortir de public/.`,
+  );
+}
+
 // Le lien de réinitialisation ne doit JAMAIS porter de fragment : le service
 // d'authentification l'écrase (cf. src/utils/authLink.ts).
 if (/\/#update-password/.test(contenu)) {

@@ -106,10 +106,26 @@ export default function GlobalMonitor() {
       hadLiveSuccessRef.current = true;
     } catch (error) {
       // Message UTILISATEUR en français ; le détail technique part en console.
-      console.error('[GlobalMonitor] API injoignable:', error);
-      const message = MONITOR_CONFIGURED
-        ? 'Service Radar momentanément injoignable — réessayez plus tard.'
-        : "Radar non configuré sur cet environnement.";
+      console.error('[GlobalMonitor] appel radar en echec:', error);
+      // Un REFUS n'est pas une PANNE. Le message unique « momentanément
+      // injoignable » s'affichait pour n'importe quelle erreur, y compris un 401 :
+      // l'utilisateur cherchait une panne de service pendant qu'il lui manquait
+      // simplement un abonnement. Constaté le 2026-08-15, service parfaitement
+      // en ligne. On distingue donc les trois cas.
+      const detail = error instanceof Error ? error.message : String(error);
+      const statut = /API (\d{3})/.exec(detail)?.[1] ?? '';
+      let message: string;
+      if (!MONITOR_CONFIGURED) {
+        message = 'Radar non configuré sur cet environnement.';
+      } else if (statut === '401' || statut === '403') {
+        message =
+          "Accès au Radar refusé : il est réservé aux formules Pro et supérieures. " +
+          'Si vous venez de souscrire, rechargez la page dans une minute.';
+      } else if (statut) {
+        message = `Le Radar a répondu une erreur (${statut}). Réessayez ; si cela persiste, écrivez à contact@minegrid.ma.`;
+      } else {
+        message = 'Service Radar injoignable — vérifiez votre connexion, puis réessayez.';
+      }
       setLiveError(message);
       if (!hadLiveSuccessRef.current) {
         // API injoignable et jamais de succès : on n'invente rien (anti-façade) -> vide + erreur.
