@@ -47,7 +47,7 @@ mal, et deux personnes ne peuvent pas y travailler en même temps.
 |---|---|---|
 | **1 — Registre des bases** | `npm run bases` : comparer prod et staging en 30 s | ✅ **fait** — 2 écarts et 8 manquants révélés dès le premier passage |
 | **2 — Un seul endroit pour le SQL** | Le SQL vivait dans **quatre** dossiers, dont « SQL_A_APPLIQUER » qui était déjà appliqué | ✅ **fait** — 56 fichiers archivés, garde-fou `npm run verifier:sql` |
-| **3 — Découper les 11 fichiers > 1 000 lignes** | Un par un, les 463 tests relancés entre chaque | ⏳ **à faire** |
+| **3 — Découper les gros fichiers** | 14 fichiers > 1 000 lignes (et non 11 : le chiffre a grossi avec le travail non commité) | 🔄 **en cours** — le plus gros est fait, voir ci-dessous |
 | **4 — Fusionner les 4 dossiers de widgets** | Quatre implémentations parallèles du même besoin | ⏳ **à faire** |
 
 ### Priorité 2 — ce qui a été vérifié AVANT de déplacer quoi que ce soit
@@ -88,6 +88,52 @@ preuves aurait cherché un fichier disparu. Vérifié : plus aucun préfixe en d
 
 Ni l'une ni l'autre n'est appliquée nulle part (`npm run bases` le confirme : `subscription_payments`
 absente des deux bases) — le renommage n'a donc aucune conséquence sur les bases existantes.
+
+### Priorité 3 — `WidgetRenderer.tsx` : 3 563 → 1 497 lignes
+
+C'était le plus gros fichier du dépôt. Le problème n'était pas seulement sa longueur :
+
+| | Avant | Après |
+|---|---|---|
+| Lignes | 3 563 | **1 497** (−58 %) |
+| `useState` | 84 | **32** |
+| `useEffect` | 38 | **15** |
+| Effets ouverts par `if (widget.id !== …) return` | 36 | **13** |
+
+Le fichier déclarait l'état de **tous** les widgets à la fois. Afficher un seul widget allouait
+les 84 états et déclenchait les 38 effets, dont 36 repartaient immédiatement. Sur un tableau de
+douze widgets, cela se multipliait par douze. Ce n'était donc pas qu'une question de lisibilité.
+
+**24 widgets** sont désormais des composants autonomes dans `src/components/dashboard/widgets/`,
+chacun avec son état, son chargement et son abonnement à `pipeline:refresh`.
+
+**Comment, sans casser** — le fichier n'avait aucun test, et 2 000 lignes de JSX déplacées à la
+main se seraient abîmées sans que rien ne le signale :
+
+- extraction **par programme** (jamais retapée), avec un script qui **refuse** dès qu'il rencontre
+  un cas qu'il ne sait pas traiter : état partagé avec un autre widget, dépendance à une variable
+  locale du parent, bloc mal borné. Il a refusé 9 widgets — ils restent à faire à la main ;
+- `tsc` après **chaque** extraction, avec annulation automatique en cas d'échec. Il a servi :
+  `demurrage-tracking` a cassé le fichier et a été annulé, le temps de corriger le script ;
+- deux défauts du script attrapés par ces garde-fous : une découpe qui ne prenait que la première
+  ligne d'une déclaration d'état sur plusieurs lignes, et un repère ambigu qui confondait la
+  branche de rafraîchissement avec le bloc de rendu (même indentation).
+
+**Ce qui est prouvé** : `widgetsExtraits.smoke.test.tsx` monte les 24 widgets, les laisse charger
+sur une API vide, les démonte, et vérifie qu'ils **se désabonnent** de `pipeline:refresh`. Sans
+cela, chaque ouverture du tableau de bord laisserait un écouteur derrière elle. Test vérifié par
+mutation : supprimer un désabonnement le fait échouer.
+Plus `widgetRendererMappers.test.ts` : 28 tests sur sept fonctions pures qui n'en avaient aucun.
+
+**Total : 463 → 538 tests.** Types OK, build OK.
+
+⚠️ **Honnêteté sur le gain** : le paquet livré ne rétrécit pas (596 → 598 ko). Les widgets restent
+importés statiquement dans le même morceau. Le gain est sur les hooks, la taille des fichiers et
+la testabilité — pas sur le poids téléchargé. Les charger à la demande serait une étape de plus.
+
+**Reste sur ce fichier** : 9 widgets refusés par le script (dont `active-deliveries`,
+`driver-schedule`, `route-optimization`, `repair-status`, `document-status`, `inventory-alerts`,
+`rental-revenue`), qui partagent `handleWidgetAction` ou une donnée du parent.
 
 ---
 
