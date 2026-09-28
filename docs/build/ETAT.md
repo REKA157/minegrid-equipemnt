@@ -1,7 +1,7 @@
 # ETAT — MineGrid Équipement
 
 > Tableau de bord du projet. **À lire en début de session, à mettre à jour avant chaque commit.**
-> Dernière mise à jour : **2026-09-28**
+> Dernière mise à jour : **2026-09-28** — séance « hygiène et scalabilité » (priorités 1 à 4)
 
 ---
 
@@ -461,6 +461,31 @@ Runbooks : `.audit/PADDLE_SETUP.md` · `docs/TENDERS_OPERATIONS.md` · `.audit/S
 
 **Assistant** : registre des paiements (le plus urgent — rien n'est historisé), puis retrait
 d'annonce du catalogue.
+
+### Reste du chantier hygiène (priorité 3)
+
+Onze fichiers dépassent encore 1 000 lignes, dont **huit sans aucun test**. Ils ne seront pas
+découpés à l'aveugle : la marche à suivre éprouvée cette séance est d'abord d'écrire les tests
+qui manquent, puis de découper, puis de vérifier par mutation.
+
+| Fichier | Lignes | Tests |
+|---|---|---|
+| `VitrinePersonnalisee.tsx` | 2 109 | 9 cas |
+| `PublicationRapide.tsx` | 1 956 | aucun |
+| `pro/widgets/EquipmentTab.tsx` | 1 778 | aucun |
+| `dashboard/widgets/SalesPipelineWidget.tsx` | 1 585 | aucun |
+| `dashboard/widgets/StockStatusWidget.tsx` | 1 576 | aucun |
+| `WidgetRenderer.tsx` | 1 497 | 47 (fumée) |
+| `MultiUserManagement.tsx` | 1 153 | 18 |
+| `MachineDetail.tsx` | 1 120 | 17 |
+| `pro/widgets/OrdersTab.tsx` | 1 174 | aucun |
+| `TransactionCasePage.tsx` | 1 118 | 2 cas |
+| `SellEquipment.tsx` | 1 113 | 6 cas |
+
+Deux autres chantiers ouverts, chiffrés mais non engagés :
+- **~50 fichiers / ~5 900 lignes de code mort** encore dispersés (voir `archive/code-mort/README.md`) ;
+- **`tsconfig.app.json` strict jamais utilisé** : le build type-vérifie en mode laxiste. Activer
+  `strict` sur 580 fichiers est un chantier à chiffrer avant de s'y mettre.
 
 ## En attente, sans blocage
 
