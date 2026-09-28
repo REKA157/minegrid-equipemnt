@@ -570,28 +570,58 @@ d'annonce du catalogue.
 
 ### Reste du chantier hygiène (priorité 3)
 
-Onze fichiers dépassent encore 1 000 lignes, dont **huit sans aucun test**. Ils ne seront pas
-découpés à l'aveugle : la marche à suivre éprouvée cette séance est d'abord d'écrire les tests
-qui manquent, puis de découper, puis de vérifier par mutation.
+Douze fichiers dépassent encore 1 000 lignes. Les onze cartographiés l'ont tous été avec le même
+verdict : **« tests d'abord »**. Chacun a désormais un plan de découpe écrit — lignes exactes,
+dépendances de chaque bloc, cas de test à écrire. Rien n'est à redécouvrir.
 
-| Fichier | Lignes | Tests |
+| Fichier | Lignes | Tests | Gain identifié |
+|---|---|---|---|
+| `VitrinePersonnalisee.tsx` | 2 062 | 24 | 1 248 l. en 11 extractions |
+| `PublicationRapide.tsx` | 1 957 | aucun | 1 461 l. en 12 extractions |
+| `pro/widgets/EquipmentTab.tsx` | 1 806 | aucun | 1 320 l. en 10 extractions |
+| `dashboard/widgets/SalesPipelineWidget.tsx` | 1 607 | aucun | 598 l. |
+| `dashboard/widgets/StockStatusWidget.tsx` | 1 588 | aucun | 834 l. |
+| `WidgetRenderer.tsx` | 1 497 | 47 (fumée) | 979 l., dont les 9 widgets que le script avait refusés |
+| `MultiUserManagement.tsx` | 1 200 | 21 | 462 l. |
+| `pro/widgets/OrdersTab.tsx` | 1 174 | aucun | 635 l. |
+| `MachineDetail.tsx` | 1 129 | 17 | 403 l. |
+| `TransactionCasePage.tsx` | 1 118 | 2 | 457 l. |
+| `SellEquipment.tsx` | 1 113 | 6 | 544 l. |
+| `components/SalesEvolutionWidgetEnriched.tsx` | 1 026 | aucun | non cartographié |
+
+**La méthode qui a marché, à réutiliser** : extraction par programme (jamais retapée), avec un
+script qui refuse tout cas qu'il ne sait pas traiter ; `tsc` après chaque étape avec annulation
+automatique en cas d'échec ; tests écrits avant ou pendant ; et **vérification par mutation** —
+casser volontairement le code pour voir le test échouer. Un test qui n'a jamais échoué ne prouve
+rien.
+
+### Défauts identifiés et VOLONTAIREMENT non corrigés — à trancher
+
+Ce sont des décisions produit, pas des corrections techniques. Chacune est documentée en
+commentaire à l'endroit exact du code.
+
+| Où | Quoi | Pourquoi je n'ai pas tranché |
 |---|---|---|
-| `VitrinePersonnalisee.tsx` | 2 109 | 9 cas |
-| `PublicationRapide.tsx` | 1 956 | aucun |
-| `pro/widgets/EquipmentTab.tsx` | 1 778 | aucun |
-| `dashboard/widgets/SalesPipelineWidget.tsx` | 1 585 | aucun |
-| `dashboard/widgets/StockStatusWidget.tsx` | 1 576 | aucun |
-| `WidgetRenderer.tsx` | 1 497 | 47 (fumée) |
-| `MultiUserManagement.tsx` | 1 153 | 18 |
-| `MachineDetail.tsx` | 1 120 | 17 |
-| `pro/widgets/OrdersTab.tsx` | 1 174 | aucun |
-| `TransactionCasePage.tsx` | 1 118 | 2 cas |
-| `SellEquipment.tsx` | 1 113 | 6 cas |
+| `StockStatusWidget` | « dumper » est classé **Camion** avant d'atteindre la branche **Tombereau** | Déplacer le mot reclasserait des machines déjà en base |
+| `EquipmentTab` | Le statut du formulaire (`active/maintenance/inactive/sold`) ne correspond pas à la contrainte de la base (`available/sold/reserved`) | « Inactif » veut-il dire « réservé » ou « retiré de la vente » ? Le champ est désormais en lecture seule et le dit. |
+| `EquipmentTab` | Pas de colonne `location` dans `machines` — il y a `city`, `address`, `region`, `country` | Laquelle alimenter est un choix métier. Champ en lecture seule et le dit. |
+| `PublicationRapide` | `loadAnalyticsData()` lit l'état `machines` encore vide dans sa fermeture : **au premier chargement le vendeur voit 0 vue** et doit cliquer « Actualiser » | Correction sûre, mais elle touche au flux de chargement : mérite son propre passage avec tests |
+| `autoSpecsService` | Un poids inconnu est pré-rempli à **0 kg** dans le formulaire de publication | Une annonce peut partir à 0 kg et sortir des filtres par tonnage côté acheteur |
+| `SalesPipelineWidget` | Un lead **jamais contacté** n'est jamais signalé « bloqué » (`new Date(undefined)` → NaN, et `NaN > 7` est faux) | Latent : le type déclare `last_contact` non nul, mais tout le chemin est en `any`, donc invérifiable en l'état |
 
-Deux autres chantiers ouverts, chiffrés mais non engagés :
-- **~50 fichiers / ~5 900 lignes de code mort** encore dispersés (voir `archive/code-mort/README.md`) ;
-- **`tsconfig.app.json` strict jamais utilisé** : le build type-vérifie en mode laxiste. Activer
-  `strict` sur 580 fichiers est un chantier à chiffrer avant de s'y mettre.
+### Rigueur TypeScript — paliers suivants
+
+`strictNullChecks` est **actif** dans le build. Restent, chiffrés : **`noImplicitAny`** (~50 erreurs
+mécaniques) puis les **12 fichiers `.js`/`.jsx`** de `src` (3 030 lignes que rien ne vérifie, ni
+avant ni après).
+⚠️ Plancher, pas plafond : 164 `: any` et 89 `as any` neutralisent encore la vérification de
+nullité. Chaque `any` retiré en révélera de nouvelles.
+
+### Code mort restant
+
+15 fichiers gardés volontairement (voir `archive/code-mort/README.md`) : fonctionnalités annoncées
+en attente de branchement, ou composants d'usage général plausible. À réexaminer quand la
+fonctionnalité correspondante sera branchée — ou abandonnée.
 
 ## En attente, sans blocage
 
