@@ -20,46 +20,24 @@ export async function getMaintenanceInterventions(): Promise<MaintenanceInterven
     // Récupérer le profil Pro pour obtenir le client_id
     const proProfile = await getProClientProfile();
     if (!proProfile) {
-      console.log('⚠️ Aucun profil Pro trouvé, création d\'interventions de démonstration...');
-      
-      // Créer des interventions de démonstration
-      const demoInterventions: Partial<MaintenanceIntervention>[] = [
-        {
-          client_id: proProfile?.id || user.id,
-          equipment_id: 'demo-equipment-1',
-          intervention_type: 'preventive',
-          status: 'scheduled',
-          priority: 'normal',
-          description: 'Maintenance préventive annuelle',
-          scheduled_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          technician_name: 'Ahmed Benali',
-          cost: 2500,
-          notes: 'Vérification générale et changement d\'huile'
-        },
-        {
-          client_id: proProfile?.id || user.id,
-          equipment_id: 'demo-equipment-2',
-          intervention_type: 'corrective',
-          status: 'in_progress',
-          priority: 'high',
-          description: 'Réparation système hydraulique',
-          scheduled_date: new Date().toISOString(),
-          actual_date: new Date().toISOString(),
-          technician_name: 'Mohammed Tazi',
-          cost: 8500,
-          notes: 'Remplacement de la pompe hydraulique'
-        }
-      ];
-
-      const { data: newInterventions, error: createError } = await supabase
-        .from('maintenance_interventions')
-        .insert(demoInterventions)
-        .select();
-
-      if (createError) throw createError;
-      
-      console.log('✅ Interventions de démonstration créées:', newInterventions);
-      return newInterventions || [];
+      // Pas de profil Pro : on ne fabrique RIEN.
+      //
+      // Ce bloc inserait auparavant des interventions de maintenance de demonstration DANS LA BASE DE
+      // PRODUCTION. Deux defauts, pas un :
+      //
+      //  1. les lignes etaient ecrites avec `client_id: proProfile?.id || user.id`,
+      //     alors qu'on se trouve dans la branche `if (!proProfile)` : `proProfile`
+      //     y vaut forcement null, donc `client_id` valait TOUJOURS `user.id`,
+      //     l'identifiant du compte. Or la lecture, plus bas, filtre sur
+      //     `proProfile.id`, l'identifiant de la fiche pro. Les lignes inserees
+      //     n'etaient donc jamais relues : l'utilisateur les voyait une fois (le
+      //     retour de l'insertion), puis plus jamais. Il restait des lignes
+      //     orphelines en base a chaque visite.
+      //  2. c'est une donnee inventee presentee comme reelle, ce que la regle du
+      //     projet interdit explicitement.
+      //
+      // Un ecran vide qui dit la verite vaut mieux qu'un ecran rempli qui ment.
+      return [];
     }
 
     // Récupérer les interventions du client

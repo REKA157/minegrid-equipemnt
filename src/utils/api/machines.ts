@@ -5,27 +5,43 @@ import { getCurrentUser } from './auth';
 
 // -------------------- MACHINES --------------------
 
+/**
+ * Nom de fichier sûr pour le bucket `machine-image` : on retire le chemin, les
+ * accents et tout caractère hors [a-zA-Z0-9._-]. Exporté pour être testé.
+ */
+export function sanitizeImageFileName(name: string): string {
+  const rawName = name.split('/').pop() || name;
+  return rawName
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+/**
+ * Publie une annonce. C'est l'UNIQUE endroit qui téléverse les images.
+ *
+ * FE-02 : `SellEquipment` téléversait déjà chaque image AVANT d'appeler cette
+ * fonction, qui les re-téléversait — soit 2 copies par image, la première
+ * devenant orpheline dans le storage. L'upload (avec assainissement du nom) est
+ * désormais centralisé ici et l'appelant ne fait plus rien.
+ */
 export async function publishMachine(machineData: MachineData, images: File[]) {
-  const uploadedImageURLs: string[] = [];
+  const uploadedImagePaths: string[] = [];
 
   for (const file of images) {
-    const fileName = `${Date.now()}_${file.name}`;
+    const fileName = `${Date.now()}_${sanitizeImageFileName(file.name)}`;
     const { error: uploadError } = await supabase
       .storage
       .from('machine-image')
-      .upload(fileName, file);
+      .upload(fileName, file, { cacheControl: '3600', upsert: false });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      throw new Error("Échec du téléversement de l'image : " + uploadError.message);
+    }
 
-    const { data: publicUrlData } = supabase
-      .storage
-      .from('machine-image')
-      .getPublicUrl(fileName);
-
-      uploadedImageURLs.push(fileName);
-
+    uploadedImagePaths.push(fileName);
   }
-  
+
   // N'envoyer QUE les colonnes réellement présentes dans la table `machines`.
   // Le formulaire porte des champs additionnels (ex: `type`) et une clé
   // camelCase `sellerId` qui n'existent pas comme colonnes → ils déclenchaient
@@ -44,7 +60,7 @@ export async function publishMachine(machineData: MachineData, images: File[]) {
   }
   row.sellerid = md.sellerId;
   row.seller_id = md.sellerId;
-  row.images = uploadedImageURLs;
+  row.images = uploadedImagePaths;
 
   const { data, error } = await supabase
     .from('machines')

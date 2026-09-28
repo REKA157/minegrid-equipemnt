@@ -64,6 +64,7 @@ export default function FeaturedMachines() {
     };
 
     const fetchFeatured = async () => {
+      try {
       const { data, error } = await supabase
         .from('machines')
         .select(MACHINE_LIST_COLUMNS)
@@ -71,7 +72,7 @@ export default function FeaturedMachines() {
         .limit(80);
 
       if (error || !data) {
-        setLoading(false);
+        if (error) console.error('[FeaturedMachines] requete en erreur', error);
         return;
       }
 
@@ -99,7 +100,16 @@ export default function FeaturedMachines() {
         }));
 
       setFeaturedMachines(withImages as Machine[]);
-      setLoading(false);
+      } catch (err) {
+        // R-11b : sans ce filet, un REJET de la promesse (coupure reseau,
+        // exception dans le calcul de score) laissait `loading` a true et la
+        // section « Machines en vedette » bloquee sur son spinner, avec une
+        // unhandledrejection en console. L'erreur reste VISIBLE en log.
+        console.error('[FeaturedMachines] chargement impossible', err);
+        setFeaturedMachines([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchFeatured();

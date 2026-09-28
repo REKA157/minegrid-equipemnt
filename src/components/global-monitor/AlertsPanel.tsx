@@ -246,17 +246,17 @@ export default function AlertsPanel() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-gray-800 truncate">{String(ev.payload.project_title || '')}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {ev.payload.project_country && (
+                        {Boolean(ev.payload.project_country) && (
                           <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
                             <MapPin className="h-2.5 w-2.5" /> {String(ev.payload.project_country)}
                           </span>
                         )}
-                        {ev.payload.project_type && (
+                        {Boolean(ev.payload.project_type) && (
                           <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: `${color}20`, color }}>
                             {PROJECT_TYPE_LABELS[String(ev.payload.project_type)] || String(ev.payload.project_type)}
                           </span>
                         )}
-                        {ev.payload.project_budget && (
+                        {Boolean(ev.payload.project_budget) && (
                           <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
                             <DollarSign className="h-2.5 w-2.5" /> ${(Number(ev.payload.project_budget) / 1e6).toFixed(0)}M
                           </span>

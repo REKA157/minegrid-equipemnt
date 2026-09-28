@@ -1,7 +1,6 @@
 import React, { useEffect, useState, ChangeEvent } from 'react';
 import { Upload, Plus, X, Camera, Info, FileSpreadsheet } from 'lucide-react';
 import { publishMachine, getCurrentUser } from '../utils/api';
-import supabase from '../utils/supabaseClient';
 import { brands } from '../data/brands';
 import { categories } from '../data/categories';
 import { fetchModelSpecs, fetchModelSpecsFull, toSellEquipmentForm, summarizeSpecs, missingForSell } from '../services/autoSpecsService';
@@ -12,9 +11,43 @@ import { generateListingCopy } from '../utils/api/aiListing';
 // handleExcelFileUpload ci-dessous. Cela evite d'alourdir le chunk de la
 // page SellEquipment pour les utilisateurs qui ne font pas d'import Excel.
 
-function cleanImagePath(img: string): string {
-  const match = img.match(/(?:.*\/)?([^/]+\.png|jpg|jpeg|webp)/i);
-  return match ? match[1] : img;
+/**
+ * Encode un ArrayBuffer en base64 par blocs de 32 ko.
+ * FE-04 : l'ancienne forme `btoa(String.fromCharCode(...new Uint8Array(buf)))`
+ * depassait la taille maximale de la pile d'appels des ~100-125 ko.
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const octets = new Uint8Array(buffer);
+  const TAILLE_BLOC = 0x8000; // 32 ko
+  let binaire = '';
+  for (let i = 0; i < octets.length; i += TAILLE_BLOC) {
+    binaire += String.fromCharCode(...octets.subarray(i, i + TAILLE_BLOC));
+  }
+  return btoa(binaire);
+}
+
+// FE-03 : bornes appliquees aux DEUX chemins d'ajout d'images.
+const MAX_IMAGES = 8;
+const MAX_IMAGE_MB = 10;
+const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
+
+/**
+ * A18-001 / A18-002 — import de parc.
+ *
+ * Le navigateur poste le classeur directement au service d'import. Deux
+ * consequences que le code ne montre pas :
+ *
+ * 1. Aucun secret ne peut etre place ici. `import.meta.env.*` et les chaines
+ *    litterales sont incrustes tels quels par Vite : tout en-tete d'authentification
+ *    ecrit dans ce fichier est servi a chaque visiteur dans le bundle. L'en-tete
+ *    `x-auth-token` qui s'y trouvait n'authentifiait donc personne ; il a ete
+ *    retire. L'authentification de l'import doit se faire cote serveur.
+ * 2. Sans URL configuree, `fetch('')` designe le document courant : le serveur
+ *    de la SPA repond 200 + index.html et l'ecran annoncait un succes alors que
+ *    rien n'etait parti. On coupe donc en amont plutot que d'appeler dans le vide.
+ */
+function urlImportParc(): string {
+  return (import.meta.env.VITE_N8N_IMPORT_PARC_URL as string | undefined)?.trim() ?? '';
 }
 
 const equipmentNames = categories.flatMap(cat =>
@@ -27,6 +60,8 @@ interface ImageFile extends File {
 
 export default function SellEquipment() {
   const [images, setImages] = useState<ImageFile[]>([]);
+  // FE-01 : verrou anti double-soumission de la publication.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
@@ -67,6 +102,8 @@ export default function SellEquipment() {
   const [detectedImageLinks, setDetectedImageLinks] = useState<string[]>([]);
   const [showImportSection, setShowImportSection] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const importParcUrl = urlImportParc();
+  const importParcDisponible = importParcUrl !== '';
 
   const handleExcelFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -160,16 +197,17 @@ export default function SellEquipment() {
       return;
     }
 
+    if (!importParcDisponible) {
+      toast.error(
+        "L'import de parc est indisponible : aucun service d'import n'est configuré sur cette installation. Publiez vos machines une par une avec le formulaire ci-dessous."
+      );
+      return;
+    }
+
     setIsImporting(true);
     try {
-      // Récupérer l'utilisateur connecté
-      logger.info("🔍 Tentative de récupération de l'utilisateur...");
       const user = await getCurrentUser();
-      logger.info("👤 Utilisateur récupéré:", user);
-      logger.info("🆔 ID de l'utilisateur:", user?.id);
-      logger.info("🆔 Type de l'ID:", typeof user?.id);
-      logger.info("🆔 ID est truthy:", !!user?.id);
-      
+
       if (!user) {
         toast("Vous devez être connecté pour importer des machines.");
         setIsImporting(false);
@@ -177,24 +215,21 @@ export default function SellEquipment() {
       }
 
       if (!user.id) {
-        logger.error("❌ L'utilisateur n'a pas d'ID !");
-        logger.error("❌ Détails de l'utilisateur:", JSON.stringify(user, null, 2));
-        toast("Erreur : Impossible de récupérer votre identifiant. Veuillez vous reconnecter.");
+        toast.error("Impossible de récupérer votre identifiant. Veuillez vous reconnecter.");
         setIsImporting(false);
         return;
       }
 
-      // Analyser les données Excel pour détecter les liens d'images
-      logger.info("📊 Analyse des données Excel...");
-      logger.info("🖼️ Liens d'images déjà détectés:", detectedImageLinks);
-      
-      // 🔄 CONVERTIR LE FICHIER EXCEL EN BASE64
-      logger.info("🔄 Conversion du fichier Excel en base64...");
       const arrayBuffer = await excelFile.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-      logger.info("✅ Fichier converti en base64, taille:", base64.length);
-      
-      // Préparer les données JSON
+      // FE-04 : `String.fromCharCode(...tableau)` etale tout le fichier dans la
+      // pile d'appels et leve RangeError des ~100 ko, ce qui rendait l'import de
+      // parc inutilisable pour tout fichier reel. Encodage par blocs.
+      const base64 = arrayBufferToBase64(arrayBuffer);
+
+      // A18-001 : `sellerId` est DECLARE par le navigateur, il n'est pas prouve.
+      // Le service d'import doit deriver l'identite du vendeur d'un jeton verifie
+      // cote serveur, pas de ce champ. Tant que l'import ne transite pas par une
+      // fonction serveur, cette valeur reste une simple affirmation du client.
       const jsonData = {
         excelFile: {
           name: excelFile.name,
@@ -214,92 +249,111 @@ export default function SellEquipment() {
         }
       };
       
-      logger.info("📦 Données JSON préparées:");
-      logger.info("  - Nom du fichier:", jsonData.excelFile.name);
-      logger.info("  - Taille:", jsonData.excelFile.size);
-      logger.info("  - SellerId:", jsonData.sellerId);
-      logger.info("  - SellerId dans metadata:", jsonData.metadata.sellerId);
-      logger.info("  - Liens d'images:", jsonData.imageLinks.length);
-      logger.info("  - Nombre de machines:", jsonData.metadata.totalMachines);
-      
-      // 🔍 DEBUG : Vérifier que le sellerId est bien dans les données JSON
-      logger.info("🔍 DEBUG - Vérification des données JSON:");
-      logger.info("🆔 SellerId dans JSON:", jsonData.sellerId);
-      logger.info("🆔 Type du sellerId:", typeof jsonData.sellerId);
-      logger.info("🆔 Égalité avec user.id:", jsonData.sellerId === user.id);
-      logger.info("🆔 JSON.stringify complet:", JSON.stringify(jsonData, null, 2));
-      
-      if (!jsonData.sellerId) {
-        logger.error("❌ CRITIQUE : Le sellerId n'est pas dans les données JSON !");
-        logger.error("❌ user.id original:", user.id);
-        logger.error("❌ Type user.id:", typeof user.id);
-        toast("Erreur : Le sellerId n'a pas été ajouté aux données. Veuillez réessayer.");
-        return;
-      }
-
-      const importParcUrl = import.meta.env.VITE_N8N_IMPORT_PARC_URL || '';
-      logger.info("🚀 Envoi vers n8n en JSON...");
-      logger.info("🚀 URL:", importParcUrl);
-      logger.info("🚀 Headers:", { 
-        'Content-Type': 'application/json',
-        'x-auth-token': 'minegrid-secret-token-2025'
-      });
-      
-      // 🔍 DEBUG : Vérifier le body avant envoi
-      const requestBody = JSON.stringify(jsonData);
-      logger.info("🚀 Body à envoyer (premiers 500 caractères):", requestBody.substring(0, 500));
-      logger.info("🚀 Body contient sellerId:", requestBody.includes('"sellerId"'));
-      logger.info("🚀 Body contient l'ID:", requestBody.includes(user.id));
-      logger.info("🚀 Nombre d'occurrences de sellerId:", (requestBody.match(/"sellerId"/g) || []).length);
-      
       const response = await fetch(importParcUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-auth-token': 'minegrid-secret-token-2025'
-        },
-        body: requestBody,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonData),
       });
 
-      // Lire le body une seule fois
       const rawText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = rawText;
-      }
-      logger.info("📨 Réponse n8n :", data);
-      logger.info("📊 Status HTTP:", response.status);
-      logger.info("📊 Headers de réponse:", Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
-        let errorMsg = `Erreur lors de l'envoi des données (code HTTP ${response.status})`;
-        errorMsg += `\nRéponse brute : ${rawText}`;
-        toast(errorMsg);
+        toast.error(
+          `Le service d'import a refusé l'envoi (code HTTP ${response.status}). Aucune annonce n'a été créée.`
+        );
         return;
       }
 
-      toast('✅ Données envoyées avec succès ! Les annonces apparaîtront bientôt dans votre dashboard.');
+      // A18-002 : un 200 ne suffit pas. Une URL qui ne pointe pas sur le service
+      // d'import (page d'accueil, portail d'authentification, proxy) repond elle
+      // aussi 200, mais en HTML. Seul un accuse de reception JSON atteste que le
+      // fichier a bien ete remis au service.
+      if (!rawText.trim()) {
+        toast.info(
+          "Le service d'import a répondu sans accusé de réception : impossible de confirmer que le fichier a été pris en compte. Vérifiez votre tableau de bord."
+        );
+        return;
+      }
+
+      let accuse: Record<string, unknown>;
+      try {
+        accuse = JSON.parse(rawText) as Record<string, unknown>;
+      } catch {
+        toast.error(
+          "La réponse reçue n'est pas un accusé de réception d'import : l'envoi n'a pas abouti. Aucune annonce n'a été créée."
+        );
+        return;
+      }
+
+      if (!accuse || typeof accuse !== 'object' || accuse.error || accuse.success === false) {
+        toast.error("Le service d'import a refusé le fichier. Aucune annonce n'a été créée.");
+        return;
+      }
+
+      // Le traitement du classeur est asynchrone et hors de portee de cette page :
+      // on accuse la REMISE du fichier, jamais la creation des annonces.
+      toast.success(
+        `Fichier remis au service d'import (${excelData.length} machine${excelData.length > 1 ? 's' : ''}). Les annonces ne seront créées qu'une fois le traitement terminé côté serveur : vérifiez votre tableau de bord.`
+      );
       setExcelData([]);
       setImagesExcelUpload([]);
       setExcelFile(null);
       setShowImportSection(false);
     } catch (error) {
-      logger.error('❌ Erreur:', error);
-      logger.error('❌ Stack trace:', error instanceof Error ? error.stack : 'N/A');
-      toast('Erreur lors de l\'envoi des données : ' + (error instanceof Error ? error.message : String(error)));
+      if (import.meta.env.DEV) logger.error("Erreur d'import de parc:", error);
+      toast.error(
+        "L'envoi du fichier a échoué : " +
+          (error instanceof Error ? error.message : String(error)) +
+          '. Aucune annonce n\'a été créée.'
+      );
     } finally {
       setIsImporting(false);
     }
   };
 
+  // FE-03 : le glisser-deposer filtrait le type et plafonnait a MAX_IMAGES,
+  // mais le selecteur de fichiers n'imposait RIEN : on pouvait ajouter 50
+  // fichiers ou un fichier de 300 Mo (onglet fige, uploads interminables).
+  // Regle unique, partagee par les deux chemins d'ajout.
+  const addImages = (files: File[]) => {
+    const rejected: string[] = [];
+    const accepted = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        rejected.push(`${file.name} (type non image)`);
+        return false;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        rejected.push(`${file.name} (superieur a ${MAX_IMAGE_MB} Mo)`);
+        return false;
+      }
+      return true;
+    });
+
+    if (rejected.length) {
+      toast(`Image(s) ignoree(s) : ${rejected.join(', ')}`);
+    }
+
+    const remainingSlots = MAX_IMAGES - images.length;
+    if (remainingSlots <= 0) {
+      toast(`Maximum ${MAX_IMAGES} images autorisees.`);
+      return;
+    }
+
+    const filesToAdd = accepted.slice(0, remainingSlots);
+    if (accepted.length > remainingSlots) {
+      toast(`Seules ${remainingSlots} image(s) ont ete ajoutees. Maximum ${MAX_IMAGES} images autorisees.`);
+    }
+    if (!filesToAdd.length) return;
+
+    setImages(prev => [...prev, ...filesToAdd.map(file => Object.assign(file, {
+      preview: URL.createObjectURL(file),
+    }))]);
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const newImages = files.map(file => Object.assign(file, {
-      preview: URL.createObjectURL(file)
-    }));
-    setImages(prev => [...prev, ...newImages]);
+    addImages(Array.from(e.target.files || []));
+    // Permet de re-selectionner le meme fichier apres un rejet.
+    e.target.value = '';
   };
 
   // 🔄 Fonctionnalité de glisser-déposer pour les images
@@ -330,23 +384,7 @@ export default function SellEquipment() {
     const dropZone = e.currentTarget as HTMLElement;
     dropZone.classList.remove('border-blue-500', 'bg-blue-50');
     
-    const files = Array.from(e.dataTransfer.files);
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
-    
-    if (imageFiles.length > 0) {
-      const remainingSlots = 8 - images.length;
-      const filesToAdd = imageFiles.slice(0, remainingSlots);
-      
-      const newImages = filesToAdd.map(file => Object.assign(file, {
-        preview: URL.createObjectURL(file)
-      }));
-      
-      setImages(prev => [...prev, ...newImages]);
-      
-      if (imageFiles.length > remainingSlots) {
-        toast(`Seules ${remainingSlots} image(s) ont été ajoutées. Maximum 8 images autorisées.`);
-      }
-    }
+    addImages(Array.from(e.dataTransfer.files));
   };
 
   // 🔄 Fonctionnalité de glisser-déposer pour les images Excel
@@ -407,49 +445,35 @@ export default function SellEquipment() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // FE-01 : sans ce verrou, un double-clic (ou un reseau lent) relancait toute
+    // la publication -> annonces ET images en double.
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     try {
       const user = await getCurrentUser();
-      if (!user) throw new Error('Vous devez être connecté');
+      if (!user) throw new Error('Vous devez etre connecte');
 
-      const imagePaths: string[] = [];
-
-      for (const image of images) {
-        const rawName = image.name.split('/').pop() || image.name;
-        const sanitized = rawName
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-zA-Z0-9._-]/g, '_');
-
-        const fileName = `${Date.now()}_${sanitized}`;
-
-        const { error } = await supabase.storage
-          .from('machine-image')
-          .upload(fileName, image, {
-            cacheControl: '3600',
-            upsert: false,
-          });
-
-        if (error) {
-          throw new Error('Échec du téléversement de l\'image : ' + error.message);
-        }
-
-        imagePaths.push(fileName);
-      }
-
+      // FE-02 : le televersement est fait UNE seule fois, dans publishMachine
+      // (qui assainit les noms de fichiers). La boucle d'upload qui se trouvait
+      // ici faisait doublon : chaque image partait deux fois et la premiere
+      // copie devenait orpheline dans le storage.
       const payload = {
         ...formData,
         sellerId: user.id,
         condition: formData.condition as 'new' | 'used',
-        images: imagePaths.map(cleanImagePath),
       };
 
       await publishMachine(payload as any, images);
 
-      toast('Équipement publié avec succès !');
+      toast('Equipement publie avec succes !');
       window.location.hash = '#dashboard/annonces';
     } catch (err: any) {
       logger.error(err);
       toast('Erreur lors de la publication : ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -477,6 +501,17 @@ export default function SellEquipment() {
 
             {showImportSection && (
               <div className="space-y-6">
+                {!importParcDisponible && (
+                  <div className="p-4 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
+                    <p className="font-semibold">Import de parc indisponible</p>
+                    <p className="mt-1">
+                      Aucun service d'import n'est configuré sur cette installation : un fichier
+                      chargé ici ne serait envoyé nulle part. Publiez vos machines une par une avec
+                      le formulaire ci-dessous, ou contactez MineGrid pour faire activer l'import.
+                    </p>
+                  </div>
+                )}
+
                 {/* Upload fichier Excel */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -591,7 +626,7 @@ export default function SellEquipment() {
                   <button
                     type="button"
                     onClick={handleExcelSubmit}
-                    disabled={isImporting || !excelData.length}
+                    disabled={isImporting || !excelData.length || !importParcDisponible}
                     className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
                     {isImporting ? 'Envoi en cours...' : 'Envoyer'}
@@ -621,7 +656,7 @@ export default function SellEquipment() {
                   </button>
                 </div>
               ))}
-              {images.length < 8 && (
+              {images.length < MAX_IMAGES && (
                 <label 
                   className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary-500 transition-all relative group"
                   onDragOver={handleDragOver}
@@ -643,7 +678,7 @@ export default function SellEquipment() {
                     <br />
                     <span className="text-xs">ou cliquez pour sélectionner</span>
                   </span>
-                  <span className="mt-1 text-xs text-gray-400">{8 - images.length} emplacements restants</span>
+                  <span className="mt-1 text-xs text-gray-400">{MAX_IMAGES - images.length} emplacements restants</span>
                 </label>
               )}
             </div>
@@ -1065,9 +1100,10 @@ export default function SellEquipment() {
             </button>
             <button
               type="submit"
-              className="px-6 py-3 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+              disabled={isSubmitting}
+              className="px-6 py-3 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Publier l'annonce
+              {isSubmitting ? 'Publication en cours...' : "Publier l'annonce"}
             </button>
           </div>
         </form>

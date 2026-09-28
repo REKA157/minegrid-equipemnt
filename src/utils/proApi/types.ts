@@ -54,9 +54,10 @@ export interface ClientOrder {
   total_amount?: number;
   currency: string;
   order_date: string;
-  expected_delivery?: string;
-  actual_delivery?: string;
-  notes?: string;
+  // Colonnes nullables en base : le formulaire envoie null quand le champ est vide
+  expected_delivery?: string | null;
+  actual_delivery?: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -79,7 +80,8 @@ export interface TechnicalDocument {
 export interface MaintenanceIntervention {
   id: string;
   client_id: string;
-  equipment_id: string;
+  // null pour une intervention générale non rattachée à un équipement
+  equipment_id: string | null;
   intervention_type: 'preventive' | 'corrective' | 'emergency' | 'inspection';
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'normal' | 'high' | 'urgent';

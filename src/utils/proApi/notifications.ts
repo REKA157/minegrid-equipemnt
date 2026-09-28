@@ -18,43 +18,24 @@ export async function getClientNotifications(): Promise<ClientNotification[]> {
     // Récupérer le profil Pro pour obtenir le client_id
     const proProfile = await getProClientProfile();
     if (!proProfile) {
-      console.log('⚠️ Aucun profil Pro trouvé, création de notifications de démonstration...');
-      
-      // Créer des notifications de démonstration
-      const demoNotifications: Partial<ClientNotification>[] = [
-        {
-          client_id: proProfile?.id || user.id,
-          user_id: user.id,
-          type: 'maintenance_due',
-          title: 'Maintenance préventive programmée',
-          message: 'La maintenance préventive de l\'équipement DEMO-001 est programmée pour le 15/01/2024',
-          is_read: false,
-          priority: 'normal',
-          related_entity_type: 'equipment',
-          related_entity_id: 'demo-equipment-1'
-        },
-        {
-          client_id: proProfile?.id || user.id,
-          user_id: user.id,
-          type: 'order_update',
-          title: 'Commande confirmée',
-          message: 'Votre commande CMD-2024-001 a été confirmée et sera livrée le 20/01/2024',
-          is_read: true,
-          priority: 'low',
-          related_entity_type: 'order',
-          related_entity_id: 'cmd-2024-001'
-        }
-      ];
-
-      const { data: newNotifications, error: createError } = await supabase
-        .from('client_notifications')
-        .insert(demoNotifications)
-        .select();
-
-      if (createError) throw createError;
-      
-      console.log('✅ Notifications de démonstration créées:', newNotifications);
-      return newNotifications || [];
+      // Pas de profil Pro : on ne fabrique RIEN.
+      //
+      // Ce bloc inserait auparavant des notifications de demonstration DANS LA BASE DE
+      // PRODUCTION. Deux defauts, pas un :
+      //
+      //  1. les lignes etaient ecrites avec `client_id: proProfile?.id || user.id`,
+      //     alors qu'on se trouve dans la branche `if (!proProfile)` : `proProfile`
+      //     y vaut forcement null, donc `client_id` valait TOUJOURS `user.id`,
+      //     l'identifiant du compte. Or la lecture, plus bas, filtre sur
+      //     `proProfile.id`, l'identifiant de la fiche pro. Les lignes inserees
+      //     n'etaient donc jamais relues : l'utilisateur les voyait une fois (le
+      //     retour de l'insertion), puis plus jamais. Il restait des lignes
+      //     orphelines en base a chaque visite.
+      //  2. c'est une donnee inventee presentee comme reelle, ce que la regle du
+      //     projet interdit explicitement.
+      //
+      // Un ecran vide qui dit la verite vaut mieux qu'un ecran rempli qui ment.
+      return [];
     }
 
     // Récupérer les notifications du client

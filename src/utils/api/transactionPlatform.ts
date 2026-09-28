@@ -1,5 +1,5 @@
 import supabase from '../supabaseClient';
-import { supabaseCall } from '../supabaseCall';
+import { supabaseCall, type SupabaseResponse } from '../supabaseCall';
 
 function isMissingTableError(err: unknown): boolean {
   const e = err as { code?: string; message?: string; cause?: { code?: string } } | null;
@@ -8,7 +8,7 @@ function isMissingTableError(err: unknown): boolean {
   return code === 'PGRST205' || msg.includes('could not find the table');
 }
 
-async function readTable<T>(label: string, fn: () => PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
+async function readTable<T>(label: string, fn: () => PromiseLike<SupabaseResponse<T>>): Promise<T> {
   try {
     return await supabaseCall<T>(fn, { label, fallback: [] as unknown as T });
   } catch (err) {

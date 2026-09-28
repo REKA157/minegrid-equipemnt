@@ -183,8 +183,8 @@ export async function getPreventiveMaintenance() {
     else if (daysUntil <= 1) urgency = 'high';
     else if (daysUntil <= 3) urgency = 'medium';
 
-    const equipment = equipmentData[intervention.equipment_id];
-    const technician = technicianData[intervention.technician_id];
+    const equipment = intervention.equipment_id ? equipmentData[intervention.equipment_id] : undefined;
+    const technician = intervention.technician_id ? technicianData[intervention.technician_id] : undefined;
 
     return {
       ...intervention,

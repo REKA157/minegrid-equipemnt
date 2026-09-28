@@ -50,6 +50,37 @@ interface MachineFormData {
   images: File[];
 }
 
+// Formes des analytics calculées depuis machine_views / messages
+interface WeeklyPerformancePoint {
+  day: string;
+  views: number;
+  percentage: number;
+}
+
+interface TopPerformerMachine {
+  id: string;
+  name: string;
+  brand: string;
+  category: string;
+  views: number;
+  contacts: number;
+}
+
+interface CategoryStat {
+  views: number;
+  machines: number;
+}
+
+interface AnalyticsData {
+  totalViews: number;
+  totalContacts: number;
+  conversionRate: number;
+  weeklyPerformance: WeeklyPerformancePoint[];
+  topPerformers: TopPerformerMachine[];
+  categoryStats: Record<string, CategoryStat>;
+  responseTime: number;
+}
+
 export default function PublicationRapide() {
   const [activeTab, setActiveTab] = useState<'list' | 'manual' | 'excel' | 'analytics'>('list');
   const [machines, setMachines] = useState<any[]>([]);
@@ -63,7 +94,7 @@ export default function PublicationRapide() {
   const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
 
   // ✅ NOUVEAUX ÉTATS POUR LES ANALYTICS RÉELLES
-  const [analyticsData, setAnalyticsData] = useState({
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData>({
     totalViews: 0,
     totalContacts: 0,
     conversionRate: 0,
@@ -176,7 +207,7 @@ export default function PublicationRapide() {
         .slice(0, 5);
 
       // 6. Statistiques par catégorie
-      const categoryStats = {};
+      const categoryStats: Record<string, CategoryStat> = {};
       machines.forEach(machine => {
         const views = machineViews[machine.id] || 0;
         if (!categoryStats[machine.category]) {
@@ -443,6 +474,10 @@ export default function PublicationRapide() {
 
       // Upload des images (seulement si de nouvelles images sont ajoutées)
       const imageUrls: string[] = [];
+      // FE-07 : un echec d'upload faisait `continue` en silence et l'annonce
+      // etait publiee avec des images manquantes, tout en affichant « publiee
+      // avec succes ». On compte les echecs et on en informe le vendeur.
+      const imagesEnEchec: string[] = [];
       for (const image of formData.images) {
         const fileName = `machine_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         const { data, error } = await supabase.storage
@@ -451,6 +486,7 @@ export default function PublicationRapide() {
 
         if (error) {
           console.error('Erreur upload image:', error);
+          imagesEnEchec.push(image.name || 'image');
           continue;
         }
 
@@ -510,7 +546,16 @@ export default function PublicationRapide() {
         return;
       }
 
-      toast(editingMachineId ? 'Machine modifiée avec succès !' : 'Machine publiée avec succès !');
+      // FE-07 : ne jamais annoncer un succes plein si des images ont ete perdues.
+      if (imagesEnEchec.length > 0) {
+        toast(
+          `${editingMachineId ? 'Machine modifiée' : 'Machine publiée'}, mais `
+          + `${imagesEnEchec.length} image(s) n'ont pas pu être envoyées : `
+          + `${imagesEnEchec.join(', ')}. Modifiez l'annonce pour les rajouter.`,
+        );
+      } else {
+        toast(editingMachineId ? 'Machine modifiée avec succès !' : 'Machine publiée avec succès !');
+      }
       
       // Reset du formulaire et retour à la liste
       setFormData({

@@ -183,27 +183,24 @@ async function tryLinkQuoteToNewTransactionCase(opts: {
   const caseId = data?.id as string | undefined;
   if (!caseId) return { caseId: null, participantsLinked: false };
 
-  const now = new Date().toISOString();
-  const { error: partErr } = await supabase.from('transaction_participants').insert([
-    {
-      case_id: caseId,
-      user_id: opts.buyerUserId,
-      role: 'buyer',
-      invited_by: opts.buyerUserId,
-      invited_at: now,
-    },
-    {
-      case_id: caseId,
-      user_id: opts.sellerId,
-      role: 'seller',
-      invited_by: opts.buyerUserId,
-      invited_at: now,
-    },
-  ]);
+  // Les lignes « participants » (buyer + seller) sont créées CÔTÉ SERVEUR par le
+  // trigger `trg_tx_cases_seed_participants` (SECURITY DEFINER, idempotent) au
+  // moment de l'INSERT du dossier — avec `accepted_at` renseigné.
+  //
+  // L'insertion manuelle qui figurait ici était redondante et échouait
+  // SYSTÉMATIQUEMENT : récursion de policy avant la migration p29, puis
+  // violation de la contrainte d'unicité (case_id, user_id, role) une fois la
+  // récursion levée. Elle faisait remonter à l'utilisateur un faux diagnostic
+  // « policy RLS » invitant à déployer un script SQL qui rouvrait des failles
+  // déjà corrigées. On VÉRIFIE donc l'état réel, sans écriture.
+  const { data: participantRows, error: partErr } = await supabase
+    .from('transaction_participants')
+    .select('id')
+    .eq('case_id', caseId);
   if (partErr && !isMissingTableError(partErr)) {
-    logger.warn('[submitQuoteRequest] participants dossier', partErr);
+    logger.warn('[submitQuoteRequest] verification participants dossier', partErr);
   }
-  const participantsLinked = !partErr;
+  const participantsLinked = !partErr && (participantRows?.length ?? 0) > 0;
 
   const { error: evErr } = await supabase.from('transaction_events').insert({
     case_id: caseId,

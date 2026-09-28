@@ -53,7 +53,8 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
   };
 
   // Fonction pour obtenir l'icône de priorité
-  const getPriorityIcon = (priority: string) => {
+  // `priority` est optionnel dans ListItem : le cas `default` rend la pastille grise.
+  const getPriorityIcon = (priority?: string) => {
     switch (priority) {
       case 'high':
         return <div className="w-2 h-2 bg-red-500 rounded-full" />;
@@ -153,7 +154,7 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
 
             {/* Statut */}
             <div className="ml-3 text-right shrink-0">
-              <div className={`text-xs font-medium px-2 py-1 rounded-full border whitespace-nowrap ${getStatusColor(item.status)}`}>
+              <div className={`text-xs font-medium px-2 py-1 rounded-full border whitespace-nowrap ${getStatusColor(item.status ?? '')}`}>
                 {item.status}
               </div>
             </div>
@@ -268,7 +269,7 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, widgetSize = 'med
                   
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                     <span className="text-sm text-gray-600">Statut:</span>
-                    <span className={`text-sm font-medium px-2 py-1 rounded-full border ${getStatusColor(selectedItem.status)}`}>
+                    <span className={`text-sm font-medium px-2 py-1 rounded-full border ${getStatusColor(selectedItem.status ?? '')}`}>
                       {selectedItem.status}
                     </span>
                   </div>

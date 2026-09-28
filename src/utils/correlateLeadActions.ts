@@ -70,7 +70,9 @@ function sourceRank(sk: CorrelatedDailyAction['sourceKind']): number {
   return 1;
 }
 
-function pipelineContactFromLead(lead: RealLead): CorrelatedDailyAction['contact'] {
+// Retourne TOUJOURS un objet contact (jamais undefined) : l'appelant décide
+// ensuite s'il le rattache à l'action ou non.
+function pipelineContactFromLead(lead: RealLead): NonNullable<CorrelatedDailyAction['contact']> {
   const title = lead.title || '';
   let name = (lead.contact_name || '').trim();
   let company = (lead.contact_company || '').trim();

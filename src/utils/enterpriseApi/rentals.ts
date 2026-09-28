@@ -386,7 +386,9 @@ export async function getRentalOverdue() {
   today.setHours(0, 0, 0, 0);
 
   const items: OverdueInvoiceItem[] = rows
-    .map((r) => {
+    // Type de retour explicite : sans lui le prédicat du .filter ci-dessous ne
+    // peut pas restreindre le tableau (l'objet inféré n'englobe pas dueDate null).
+    .map((r): OverdueInvoiceItem | null => {
       const status = String(r.status || '');
       const st = status.toLowerCase();
       if (st.includes('annul') || st.includes('sold') || st.includes('pay')) return null;
@@ -412,7 +414,7 @@ export async function getRentalOverdue() {
         bucket: overdueBucket(daysLate),
       };
     })
-    .filter((x): x is OverdueInvoiceItem => !!x);
+    .filter((x): x is OverdueInvoiceItem => x !== null);
 
   return {
     items: items.sort((a, b) => b.remaining - a.remaining),

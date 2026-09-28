@@ -274,7 +274,7 @@ const PremiumDashboard: React.FC = () => {
             </div>
             <div className="mt-4">
               <span className="text-sm text-gray-500">
-                {stats?.totalViews > 0 ? `${stats.totalMessages} messages / ${stats.totalViews} vues` : 'Aucune donnée'}
+                {stats && stats.totalViews > 0 ? `${stats.totalMessages} messages / ${stats.totalViews} vues` : 'Aucune donnée'}
               </span>
             </div>
           </div>

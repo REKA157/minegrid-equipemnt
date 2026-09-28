@@ -60,12 +60,49 @@ Le paquet livré ne rétrécit pas (598 ko avant comme après) : ce code n'y ent
 déjà plus, le bundler l'écartait tout seul. Le gain est pour qui lit le dépôt —
 plus de fausse piste à 8 779 lignes — et pour `tsc`, qui n'a plus à le vérifier.
 
+## `src-non-atteint/` — 35 fichiers, ~4 000 lignes (2026-09-28)
+
+Le reste du code jamais atteint depuis `src/main.tsx` ni `src/App.tsx`, trié **un
+par un** et non en bloc.
+
+### Comment chaque verdict a été pris
+
+Cinquante fichiers candidats ont été instruits séparément : lecture du fichier,
+`grep` de son nom **et de chacun de ses exports** dans tout le dépôt — pas
+seulement `src/` : configurations, `scripts/`, `package.json`, `docs/`, `*.md` —
+recherche d'un équivalent vivant, et consultation de `git log`.
+
+Puis, **uniquement pour ceux proposés à l'archivage**, deux relecteurs
+adversariaux ont cherché à prouver le contraire, sous deux angles distincts :
+
+1. une référence indirecte — ré-export par un `index.ts`, import en guillemets
+   doubles, import dynamique, chemin ou casse différents ;
+2. une raison non-code — cité par la configuration, un script npm, la
+   documentation, ou fonctionnalité annoncée pas encore branchée.
+
+**Un seul contradicteur convaincant suffisait à bloquer l'archivage** : on
+préfère garder un fichier inutile que supprimer un fichier utile.
+
+### Résultat : 35 archivés, 15 gardés
+
+Parmi les gardés, quatre l'ont été **grâce à cette relecture** :
+
+| Gardé | Pourquoi |
+|---|---|
+| `src/test/setup.ts` | **Déclaré dans `vitest.config.ts:14`** (`setupFiles`). L'archiver cassait les 603 tests. Invisible pour une analyse qui ne part que de `main.tsx`. |
+| `src/constants/dashboardConfig.ts` | Contredit par un relecteur. |
+| `src/components/dashboard/layout/TopBar.tsx` | Contredit par un relecteur. |
+| `src/components/dashboard/layout/MainDashboardLayout.tsx` | Contredit par un relecteur. |
+
+Les onze autres ont été gardés d'emblée : fonctionnalités annoncées en attente de
+branchement (`nextgen/escrow`, `nextgen/finance`, `nextgen/registry`,
+`plannedEnterpriseWidgets`), ou composants d'usage général plausible
+(`LocationPicker`, `NotificationCenter`, `ThemeProvider`, `ThemeToggle`).
+
+Vérifié après déplacement : `tsc` 0 erreur, **603 tests verts**, build OK.
+
 ## Le reste du code mort, pas encore traité
 
-Il subsiste environ **50 fichiers / 5 900 lignes** jamais atteints, dispersés
-(`QuoteGenerator.tsx`, `ConfigurationPro.tsx`, `EquipmentDetail.tsx`,
-`NotificationCenter.tsx`, les doublons `dashboard/TopBar` et
-`dashboard/layout/TopBar`…). Ils n'ont **pas** été déplacés : contrairement au
-fork ci-dessus, ce sont des pages et composants isolés dont certains peuvent
-attendre un rebranchement volontaire. Chacun mérite d'être tranché un par un,
-pas en bloc.
+Les 15 fichiers gardés ci-dessus restent dans `src/`. Ils ne sont atteints par
+aucun chemin d'import, mais chacun a une raison identifiée d'y rester. À
+réexaminer quand la fonctionnalité correspondante sera branchée — ou abandonnée.

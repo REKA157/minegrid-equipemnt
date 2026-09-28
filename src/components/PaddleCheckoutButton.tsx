@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
 import supabase from '../utils/supabaseClient';
-import { getPaidPlan, PLAN_RANK } from '../config/plans';
+import {
+  getPaidPlan,
+  identifiantPrixExploitable,
+  PAIEMENT_CARTE_INDISPONIBLE,
+  PLAN_RANK,
+} from '../config/plans';
 import { getMySubscription } from '../utils/api/subscription';
 import type { SubscriptionType } from '../utils/api/subscription';
 
@@ -74,6 +79,26 @@ export default function PaddleCheckoutButton({
     );
   }
 
+  // A28-002 — L'identifiant de prix vient de l'environnement de BUILD. Absent du
+  // paquet livré, il vaut '' et aucun des trois plans ne peut être souscrit :
+  // afficher « Payer 20 USD/mois » serait promettre ce qu'on ne peut pas tenir.
+  // Le refus se dit donc AVANT le clic, pas après, et il dit quoi faire à la place.
+  if (!identifiantPrixExploitable(plan.paddlePriceId)) {
+    return (
+      <div className="w-full">
+        <button
+          type="button"
+          disabled
+          className="w-full bg-gray-200 text-gray-700 py-3 px-4 rounded-lg font-semibold flex items-center justify-center cursor-not-allowed"
+        >
+          <Lock className="h-5 w-5 mr-2" />
+          Paiement par carte indisponible
+        </button>
+        <p className="mt-2 text-sm text-gray-600">{PAIEMENT_CARTE_INDISPONIBLE}</p>
+      </div>
+    );
+  }
+
   const waitForActivation = async (): Promise<boolean> => {
     for (let attempt = 0; attempt < ACTIVATION_POLL_ATTEMPTS; attempt++) {
       const sub = await getMySubscription();
@@ -94,12 +119,12 @@ export default function PaddleCheckoutButton({
     // Import dynamique : Paddle.js n'entre pas dans le bundle des pages sans paiement.
     const { isPaddleConfigured, openPlanCheckout } = await import('../utils/paddle');
 
-    if (!isPaddleConfigured() || !plan.paddlePriceId) {
+    // Le jeton client vit dans utils/paddle, chargé à la demande : seul le clic
+    // peut constater son absence. L'identifiant de prix est revérifié ici parce
+    // qu'un rendu ancien peut survivre à un changement de plan.
+    if (!isPaddleConfigured() || !identifiantPrixExploitable(plan.paddlePriceId)) {
       setState('idle');
-      onError(
-        "Le paiement en ligne n'est pas encore configuré sur cet environnement. " +
-          'Utilisez un code promo ou contactez le support.',
-      );
+      onError(PAIEMENT_CARTE_INDISPONIBLE);
       return;
     }
 

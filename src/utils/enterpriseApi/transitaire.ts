@@ -130,7 +130,9 @@ export async function getDemurrageExposure() {
   today.setHours(0, 0, 0, 0);
 
   const items: DemurrageItem[] = rows
-    .map((r) => {
+    // Type de retour explicite : sans lui le prédicat du .filter ci-dessous ne
+    // peut pas restreindre le tableau (l'objet inféré n'englobe pas freeUntil null).
+    .map((r): DemurrageItem | null => {
       const arrival = r.arrival_date ? new Date(String(r.arrival_date)) : null;
       if (!arrival) return null;
       const freeDays = Number(r.free_days ?? 0);
@@ -151,7 +153,7 @@ export async function getDemurrageExposure() {
         returned: !!returned,
       };
     })
-    .filter((x): x is DemurrageItem => !!x);
+    .filter((x): x is DemurrageItem => x !== null);
 
   const inDemurrage = items.filter((i) => i.daysOver > 0 && !i.returned);
   return {

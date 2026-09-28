@@ -14,6 +14,13 @@ type MockConfig = {
   transactionCaseInsertError: { message: string; code?: string } | null;
   transactionCaseId: string;
   rpcResult: { data: string | null; error: { message: string } | null };
+  /**
+   * Lignes renvoyées par la VÉRIFICATION des participants du dossier.
+   * Depuis p29, submitQuoteRequest n'insère plus ces lignes (le trigger serveur
+   * `trg_tx_cases_seed_participants` s'en charge) : il vérifie leur présence.
+   */
+  participantRows: Array<{ id: string }> | null;
+  participantSelectError: { message: string; code?: string } | null;
 };
 
 const hoisted = vi.hoisted(() => {
@@ -28,6 +35,8 @@ const hoisted = vi.hoisted(() => {
     transactionCaseInsertError: null,
     transactionCaseId: CASE,
     rpcResult: { data: null, error: null },
+    participantRows: [{ id: 'part-buyer' }, { id: 'part-seller' }],
+    participantSelectError: null,
   };
 
   const rpcMock = vi.fn(async (_fn: string, _args: { p_quote_request_id: string }) => mockConfig.rpcResult);
@@ -52,6 +61,15 @@ const hoisted = vi.hoisted(() => {
         return { data: null, error: mockConfig.transactionCaseInsertError };
       }
       return { data: { id: mockConfig.transactionCaseId }, error: null };
+    }
+
+    // p29 : le code de production ne fait plus d'INSERT ici — il VÉRIFIE que le
+    // trigger serveur a bien créé les participants.
+    if (table === 'transaction_participants' && operation === 'select') {
+      if (mockConfig.participantSelectError) {
+        return { data: null, error: mockConfig.participantSelectError };
+      }
+      return { data: mockConfig.participantRows, error: null };
     }
 
     if (table === 'transaction_participants' && operation === 'insert') {
@@ -154,6 +172,8 @@ function resetMockConfig() {
   hoisted.mockConfig.transactionCaseInsertError = null;
   hoisted.mockConfig.transactionCaseId = hoisted.CASE;
   hoisted.mockConfig.rpcResult = { data: null, error: null };
+  hoisted.mockConfig.participantRows = [{ id: 'part-buyer' }, { id: 'part-seller' }];
+  hoisted.mockConfig.participantSelectError = null;
 }
 
 describe('submitQuoteRequest', () => {
@@ -191,6 +211,40 @@ describe('submitQuoteRequest', () => {
     expect(hoisted.fromMock).toHaveBeenCalledWith('transaction_cases');
     expect(hoisted.fromMock).toHaveBeenCalledWith('transaction_participants');
     expect(hoisted.rpcMock).not.toHaveBeenCalled();
+  });
+
+  // ----- Non-régression p29 (NEW-01) -------------------------------------
+  // Le parcours acheteur écrivait en direct dans transaction_participants, ce
+  // qui échouait toujours (récursion de policy, puis doublon) et affichait un
+  // faux diagnostic RLS. Le trigger serveur crée ces lignes : on ne doit plus
+  // jamais écrire dans cette table depuis le front.
+  it("NEW-01 : n'écrit plus dans transaction_participants (le trigger serveur s'en charge)", async () => {
+    hoisted.mockConfig.userId = BUYER_ID;
+    hoisted.mockConfig.machineSeller = { seller_id: SELLER_ID };
+
+    const result = await submitQuoteRequest(basePayload);
+
+    const participantsBuilder = hoisted.fromMock.mock.results
+      .filter((_r, i) => hoisted.fromMock.mock.calls[i][0] === 'transaction_participants')
+      .map((r) => r.value as Record<string, { mock: { calls: unknown[] } }>);
+
+    expect(participantsBuilder.length).toBeGreaterThan(0);
+    for (const builder of participantsBuilder) {
+      expect(builder.insert.mock.calls.length).toBe(0); // aucune écriture
+      expect(builder.select.mock.calls.length).toBeGreaterThan(0); // vérification seule
+    }
+    expect(result.participantsLinked).toBe(true);
+  });
+
+  it('NEW-01 : participants absents => participantsLinked = false (diagnostic honnête)', async () => {
+    hoisted.mockConfig.userId = BUYER_ID;
+    hoisted.mockConfig.machineSeller = { seller_id: SELLER_ID };
+    hoisted.mockConfig.participantRows = [];
+
+    const result = await submitQuoteRequest(basePayload);
+
+    expect(result.transactionCaseId).toBe(CASE_ID);
+    expect(result.participantsLinked).toBe(false);
   });
 
   it('acheteur = vendeur : pas de dossier transaction', async () => {

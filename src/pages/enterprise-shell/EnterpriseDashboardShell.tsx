@@ -399,9 +399,11 @@ export const EnterpriseDashboardShell: React.FC<EnterpriseDashboardShellProps> =
                       // « i » d'aide : phrase courte au survol (description persistée
                       // sinon rôle par type) + explication détaillée au clic (par id
                       // sinon par type). Un widget sans explication montre la phrase courte.
-                      const hint = widget.description || WIDGET_ROLE_HINTS[widget.type] || '';
+                      // `type` est optionnel : clé vide => aucune entrée trouvée (repli identique).
+                      const widgetType = widget.type ?? '';
+                      const hint = widget.description || WIDGET_ROLE_HINTS[widgetType] || '';
                       const details =
-                        WIDGET_EXPLANATIONS[widget.id] || WIDGET_EXPLANATIONS[widget.type];
+                        WIDGET_EXPLANATIONS[widget.id] || WIDGET_EXPLANATIONS[widgetType];
                       return hint || details ? (
                         <InfoTooltip
                           text={hint || String(widget.title ?? widget.id)}

@@ -20,43 +20,24 @@ export async function getClientOrders(): Promise<ClientOrder[]> {
     // Récupérer le profil Pro pour obtenir le client_id
     const proProfile = await getProClientProfile();
     if (!proProfile) {
-      console.log('⚠️ Aucun profil Pro trouvé, création de commandes de démonstration...');
-      
-      // Créer des commandes de démonstration
-      const demoOrders: Partial<ClientOrder>[] = [
-        {
-          client_id: proProfile?.id || user.id,
-          order_number: 'CMD-2024-001',
-          order_type: 'purchase',
-          status: 'confirmed',
-          total_amount: 125000,
-          currency: 'MAD',
-          order_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          expected_delivery: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-          notes: 'Commande de pièces de rechange'
-        },
-        {
-          client_id: proProfile?.id || user.id,
-          order_number: 'CMD-2024-002',
-          order_type: 'maintenance',
-          status: 'pending',
-          total_amount: 8500,
-          currency: 'MAD',
-          order_date: new Date().toISOString(),
-          expected_delivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          notes: 'Maintenance préventive'
-        }
-      ];
-
-      const { data: newOrders, error: createError } = await supabase
-        .from('client_orders')
-        .insert(demoOrders)
-        .select();
-
-      if (createError) throw createError;
-      
-      console.log('✅ Commandes de démonstration créées:', newOrders);
-      return newOrders || [];
+      // Pas de profil Pro : on ne fabrique RIEN.
+      //
+      // Ce bloc inserait auparavant des commandes de demonstration DANS LA BASE DE
+      // PRODUCTION. Deux defauts, pas un :
+      //
+      //  1. les lignes etaient ecrites avec `client_id: proProfile?.id || user.id`,
+      //     alors qu'on se trouve dans la branche `if (!proProfile)` : `proProfile`
+      //     y vaut forcement null, donc `client_id` valait TOUJOURS `user.id`,
+      //     l'identifiant du compte. Or la lecture, plus bas, filtre sur
+      //     `proProfile.id`, l'identifiant de la fiche pro. Les lignes inserees
+      //     n'etaient donc jamais relues : l'utilisateur les voyait une fois (le
+      //     retour de l'insertion), puis plus jamais. Il restait des lignes
+      //     orphelines en base a chaque visite.
+      //  2. c'est une donnee inventee presentee comme reelle, ce que la regle du
+      //     projet interdit explicitement.
+      //
+      // Un ecran vide qui dit la verite vaut mieux qu'un ecran rempli qui ment.
+      return [];
     }
 
     // Récupérer les commandes du client

@@ -620,11 +620,14 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <FolderOpen className="h-12 w-12 mx-auto text-gray-300 mb-4" />
         <h1 className="text-xl font-semibold text-gray-900 mb-2">Dossier introuvable</h1>
+        {/* NE JAMAIS suggérer ici de déployer sql/transaction_platform_extended.sql :
+            ce script ré-accorde les écritures sur payment_records, audit_logs,
+            inspection_reports et commission_records. Message factuel côté
+            utilisateur, le diagnostic technique reste au support. */}
         <p className="text-gray-600 mb-6 text-sm">
-          Ce dossier n’existe pas ou vous n’y avez pas accès. Vérifiez que le module transaction est déployé (
-          <code className="text-xs bg-gray-100 px-1 rounded">transaction_platform_core.sql</code>
-          puis éventuellement <code className="text-xs bg-gray-100 px-1 rounded">transaction_platform_extended.sql</code>
-          ).
+          Ce dossier n’existe pas ou vous n’y avez pas accès. Il est aussi possible que le module
+          transaction ne soit pas disponible sur cette instance : dans ce cas aucun dossier n’est
+          consultable et il faut le signaler au support.
         </p>
         <a
           href="#dossiers"
@@ -1091,9 +1094,10 @@ export default function TransactionCasePage({ caseId }: TransactionCasePageProps
           </h2>
           {bundle.audit.length === 0 ? (
             <p className="text-sm text-gray-500">
-              Aucune entrée visible (déployez <code className="text-xs bg-gray-100 px-1 rounded">transaction_platform_extended.sql</code>{' '}
-              et la colonne <code className="text-xs bg-gray-100 px-1 rounded">transaction_case_id</code> sur{' '}
-              <code className="text-xs bg-gray-100 px-1 rounded">audit_logs</code>).
+              Aucune entrée d’audit visible pour ce dossier : soit rien n’a encore été journalisé,
+              soit le journal n’est pas disponible sur cette instance. Un journal vide ne vaut pas
+              preuve qu’aucune action n’a eu lieu ; en cas de litige, demandez l’historique au
+              support.
             </p>
           ) : (
             <ul className="space-y-2 text-xs text-gray-700">
