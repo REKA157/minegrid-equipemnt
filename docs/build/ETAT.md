@@ -532,6 +532,27 @@ Runbooks : `.audit/PADDLE_SETUP.md` · `docs/TENDERS_OPERATIONS.md` · `.audit/S
 
 ---
 
+## ⚠️ À savoir sur l'historique git de la séance du 2026-09-28
+
+Le commit **`d16802c9`** (« Hygiène — 35 fichiers morts archivés… ») contient **plus que son
+titre** : un `git add` trop large de ma part y a joint **24 fichiers de travail déjà en cours**
+avant ce commit, sans rapport avec l'archivage — `SellEquipment.tsx`, `PaddleCheckoutButton.tsx`,
+`quoteRequests.ts`, `TransactionCasePage.tsx`, plusieurs fichiers de test, etc.
+
+**Rien n'est perdu** : ces fichiers sont versionnés, simplement sous un message qui ne les décrit
+pas. Je n'ai pas réécrit l'historique pour les en sortir, parce que je ne peux pas établir leur
+provenance avec certitude — plusieurs viennent probablement de travaux antérieurs de cette même
+séance. Découper à l'aveugle aurait été pire que le défaut.
+
+Le commit suivant (`strictNullChecks`) a eu le même début de problème sur 4 fichiers
+(`plans.ts`, `plans.test.ts`, `main.tsx`, `tendersSync.ts`) : là, l'erreur a été vue et **corrigée
+avant d'aller plus loin** — ils sont ressortis du commit et sont redevenus du travail non commité.
+
+Si vous voulez un historique propre sur `d16802c9`, dites-le : c'est faisable, l'historique est
+purement local (rien n'a jamais été poussé).
+
+---
+
 ## Prochaine action
 
 **Patron**, dans l'ordre :
