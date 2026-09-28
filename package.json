@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "postbuild": "node scripts/verifier-bundle.mjs",
+    "bases": "node scripts/comparer-bases.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

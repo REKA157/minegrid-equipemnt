@@ -1,7 +1,31 @@
 # ETAT — MineGrid Équipement
 
 > Tableau de bord du projet. **À lire en début de session, à mettre à jour avant chaque commit.**
-> Dernière mise à jour : **2026-08-12**
+> Dernière mise à jour : **2026-09-28**
+
+---
+
+## 🔎 État réel des deux bases — `npm run bases`
+
+Un comparateur interroge prod et staging et liste les écarts en trente secondes,
+sans aucun secret (clé publique lue dans le paquet construit).
+
+**Relevé du 2026-09-28 :**
+
+| | Objets |
+|---|---|
+| ⚠ **Écart prod ↔ staging** (2) | `tender_workspaces`, `get_my_tender_workspace` — **manquent en PRODUCTION** (migration teamE). Le module Appels d'offres y reste en mode local. |
+| ✗ **Absents des DEUX bases** (8) | `subscription_payments` + les 7 fonctions d'administration — `p27`/`p28`/`p29` écrites et prouvées, **jamais appliquées** |
+| ✅ Alignés | les 22 autres, dont `get_effective_subscription_for` (appliquée en prod depuis) |
+
+**Pourquoi cet outil existe** : le 2026-08-18, **cinq pannes** ont eu la même cause — un objet présent
+d'un côté, absent de l'autre, sans rien pour le signaler. Le symptôme ne désignait jamais la cause
+(« radar injoignable » = fonction d'abonnement manquante ; « code promo invalide » = index manquant).
+Chaque migration livrée doit désormais ajouter sa ligne dans `scripts/comparer-bases.mjs`.
+
+⚠️ Le comparateur distingue **trois** états, pas deux : aligné, en écart, et **absent partout**.
+Une première version ne signalait que les écarts — et déclarait donc « tout va bien » sur deux bases
+également incomplètes, ce qui masquait `p27`/`p28`/`p29`.
 
 ---
 
