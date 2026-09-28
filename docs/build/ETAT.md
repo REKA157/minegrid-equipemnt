@@ -244,14 +244,42 @@ Les boutons « modifier » et « retirer » d'un membre étaient des icônes san
 
 ---
 
-### Trouvé au passage : le `tsconfig` strict n'est jamais utilisé
+### ✅ `strictNullChecks` est désormais ACTIF dans le build
 
-`tsconfig.app.json` déclare `strict: true`, `noUnusedLocals: true`, `noUnusedParameters: true`.
-Mais `npm run build` lance `tsc` tout court, qui lit `tsconfig.json` — où tout cela vaut **false**,
-`noImplicitAny` compris. Aucun script ne référence `tsconfig.app.json`, et `tsconfig.json` ne le
-déclare pas en `references` : **la configuration stricte est morte**. Le contrôle de types du build
-est donc bien plus laxiste qu'il n'en a l'air. Non corrigé ici : activer `strict` sur 580 fichiers
-est un chantier à part entière, à chiffrer avant de s'y mettre.
+Le constat était juste et pire que décrit : `tsconfig.app.json` déclarait `strict: true`, mais
+`npm run build` lance `tsc` sans `-p`, donc lit `tsconfig.json` où tout valait `false`. Les deux
+configurations orphelines promettaient une rigueur que rien n'appliquait — deux audits l'avaient
+signalé sans que la contradiction soit levée.
+
+**Piège qui aurait fait échouer la correction naïve** : écrire `"strict": true` n'aurait PAS suffi.
+Les options posées explicitement à `false` (`noImplicitAny`, `noImplicitThis`…) l'emportent sur la
+valeur héritée de `strict`. On aurait cru activer la rigueur et on n'en aurait eu que la moitié.
+
+**Fait** : 50 erreurs corrigées sur 11 fichiers, **sans un seul `any`, `as any`, `!` ou
+`@ts-ignore`** — un raccourci aurait activé une vérification pour la désactiver aussitôt. Chaque
+correction a été relue par un second agent chargé de la contredire, diff en main.
+
+`strictNullChecks: true` est maintenant dans `tsconfig.json`, et les deux configurations orphelines
+héritent de la vraie : elles ne peuvent plus diverger. **Vérifié en cassant exprès** : un accès sur
+une valeur possiblement nulle fait désormais échouer `npm run build` (`TS18047`).
+
+**Trois vrais défauts mis au jour par le typage :**
+
+1. **`DashboardConfigurator` enregistrait tous les widgets à `position: 0`.** Le code lisait
+   `layout.find(...)?.position`, or les objets de disposition de `react-grid-layout` portent
+   `i, x, y, w, h` et **jamais** `position`. L'expression valait donc toujours `undefined`, puis 0 :
+   l'ordre des widgets voulu par l'utilisateur était perdu à la sauvegarde. Corrigé aux deux
+   endroits. **C'est le relecteur adversarial qui l'a vu**, l'agent s'étant arrêté au typage.
+2. **Les écrans professionnels écrivaient des données inventées en production** (voir plus bas) —
+   `strictNullChecks` signalait « propriété inexistante sur le type `never` » sur les six lignes
+   fautives. Le compilateur disait, correctement, que la branche défensive était morte.
+3. **`PaddleCheckoutButton`** avait une conversion auto-référentielle (`as typeof corps`) qui
+   annulait toute vérification sur le chemin traduisant les refus de paiement Paddle.
+
+**Paliers suivants, chiffrés :** `noImplicitAny` ≈ 50 erreurs mécaniques ; puis les **12 fichiers
+`.js`/`.jsx` non typés** de `src` (3 030 lignes que rien ne vérifie, ni avant ni après).
+⚠️ Ces 50 sont un **plancher, pas un plafond** : le dépôt compte 164 `: any` et 89 `as any`, qui
+neutralisent la vérification de nullité. Chaque `any` retiré en révélera de nouvelles.
 
 ---
 

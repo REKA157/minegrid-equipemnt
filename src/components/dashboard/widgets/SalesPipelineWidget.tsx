@@ -42,6 +42,26 @@ function TransactionDossierLink({
     </a>
   );
 }
+/**
+ * Alerte heuristique affichée dans le bandeau « Alertes sur le pipeline ».
+ * Calculée à partir des leads chargés (aucun modèle génératif).
+ * Selon le type, l'alerte porte soit les leads concernés, soit les étapes
+ * à faible conversion : d'où les deux champs optionnels.
+ */
+interface AlertePipeline {
+  /** Détermine l'icône, la couleur et l'action déclenchée au clic. */
+  type: 'blockage' | 'quote' | 'opportunity' | 'conversion';
+  title: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low';
+  /** Libellé du bouton d'action de l'alerte. */
+  action: string;
+  /** Leads concernés (alertes blocage, devis, opportunité). */
+  leads?: unknown[];
+  /** Paires [étape, taux de conversion] (alerte conversion). */
+  stages?: [string, number][];
+}
+
 // Correction : data doit être de type { leads: any[] }
 const SalesPipelineWidget = ({
   data,
@@ -238,7 +258,9 @@ const SalesPipelineWidget = ({
 
   /** Alertes = heuristiques sur les leads chargés (pas de modèle IA — voir widget « Insights IA »). */
   const pipelineHeuristicAlerts = React.useMemo(() => {
-    const insights = [];
+    // Annotation explicite : sans elle, `[]` est inféré `never[]` sous
+    // strictNullChecks et tous les push sont refusés.
+    const insights: AlertePipeline[] = [];
     const stuckLeads = leadsData.filter(lead => {
       const daysSinceContact = getDaysSinceLastContact(lead.lastContact);
       return daysSinceContact > 7 && lead.stage !== 'Conclu' && lead.stage !== 'Perdu';

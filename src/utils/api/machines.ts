@@ -1,4 +1,5 @@
 import { MACHINE_LIST_COLUMNS, SELLER_MACHINES_MAX_ROWS } from '../../constants/machineQueryFields';
+import type { User } from '@supabase/supabase-js';
 import type { MachineData } from './types';
 import supabase from '../supabaseClient';
 import { getCurrentUser } from './auth';
@@ -108,7 +109,10 @@ export async function getSellerMachines() {
 // -------------------- STATISTIQUES --------------------
 
 export async function recordMachineView(machineId: string) {
-  let user = null;
+  // Reste `null` pour un visiteur non connecté : le type l'indique explicitement,
+  // sinon la déclaration `= null` seule fait croire au compilateur que la valeur
+  // ne peut jamais être un utilisateur.
+  let user: User | null = null;
   try {
     user = await getCurrentUser();
   } catch {

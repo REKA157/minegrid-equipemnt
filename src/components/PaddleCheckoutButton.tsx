@@ -27,6 +27,18 @@ const ACTIVATION_POLL_ATTEMPTS = 20;
 const ACTIVATION_POLL_INTERVAL_MS = 2000;
 
 /**
+ * Corps d'erreur renvoyé par la fonction `paddle-upgrade` quand elle refuse un
+ * changement de formule. Les deux champs sont facultatifs : le serveur peut
+ * répondre un corps vide, ou un corps sans code Paddle.
+ */
+interface RefusPaddle {
+  /** Code d'erreur brut de Paddle (ex. `subscription_locked`), purement technique. */
+  paddle_code?: string;
+  /** Motif propre à notre fonction (ex. `not_configured`). */
+  reason?: string;
+}
+
+/**
  * Traduit le refus renvoyé par `paddle-upgrade` en une phrase actionnable.
  *
  * `functions.invoke` range la réponse d'erreur dans `error.context` (la Response
@@ -37,9 +49,12 @@ const ACTIVATION_POLL_INTERVAL_MS = 2000;
 async function motifPaddle(erreur: unknown): Promise<string> {
   const contexte = (erreur as { context?: { json?: () => Promise<unknown> } })?.context;
   if (!contexte?.json) return '';
-  let corps: { paddle_code?: string; reason?: string } | null = null;
+  let corps: RefusPaddle | null = null;
   try {
-    corps = (await contexte.json()) as typeof corps;
+    // Type écrit en toutes lettres : `as typeof corps` se résolvait à `null` par
+    // le flux de contrôle, et `corps?.paddle_code` devenait `never` — le typage
+    // ne garantissait donc rien sur ce chemin, celui des refus de paiement.
+    corps = (await contexte.json()) as RefusPaddle | null;
   } catch {
     return '';
   }

@@ -7,8 +7,16 @@ interface PremiumBadgeProps {
   className?: string;
 }
 
+/** Un badge premium affiché : son icône, son libellé, ses classes de couleur et son infobulle. */
+interface BadgePremiumAffiche {
+  icon: React.ReactElement;
+  text: string;
+  color: string;
+  tooltip: string;
+}
+
 export default function PremiumBadge({ premium, className = "" }: PremiumBadgeProps) {
-  const badges = [];
+  const badges: BadgePremiumAffiche[] = [];
 
   // Badge Boosté
   if (premium.isBoosted) {

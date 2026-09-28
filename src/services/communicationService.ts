@@ -20,6 +20,22 @@ export interface ContactData {
   company?: string;
 }
 
+// Résultat d'un envoi unitaire, tel qu'agrégé par initiateContact : le canal
+// employé, puis les champs renvoyés par sendEmail / sendSMS. En cas de succès on
+// a messageId + sentAt ; en cas d'échec on a error. D'où les champs optionnels.
+export interface ResultatEnvoi {
+  /** Canal utilisé pour cet envoi. */
+  type: 'email' | 'sms';
+  /** Vrai si le canal a accepté le message. */
+  success: boolean;
+  /** Identifiant attribué au message ; absent en cas d'échec. */
+  messageId?: string;
+  /** Horodatage ISO de l'envoi ; absent en cas d'échec. */
+  sentAt?: string;
+  /** Message d'erreur ; absent en cas de succès. */
+  error?: string;
+}
+
 // Service de communication unifié
 class CommunicationService {
   // Envoyer un email
@@ -190,7 +206,7 @@ class CommunicationService {
 
   // Méthodes utilitaires
   async initiateContact(contact: ContactData, actionTitle: string, method: 'email' | 'sms' | 'both' = 'email') {
-    const results = [];
+    const results: ResultatEnvoi[] = [];
 
     if (method === 'email' || method === 'both') {
       if (contact.email) {

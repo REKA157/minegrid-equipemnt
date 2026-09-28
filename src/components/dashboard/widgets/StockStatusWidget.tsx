@@ -83,6 +83,11 @@ function mapEquipmentCategory(row: {
     mappedCategory = 'Camion';
   } else if (searchText.includes('compacteur') || searchText.includes('compactor') || searchText.includes('rouleau')) {
     mappedCategory = 'Compacteur';
+    // NOTE : « dumper » est capte par la branche Camion juste au-dessus, donc il
+    // n'arrive jamais ici. Un tombereau nomme « dumper » est classe « Camion ».
+    // Non corrige volontairement : deplacer « dumper » reclasserait des machines
+    // existantes d'une categorie a l'autre, ce qui est une decision produit et
+    // non une correction technique.
   } else if (searchText.includes('tombereau') || searchText.includes('dumper') || searchText.includes('benne')) {
     mappedCategory = 'Tombereau';
   } else if (searchText.includes('grue') || searchText.includes('crane')) {
@@ -138,12 +143,19 @@ function categoryLabelsEqual(a: string, b: string): boolean {
   return a.normalize('NFC').trim() === b.normalize('NFC').trim();
 }
 
+// ATTENTION — cette liste doit ne contenir QUE des valeurs que
+// `mapEquipmentCategory` sait produire. Toute autre entree est un filtre qui
+// affiche « 0 equipement trouve » quoi qu'il arrive.
+//
+// « Excavatrice » a ete retiree le 2026-09-28 pour cette raison exacte :
+// mapEquipmentCategory traduit « excavatrice » en « Pelle », donc aucune
+// machine ne portait jamais cette categorie. Le vendeur qui filtrait dessus
+// lisait « 0 equipement » alors qu'il en avait — les pelles sont sous « Pelle ».
 const STOCK_WIDGET_CATEGORY_OPTIONS = [
   'Toutes',
   'Pelle',
   'Chargeur',
   'Bouteur',
-  'Excavatrice',
   'Camion',
   'Compacteur',
   'Tombereau',

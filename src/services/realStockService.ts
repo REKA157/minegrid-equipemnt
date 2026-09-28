@@ -447,7 +447,7 @@ export class RealStockService {
       const metrics = await this.calculateEquipmentMetrics(equipmentId);
       
       // Générer des recommandations basées sur les métriques
-      const recommendations = [];
+      const recommendations: string[] = [];
       
       if (metrics.visibilityScore < 50) {
         recommendations.push('Ajouter plus de photos pour améliorer la visibilité');

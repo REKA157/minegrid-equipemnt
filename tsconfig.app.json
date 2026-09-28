@@ -1,24 +1,15 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "jsx": "react-jsx",
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
-  },
+  // Cette configuration NE PILOTE PAS le build. `npm run build` lance `tsc` sans
+  // `-p`, qui lit `tsconfig.json`. Elle ne sert qu'aux editeurs qui la
+  // decouvrent par son nom.
+  //
+  // Elle declarait auparavant `strict: true` alors que le build tournait en
+  // `strict: false` : elle promettait donc une rigueur que rien n'appliquait,
+  // et laissait croire au lecteur que le code etait verifie. Deux audits l'ont
+  // signalee comme orpheline sans que la contradiction soit levee.
+  //
+  // Elle herite desormais de la vraie configuration : les deux ne peuvent plus
+  // diverger, et ce qu'un editeur signale est exactement ce que le build refuse.
+  "extends": "./tsconfig.json",
   "include": ["src"]
 }

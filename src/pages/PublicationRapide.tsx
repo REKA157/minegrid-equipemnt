@@ -173,7 +173,7 @@ export default function PublicationRapide() {
       const conversionRate = totalViews > 0 ? (totalContacts / totalViews * 100).toFixed(1) : 0;
 
       // 4. Performance hebdomadaire (7 derniers jours)
-      const weeklyPerformance = [];
+      const weeklyPerformance: WeeklyPerformancePoint[] = [];
       const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
       
       for (let i = 6; i >= 0; i--) {
@@ -218,7 +218,8 @@ export default function PublicationRapide() {
       });
 
       // ✅ 7. TEMPS DE RÉPONSE MOYEN RÉEL
-      const responseTimes = [];
+      // Temps de réponse calculés, en heures
+      const responseTimes: number[] = [];
       
       if (messagesData && messagesData.length > 0) {
         // Grouper les messages par machine_id pour calculer les temps de réponse

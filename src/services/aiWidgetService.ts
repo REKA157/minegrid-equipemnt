@@ -45,6 +45,19 @@ export interface AIRecommendation {
   priority: number;
 }
 
+/**
+ * Suggestion d'optimisation renvoyée par getOptimizationSuggestions().
+ * Forme consommée par AIOptimizationWidget, qui en dérive ensuite la priorité
+ * (à partir de expectedImpact) et la catégorie (à partir de type).
+ */
+export interface SuggestionOptimisation {
+  type: string;
+  title: string;
+  description: string;
+  actions: string[];
+  expectedImpact: string;
+}
+
 /** Cache court côté client pour réduire les appels dupliqués (plusieurs widgets au montage). */
 const MONITOR_GET_CACHE_MS = 30_000;
 const MONITOR_GET_CACHE_MAX_KEYS = 200;
@@ -337,7 +350,9 @@ class AIWidgetService {
 
       const userData = await this.getSellerMachines(userId);
 
-      const suggestions = [];
+      // Annoté : sans type explicite, `[]` est inféré `never[]` sous strictNullChecks
+      // et tout push devient une erreur.
+      const suggestions: SuggestionOptimisation[] = [];
 
       // Optimisation des prix
       const priceOptimization = this.suggestPriceOptimization(userData);

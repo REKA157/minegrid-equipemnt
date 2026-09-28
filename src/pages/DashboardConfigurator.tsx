@@ -8,6 +8,11 @@ import {
   AlertTriangle, Plus, Minus, Maximize2, Minimize2, Bell
 } from 'lucide-react';
 import { WidthProvider, Responsive } from 'react-grid-layout';
+// Type officiel d'une case de la grille (i, x, y, w, h + bornes facultatives).
+// Sans annotation, TypeScript déduit `never[]` d'un `const layout = []` dès que
+// strictNullChecks est actif : d'où l'alias, importé sous un nom distinct car
+// `Layout` est déjà pris par l'icône lucide-react importée plus haut.
+import type { Layout as DispositionGrille } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { useAuth } from '../hooks/useAuth';
@@ -311,7 +316,7 @@ function getWidthFromSize(size: '1/3' | '1/2' | '2/3' | '1/1') {
 
 // Fonction pour générer un layout compact automatiquement
 function generateCompactLayout(selectedWidgets: string[], widgetSizes: {[key: string]: '1/3' | '1/2' | '2/3' | '1/1'}) {
-  const layout = [];
+  const layout: DispositionGrille[] = [];
   let x = 0;
   let y = 0;
   const rowHeight = 2;
@@ -386,7 +391,7 @@ const DashboardConfigurator: React.FC = () => {
   // Adapter le layout pour 12 colonnes
   const generateLayout = () => {
     const enabledWidgets = selectedMetierData?.widgets.filter(w => selectedWidgets.includes(w.id)) || [];
-    const layout = [];
+    const layout: DispositionGrille[] = [];
     let x = 0;
     let y = 0;
     let currentRowMaxY = y;
@@ -423,11 +428,22 @@ const DashboardConfigurator: React.FC = () => {
     
     const config = {
       metier: selectedMetier,
-      widgets: enabledWidgets.map(widget => ({
+      widgets: enabledWidgets.map((widget, index) => ({
         ...widget,
         enabled: true,
         size: resolveWidgetSize(widget as unknown as ShellWidget, widgetSizes),
-        position: layout.find(l => l.i === widget.id)?.position || 0
+        // L'ancienne version ecrivait `layout.find(...)?.position || 0`. Or les
+        // objets de disposition sont des `Layout` de react-grid-layout : ils
+        // portent i, x, y, w, h — JAMAIS de champ `position`. L'expression
+        // valait donc toujours undefined, puis 0 : TOUS les widgets etaient
+        // enregistres avec la meme position 0, et l'ordre voulu par
+        // l'utilisateur etait perdu a la sauvegarde.
+        // La disposition est construite dans l'ordre d'affichage : le rang du
+        // widget dans ce tableau EST sa position.
+        position: (() => {
+          const rang = layout.findIndex(l => l.i === widget.id);
+          return rang >= 0 ? rang : index;
+        })()
       })),
       layout: {
         lg: layout
@@ -461,11 +477,22 @@ const DashboardConfigurator: React.FC = () => {
     const enabledWidgets = selectedMetierData?.widgets.filter(w => selectedWidgets.includes(w.id)) || [];
     const config = {
       metier: selectedMetier,
-      widgets: enabledWidgets.map(widget => ({
+      widgets: enabledWidgets.map((widget, index) => ({
         ...widget,
         enabled: true,
         size: resolveWidgetSize(widget as unknown as ShellWidget, widgetSizes),
-        position: layout.find(l => l.i === widget.id)?.position || 0
+        // L'ancienne version ecrivait `layout.find(...)?.position || 0`. Or les
+        // objets de disposition sont des `Layout` de react-grid-layout : ils
+        // portent i, x, y, w, h — JAMAIS de champ `position`. L'expression
+        // valait donc toujours undefined, puis 0 : TOUS les widgets etaient
+        // enregistres avec la meme position 0, et l'ordre voulu par
+        // l'utilisateur etait perdu a la sauvegarde.
+        // La disposition est construite dans l'ordre d'affichage : le rang du
+        // widget dans ce tableau EST sa position.
+        position: (() => {
+          const rang = layout.findIndex(l => l.i === widget.id);
+          return rang >= 0 ? rang : index;
+        })()
       })),
       layout: {
         lg: layout

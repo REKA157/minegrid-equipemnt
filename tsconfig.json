@@ -11,7 +11,24 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    // Activation PROGRESSIVE de la rigueur, le 2026-09-28.
+    //
+    // `strict` reste false : il regroupe une dizaine d'options, dont
+    // `noImplicitAny` qui coute encore une cinquantaine de corrections. On
+    // active donc les verifications une par une, en laissant le depot a zero
+    // erreur a chaque palier — plutot qu'un grand soir qui resterait desactive.
+    //
+    // PIEGE A CONNAITRE : ecrire "strict": true NE SUFFIRAIT PAS. Les options
+    // posees explicitement a false plus bas (noImplicitAny, noImplicitThis...)
+    // gagnent sur la valeur heritee de `strict`. On croirait avoir active la
+    // rigueur et on n'en aurait que la moitie.
+    //
+    // Palier 1 — FAIT : strictNullChecks. 50 erreurs corrigees, dont 3 vrais
+    // defauts qu'il a mis au jour (voir docs/build/ETAT.md).
+    // Palier 2 — a faire : noImplicitAny (~50 erreurs, mecaniques).
+    // Palier 3 — a faire : les 12 fichiers .js/.jsx non types de src (3 000 l.).
     "strict": false,
+    "strictNullChecks": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,

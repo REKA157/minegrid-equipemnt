@@ -1172,7 +1172,9 @@ export default function VitrinePersonnalisee() {
                       {/* Grouper les machines par slides */}
                       {(() => {
                         const machinesPerSlide = 2; // 2 machines par slide pour plus de lisibilité
-                        const slides = [];
+                        // Typé explicitement : sans annotation, un tableau vide est inféré `never[]`
+                        // sous strictNullChecks et refuse le push des slides JSX.
+                        const slides: React.ReactElement[] = [];
                         
                         for (let i = 0; i < filteredMachines.length; i += machinesPerSlide) {
                           const slideMachines = filteredMachines.slice(i, i + machinesPerSlide);

@@ -212,7 +212,7 @@ export function toSellEquipmentForm(specs: NormalizedSpecs) {
   const powerHp = specs.engine?.power_hp ?? (powerKw ? Math.round(powerKw * 1.341) : null);
   
   // Générer une description basée sur les spécifications
-  const descriptionParts = [];
+  const descriptionParts: string[] = [];
   if (specs.brand && specs.model) {
     descriptionParts.push(`${specs.brand.toUpperCase()} ${specs.model.toUpperCase()}`);
   }
@@ -269,7 +269,7 @@ export function toPublicationRapideForm(specs: NormalizedSpecs) {
     : '';
   
   // Générer une description basée sur les spécifications
-  const descriptionParts = [];
+  const descriptionParts: string[] = [];
   if (specs.brand && specs.model) {
     descriptionParts.push(`${specs.brand.toUpperCase()} ${specs.model.toUpperCase()}`);
   }

@@ -1,22 +1,11 @@
 {
+  // Configuration des fichiers d'outillage (vite.config.ts), hors application.
+  // Comme `tsconfig.app.json`, elle annoncait `strict: true` sans que rien ne
+  // l'applique. Elle herite maintenant de la configuration reelle du build.
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "lib": ["ES2023"]
   },
   "include": ["vite.config.ts"]
 }

@@ -221,10 +221,19 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
             .catch((sellerErr: unknown) => {
               console.error('Erreur chargement vendeur (rejet):', sellerErr);
               const basePayload = merged as unknown as MachineWithPremium;
-              setMachineData({
+              const paquetDeRepli: MachineWithPremium = {
                 ...basePayload,
                 seller: { id: sellerUid, name: '', rating: 0, location: geoLine },
-              });
+              };
+              setMachineData(paquetDeRepli);
+              // Cette branche etait la SEULE des quatre a ne pas appeler
+              // finishSellerAndImages. Consequence sur une coupure reseau
+              // pendant le chargement du vendeur : la fiche s'affichait sans
+              // AUCUNE photo (juste le gabarit), et recordMachineView n'etait
+              // jamais appele — la visite n'etait donc pas comptee. Les
+              // statistiques du vendeur devenaient incomparables d'une semaine
+              // a l'autre, sans que rien ne le signale.
+              finishSellerAndImages(paquetDeRepli);
               setLoading(false);
             });
         } else {

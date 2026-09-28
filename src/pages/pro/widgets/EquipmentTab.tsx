@@ -178,6 +178,14 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
           category: editEquipmentForm.equipment_type,
           description: editEquipmentForm.description,
           price: editEquipmentForm.price,
+          // `model` et `year` etaient saisissables dans le formulaire et
+          // n'arrivaient dans AUCUNE des deux requetes d'enregistrement. Le
+          // vendeur corrigeait l'annee ou le modele de sa machine, lisait
+          // « mis a jour avec succes », et la valeur revenait a l'ancienne au
+          // rechargement : une donnee perdue sans un mot d'avertissement.
+          // Les deux colonnes existent bien dans `machines` (text et integer).
+          model: editEquipmentForm.model,
+          year: editEquipmentForm.year,
           images: updatedImages
         })
         .eq('id', selectedEquipment.id);
@@ -1278,7 +1286,12 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
                   />
                 </div>
 
-                {/* Localisation */}
+                {/* Localisation — NON ENREGISTREE, et le dire vaut mieux que
+                    la perdre en silence. La table `machines` n'a pas de colonne
+                    `location` : elle a `city`, `address`, `region`, `country`.
+                    Choisir laquelle alimenter est une decision produit, pas une
+                    correction technique. En attendant, le champ est en lecture
+                    seule : le vendeur ne saisit plus une valeur qui disparait. */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Localisation
@@ -1286,26 +1299,41 @@ export function EquipmentTab({ equipment, userMachines, onRefresh }: { equipment
                   <input
                     type="text"
                     value={editEquipmentForm.location}
-                    onChange={(e) => handleEditInputChange('location', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Modification pas encore disponible — écrivez à contact@minegrid.ma.
+                  </p>
                 </div>
 
-                {/* Statut */}
+                {/* Statut — NON ENREGISTRE non plus. Les vocabulaires ne
+                    concordent pas : la base contraint `machines.status` a
+                    `available | sold | reserved`, alors que ce menu propose
+                    `active | maintenance | inactive | sold`. Envoyer la valeur
+                    telle quelle violerait la contrainte sur trois choix sur
+                    quatre. Rapprocher les deux vocabulaires est une decision
+                    produit : « inactif » veut-il dire « reserve » ou « retire de
+                    la vente » ? Tant qu'elle n'est pas prise, on n'affiche pas
+                    un champ qui fait croire qu'il enregistre. */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Statut
                   </label>
                   <select
                     value={editEquipmentForm.status}
-                    onChange={(e) => handleEditInputChange('status', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
                   >
                     <option value="active">Actif</option>
                     <option value="maintenance">En maintenance</option>
                     <option value="inactive">Inactif</option>
                     <option value="sold">Vendu</option>
                   </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Modification pas encore disponible — écrivez à contact@minegrid.ma.
+                  </p>
                 </div>
 
                 {/* Heures totales */}
