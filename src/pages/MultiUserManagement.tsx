@@ -35,7 +35,13 @@ import {
   type UserInvitation,
 } from '../utils/userManagement';
 import { setupUserInvitationsTable } from '../utils/setupUserInvitations';
-import { getOrgMembers, removeOrgMember, type OrgMember, type OrgRole } from '../utils/api/organization';
+import {
+  getOrgMembers,
+  removeOrgMember,
+  setOrgMemberRole,
+  type OrgMember,
+  type OrgRole,
+} from '../utils/api/organization';
 import { useSubscription } from '../hooks/useSubscription';
 import { hasEnterprise } from '../utils/api/subscription';
 import { toast } from '../utils/toast';
@@ -199,7 +205,9 @@ const MultiUserManagement: React.FC = () => {
             setMemberScopes(map);
           }
         } catch {
-          /* RLS/table absente : on garde le défaut (accès à tout) */
+          // RLS ou table absente : on NE SAIT PAS quelles affectations sont
+          // posees. On l'assume au lieu de supposer « acces a tout ».
+          if (!cancelled) setAffectationsConnues(false);
         }
       } finally {
         if (!cancelled) setMembersLoading(false);
@@ -394,10 +402,35 @@ const MultiUserManagement: React.FC = () => {
   // Affectation (Commercial / Appels d'offres) par membre, chargée du serveur.
   // Défaut : accès aux deux (aucun blocage tant que rien n'est restreint).
   const [memberScopes, setMemberScopes] = useState<Record<string, MemberScope>>({});
+  // Faux tant que la lecture des affectations a echoue. Sans ce drapeau, un
+  // echec de lecture se confondait avec « ce membre a acces a tout » : rouvrir
+  // puis enregistrer la fiche d'un membre volontairement restreint lui rendait
+  // les deux espaces. Un echec de lecture ne doit jamais ELARGIR des droits.
+  const [affectationsConnues, setAffectationsConnues] = useState(true);
   const scopeOf = (m: TeamMember): MemberScope =>
     memberScopes[m.id] ?? { commercial: true, tenders: true };
 
-  const handleUpdateMember = (memberId: string, updates: Partial<TeamMember>) => {
+  const handleUpdateMember = async (memberId: string, updates: Partial<TeamMember>) => {
+    const membre = teamMembers.find((m) => m.id === memberId);
+
+    // Le role societe est un DROIT : il vit dans organization_members et c'est la
+    // RLS qui s'en sert. Jusqu'ici cette fonction ne faisait que `setTeamMembers`,
+    // donc un administrateur qui retrogradait quelqu'un en « Lecteur » voyait
+    // l'ecran changer, partait rassure, et la base gardait 'admin'. Au
+    // rechargement l'ancien role revenait et la personne conservait tous ses
+    // droits. La fonction serveur `setOrgMemberRole` existait deja et n'etait
+    // appelee nulle part.
+    if (updates.role && membre && updates.role !== membre.role) {
+      const res = await setOrgMemberRole(memberId, updates.role);
+      if (!res.ok) {
+        // On laisse la fenetre OUVERTE et on ne touche pas a l'affichage :
+        // mieux vaut un echec visible qu'un succes imaginaire.
+        toast(`❌ ${res.error || "Le rôle n'a pas pu être enregistré. Aucun droit n'a changé."}`);
+        return;
+      }
+      toast('✅ Rôle enregistré');
+    }
+
     setTeamMembers(teamMembers.map(member =>
       member.id === memberId ? { ...member, ...updates } : member
     ));
@@ -636,18 +669,26 @@ const MultiUserManagement: React.FC = () => {
                         >
                           <Clock className="h-4 w-4" />
                         </button>
+                        {/* Boutons en icone seule : sans title ni aria-label, un
+                            lecteur d'ecran annonce « bouton » trois fois de suite
+                            et rien ne distingue « modifier » de « retirer ». Celui
+                            de l'historique, juste au-dessus, les avait deja. */}
                         <button
                           onClick={() => {
                             setSelectedMember(member);
                             setShowEditModal(true);
                           }}
                           className="p-2 text-gray-400 hover:text-orange-600 transition-colors"
+                          title={`Modifier ${member.name}`}
+                          aria-label={`Modifier ${member.name}`}
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteMember(member.id)}
                           className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          title={`Retirer ${member.name} de la société`}
+                          aria-label={`Retirer ${member.name} de la société`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -1025,14 +1066,21 @@ const MultiUserManagement: React.FC = () => {
                 fromOrg: true,
               });
               // Affectation -> serveur (redirige hors des espaces non couverts).
-              void setMemberScope(memberId, commercial, tenders).then((res) => {
+              // Si la lecture initiale a echoue, les cases affichent le defaut
+              // « tout coche » : enregistrer elargirait les droits d'un membre
+              // restreint sans que personne ne l'ait demande. On s'abstient.
+              if (!affectationsConnues) {
+                toast(
+                  "⚠️ Les affectations n'ont pas pu être lues : elles sont laissées inchangées.",
+                );
+              } else void setMemberScope(memberId, commercial, tenders).then((res) => {
                 if (res.success) {
                   setMemberScopes((prev) => ({ ...prev, [memberId]: { commercial, tenders } }));
                 } else {
                   toast(`❌ ${res.error || 'Échec du réglage de l’affectation.'}`);
                 }
               });
-              handleUpdateMember(memberId, {
+              void handleUpdateMember(memberId, {
                 role: formData.get('role') as any,
                 status: formData.get('status') as any
               });

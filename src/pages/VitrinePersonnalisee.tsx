@@ -30,6 +30,7 @@ import Price from '../components/Price';
 import { toast } from '../utils/toast';
 import { useMemberScope } from '../hooks/useMemberScope';
 import { isInvitedMember } from '../utils/api/memberScope';
+import { submitQuoteRequest } from '../utils/api/quoteRequests';
 interface VitrineData {
   id: string;
   company_name: string;
@@ -91,25 +92,19 @@ interface Machine {
   specifications?: any;
 }
 
-function getSellerIdFromHash() {
-  const hash = window.location.hash;
-  const match = hash.match(/^#vitrine\/?(\w+)?/);
-  return match && match[1] ? match[1] : null;
-}
+// Logique de la vitrine sortie dans son propre module, ou elle est enfin
+// testable (vitrineHelpers.test.ts). Y COMPRIS la lecture de l'identifiant
+// vendeur, dont la regex tronquait les UUID : voir l'en-tete du module.
+import {
+  FORMULAIRE_LOCATION_VIDE,
+  lireIdentifiantVendeurDepuisHash,
+  isValidImageUrl,
+  getDefaultImageForCategory,
+} from './vitrineHelpers';
 
-// Fonction pour valider une URL d'image
-function isValidImageUrl(url: string): boolean {
-  if (!url || typeof url !== 'string') return false;
-  const trimmedUrl = url.trim();
-  if (trimmedUrl === '') return false;
-  
-  // Vérifier si c'est une URL valide
-  try {
-    new URL(trimmedUrl);
-    return true;
-  } catch {
-    return false;
-  }
+/** Identifiant du vendeur porte par l'URL courante. */
+function getSellerIdFromHash() {
+  return lireIdentifiantVendeurDepuisHash(window.location.hash);
 }
 
 // Fonction pour récupérer les images d'une machine depuis Supabase Storage
@@ -142,36 +137,6 @@ async function getMachineImagesFromStorage(machineId: string): Promise<string[]>
   }
 }
 
-// Fonction pour obtenir une image par défaut selon la catégorie de machine
-function getDefaultImageForCategory(category: string): string[] {
-  const imageMap: { [key: string]: string } = {
-    'excavator': 'https://images.unsplash.com/photo-1573176054053-b0e345766088?auto=format&fit=crop&w=800&q=80',
-    'loader': 'https://images.unsplash.com/photo-1581094487326-5937e8490a87?auto=format&fit=crop&w=800&q=80',
-    'bulldozer': 'https://images.unsplash.com/photo-1570126681446-66f8f1b15f3c?auto=format&fit=crop&w=800&q=80',
-    'crane': 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=800&q=80',
-    'drill': 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=800&q=80',
-    'truck': 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?auto=format&fit=crop&w=800&q=80',
-    'compactor': 'https://images.unsplash.com/photo-1570126681446-66f8f1b15f3c?auto=format&fit=crop&w=800&q=80',
-    'grader': 'https://images.unsplash.com/photo-1570126681446-66f8f1b15f3c?auto=format&fit=crop&w=800&q=80',
-    'construction': 'https://images.unsplash.com/photo-1573176054053-b0e345766088?auto=format&fit=crop&w=800&q=80',
-    // Ajout de nouvelles catégories avec des images plus spécifiques
-    'excavatrice': 'https://images.unsplash.com/photo-1573176054053-b0e345766088?auto=format&fit=crop&w=800&q=80',
-    'pelle': 'https://images.unsplash.com/photo-1573176054053-b0e345766088?auto=format&fit=crop&w=800&q=80',
-    'chargeuse': 'https://images.unsplash.com/photo-1581094487326-5937e8490a87?auto=format&fit=crop&w=800&q=80',
-    'bouteur': 'https://images.unsplash.com/photo-1570126681446-66f8f1b15f3c?auto=format&fit=crop&w=800&q=80',
-    'grue': 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=800&q=80',
-    'foreuse': 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=800&q=80',
-    'forage': 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=800&q=80',
-    'camion': 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?auto=format&fit=crop&w=800&q=80',
-    'compacteur': 'https://images.unsplash.com/photo-1570126681446-66f8f1b15f3c?auto=format&fit=crop&w=800&q=80',
-    'niveleuse': 'https://images.unsplash.com/photo-1570126681446-66f8f1b15f3c?auto=format&fit=crop&w=800&q=80'
-  };
-  
-  // Normaliser la catégorie pour une meilleure correspondance
-  const normalizedCategory = category.toLowerCase().trim();
-  return [imageMap[normalizedCategory] || imageMap['construction']];
-}
-
 export default function VitrinePersonnalisee() {
   const [vitrineData, setVitrineData] = useState<VitrineData | null>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -194,12 +159,26 @@ export default function VitrinePersonnalisee() {
   const [newSpecialization, setNewSpecialization] = useState('');
   const [newCertification, setNewCertification] = useState('');
   
-  // États pour les interactions intelligentes
-  const [showRecommendations, setShowRecommendations] = useState(false);
-  const [showCostSimulation, setShowCostSimulation] = useState(false);
-  const [showCallbackForm, setShowCallbackForm] = useState(false);
-  const [showExpertContact, setShowExpertContact] = useState(false);
-  const [showBundleForm, setShowBundleForm] = useState(false);
+  // Critères de recherche du visiteur : transmis tels quels à l'entreprise,
+  // aucun moteur de recommandation n'existe côté serveur.
+  const [criteres, setCriteres] = useState({ chantier: '', budget: '', duree: '' });
+
+  // Simulateur : le calcul n'utilise QUE les tarifs de location publiés sur
+  // l'annonce. Pas de tarif publié = pas d'estimation (cf. estimationIndisponible).
+  const [simulation, setSimulation] = useState({ machineId: '', duree: '1', unite: 'mois' });
+  const [estimation, setEstimation] = useState<{
+    machine: string;
+    tarif: number;
+    unite: string;
+    quantite: number;
+    total: number;
+  } | null>(null);
+  const [estimationIndisponible, setEstimationIndisponible] = useState<string | null>(null);
+
+  // Demande de location (modale)
+  const [rentalForm, setRentalForm] = useState(FORMULAIRE_LOCATION_VIDE);
+  const [rentalSubmitting, setRentalSubmitting] = useState(false);
+  const [rentalError, setRentalError] = useState<string | null>(null);
   const [showDataInfo, setShowDataInfo] = useState(false);
 
   // Filtrer les machines selon la catégorie sélectionnée
@@ -548,6 +527,8 @@ export default function VitrinePersonnalisee() {
 
   const handleRentalRequest = (machine: Machine) => {
     setSelectedMachine(machine);
+    setRentalForm(FORMULAIRE_LOCATION_VIDE);
+    setRentalError(null);
     setShowRentalForm(true);
   };
 
@@ -561,50 +542,125 @@ export default function VitrinePersonnalisee() {
     window.location.href = `tel:${vitrineData?.emergency_phone}`;
   };
 
-  // Fonctions pour les interactions intelligentes
-  const handleGetRecommendations = () => {
-    setShowRecommendations(true);
-    // Simulation de recommandations basées sur les critères
-    setTimeout(() => {
-      toast('Recommandations envoyées par email ! Nos experts vous contacteront dans les 24h.');
-      setShowRecommendations(false);
-    }, 1000);
+  /**
+   * Seuls canaux de contact RÉELS d'une vitrine : le numéro WhatsApp et l'e-mail
+   * saisis par l'entreprise. Rien d'autre n'est branché côté serveur — pas de
+   * file de rappel, pas d'équipe d'experts, pas de moteur de recommandation.
+   */
+  const canalContact = (() => {
+    const whatsapp = vitrineData?.whatsapp?.replace(/\D/g, '') || '';
+    if (whatsapp) return { type: 'whatsapp' as const, cible: whatsapp };
+    const email = vitrineData?.email?.trim() || '';
+    if (email) return { type: 'email' as const, cible: email };
+    return null;
+  })();
+
+  const handleEnvoyerCriteres = () => {
+    if (!canalContact) return;
+    const message = [
+      `Bonjour ${vitrineData?.company_name || ''},`.trim(),
+      'Je cherche un équipement correspondant à ces critères :',
+      `- Type de chantier : ${criteres.chantier || 'non précisé'}`,
+      `- Budget estimé : ${criteres.budget || 'non précisé'}`,
+      `- Durée d'utilisation : ${criteres.duree || 'non précisée'}`,
+    ].join('\n');
+
+    if (canalContact.type === 'whatsapp') {
+      window.open(`https://wa.me/${canalContact.cible}?text=${encodeURIComponent(message)}`, '_blank');
+      return;
+    }
+    const sujet = encodeURIComponent('Recherche d\'équipement');
+    window.open(`mailto:${canalContact.cible}?subject=${sujet}&body=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const handleCalculateCost = () => {
-    setShowCostSimulation(true);
-    // Simulation de calcul de coût
-    setTimeout(() => {
-      toast('Estimation envoyée par email ! Coût total estimé : 7 500€ pour 3 mois avec transport inclus.');
-      setShowCostSimulation(false);
-    }, 1000);
+  const handleEstimerLocation = () => {
+    setEstimation(null);
+    setEstimationIndisponible(null);
+
+    const machine = machines.find(m => m.id === simulation.machineId);
+    if (!machine) {
+      setEstimationIndisponible('Sélectionnez un équipement pour obtenir une estimation.');
+      return;
+    }
+    const quantite = Number(simulation.duree);
+    if (!Number.isFinite(quantite) || quantite <= 0) {
+      setEstimationIndisponible('Indiquez une durée supérieure à zéro.');
+      return;
+    }
+    const tarif =
+      simulation.unite === 'mois'
+        ? machine.rental_price_monthly
+        : simulation.unite === 'semaines'
+          ? machine.rental_price_weekly
+          : machine.rental_price_daily;
+
+    if (!tarif || tarif <= 0) {
+      setEstimationIndisponible(
+        `Le tarif de location n'est pas renseigné sur l'annonce « ${machine.name} » pour cette unité : aucune estimation ne peut être calculée ici.`,
+      );
+      return;
+    }
+    setEstimation({
+      machine: machine.name,
+      tarif,
+      unite: simulation.unite,
+      quantite,
+      total: tarif * quantite,
+    });
   };
 
-  const handleCallbackRequest = () => {
-    setShowCallbackForm(true);
-    // Simulation de demande de rappel
-    setTimeout(() => {
-      toast('Demande de rappel enregistrée ! Un expert vous appellera sous 2h.');
-      setShowCallbackForm(false);
-    }, 1000);
-  };
+  const handleEnvoyerDemandeLocation = async () => {
+    if (!selectedMachine) return;
+    const nom = rentalForm.nom.trim();
+    const email = rentalForm.email.trim();
+    if (!nom || !email) {
+      setRentalError('Renseignez votre nom et votre email : sans eux le loueur ne peut pas vous répondre.');
+      return;
+    }
 
-  const handleExpertContact = () => {
-    setShowExpertContact(true);
-    // Simulation de contact expert
-    setTimeout(() => {
-      toast('Expert contacté ! Il vous rappellera dans les 30 minutes.');
-      setShowExpertContact(false);
-    }, 1000);
-  };
+    setRentalSubmitting(true);
+    setRentalError(null);
+    try {
+      const options = [
+        rentalForm.transport ? 'transport' : null,
+        rentalForm.chauffeur ? 'chauffeur' : null,
+        rentalForm.maintenance ? 'maintenance sur site' : null,
+      ].filter(Boolean);
+      const message = [
+        `Demande de location — ${selectedMachine.name}`,
+        `Type de chantier : ${rentalForm.chantier}`,
+        `Période souhaitée : du ${rentalForm.dateDebut || 'non précisé'} au ${rentalForm.dateFin || 'non précisé'}`,
+        `Lieu de livraison : ${rentalForm.lieu || 'non précisé'}`,
+        `Options demandées : ${options.length ? options.join(', ') : 'aucune'}`,
+      ].join('\n');
 
-  const handleBundleRequest = () => {
-    setShowBundleForm(true);
-    // Simulation de demande de bundle
-    setTimeout(() => {
-      toast('Devis bundle demandé ! Notre équipe vous enverra une proposition complète sous 24h.');
-      setShowBundleForm(false);
-    }, 1000);
+      const resultat = await submitQuoteRequest({
+        machine_id: selectedMachine.id,
+        machine_name: selectedMachine.name,
+        brand: selectedMachine.brand || null,
+        seller_id: vitrineData?.user_id || null,
+        buyer_name: nom,
+        buyer_email: email,
+        buyer_phone: rentalForm.telephone.trim() || null,
+        need_by_date: rentalForm.dateDebut || null,
+        message,
+        source: 'vitrine_location',
+      });
+
+      toast.success(
+        `Demande de location enregistrée (référence ${resultat.quoteId}). Elle apparaît dans les demandes du loueur.`,
+      );
+      setShowRentalForm(false);
+      setRentalForm(FORMULAIRE_LOCATION_VIDE);
+    } catch (error) {
+      console.error('Erreur demande de location:', error);
+      setRentalError(
+        'La demande n\'a pas pu être enregistrée. Réessayez, ou contactez l\'entreprise directement.',
+      );
+      toast.error('La demande de location n\'a pas pu être enregistrée.');
+    } finally {
+      setRentalSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -1640,25 +1696,30 @@ export default function VitrinePersonnalisee() {
 
 
 
-            {/* Interactions Intelligentes */}
+            {/* Guide — critères de recherche et estimation de location */}
             <div className="bg-white rounded-lg shadow-md p-6 mt-8">
               <h2 className="text-xl font-bold text-gray-900 mb-6">
                 Guide
               </h2>
-              
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Assistant de choix intelligent */}
+                {/* Critères de recherche — transmis à l'entreprise sur son canal réel */}
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-lg border border-orange-200">
                   <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                     <span className="text-orange-600 mr-2">🧠</span>
-                    Trouvez votre équipement idéal
+                    Décrivez votre besoin
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Type de chantier</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                        <option>Sélectionnez votre chantier</option>
+                      <label htmlFor="criteres-chantier" className="block text-sm font-medium text-gray-700 mb-2">Type de chantier</label>
+                      <select
+                        id="criteres-chantier"
+                        value={criteres.chantier}
+                        onChange={(e) => setCriteres(prev => ({ ...prev, chantier: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="">Sélectionnez votre chantier</option>
                         <option>Construction de routes</option>
                         <option>Mining / Extraction</option>
                         <option>Agriculture</option>
@@ -1666,141 +1727,142 @@ export default function VitrinePersonnalisee() {
                         <option>Manutention</option>
                       </select>
                     </div>
-                    
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Budget estimé</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                        <option>Sélectionnez votre budget</option>
+                      <label htmlFor="criteres-budget" className="block text-sm font-medium text-gray-700 mb-2">Budget estimé</label>
+                      <select
+                        id="criteres-budget"
+                        value={criteres.budget}
+                        onChange={(e) => setCriteres(prev => ({ ...prev, budget: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="">Sélectionnez votre budget</option>
                         <option>Moins de 50k€</option>
                         <option>50k€ - 150k€</option>
                         <option>150k€ - 500k€</option>
                         <option>Plus de 500k€</option>
                       </select>
                     </div>
-                    
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Durée d'utilisation</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                        <option>Sélectionnez la durée</option>
+                      <label htmlFor="criteres-duree" className="block text-sm font-medium text-gray-700 mb-2">Durée d'utilisation</label>
+                      <select
+                        id="criteres-duree"
+                        value={criteres.duree}
+                        onChange={(e) => setCriteres(prev => ({ ...prev, duree: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="">Sélectionnez la durée</option>
                         <option>1-3 mois</option>
                         <option>3-6 mois</option>
                         <option>6-12 mois</option>
                         <option>Plus d'un an</option>
                       </select>
                     </div>
-                    
-                    <button 
-                      onClick={handleGetRecommendations}
-                      disabled={showRecommendations}
-                      className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium disabled:opacity-50"
+
+                    <button
+                      onClick={handleEnvoyerCriteres}
+                      disabled={!canalContact}
+                      className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {showRecommendations ? '⏳ Traitement...' : '💡 Obtenir mes recommandations'}
+                      {!canalContact
+                        ? 'Envoyer mes critères'
+                        : canalContact.type === 'email'
+                          ? '✉️ Envoyer mes critères par email'
+                          : '💬 Envoyer mes critères sur WhatsApp'}
                     </button>
+                    <p className="text-xs text-gray-600">
+                      {canalContact
+                        ? 'Vos critères sont recopiés dans un message que vous envoyez vous-même à l\'entreprise. MineGrid ne fait aucune recommandation automatique.'
+                        : 'Cette entreprise n\'a pas renseigné de canal de contact (WhatsApp ou email) : impossible de lui transmettre vos critères depuis cette page.'}
+                    </p>
                   </div>
                 </div>
 
-                {/* Simulation de coût */}
+                {/* Estimation de location — calculée sur les tarifs publiés, sinon rien */}
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-lg border border-orange-200">
                   <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                     <span className="text-orange-600 mr-2">💰</span>
-                    Simulateur de coût
+                    Estimation de location
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Équipement</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                        <option>Sélectionnez un équipement</option>
-                        {filteredMachines.slice(0, 3).map(machine => (
-                          <option key={machine.id}>{machine.name}</option>
+                      <label htmlFor="simulateur-equipement" className="block text-sm font-medium text-gray-700 mb-2">Équipement</label>
+                      <select
+                        id="simulateur-equipement"
+                        value={simulation.machineId}
+                        onChange={(e) => setSimulation(prev => ({ ...prev, machineId: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="">Sélectionnez un équipement</option>
+                        {filteredMachines.map(machine => (
+                          <option key={machine.id} value={machine.id}>{machine.name}</option>
                         ))}
                       </select>
                     </div>
-                    
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Durée</label>
+                      <label htmlFor="simulateur-duree" className="block text-sm font-medium text-gray-700 mb-2">Durée de location</label>
                       <div className="flex space-x-2">
-                        <input type="number" placeholder="3" className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm" />
-                        <select className="px-3 py-2 border border-gray-300 rounded-md text-sm">
-                          <option>mois</option>
-                          <option>semaines</option>
-                          <option>jours</option>
+                        <input
+                          id="simulateur-duree"
+                          type="number"
+                          min="1"
+                          value={simulation.duree}
+                          onChange={(e) => setSimulation(prev => ({ ...prev, duree: e.target.value }))}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                        <label htmlFor="simulateur-unite" className="sr-only">Unité de durée</label>
+                        <select
+                          id="simulateur-unite"
+                          value={simulation.unite}
+                          onChange={(e) => setSimulation(prev => ({ ...prev, unite: e.target.value }))}
+                          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        >
+                          <option value="mois">mois</option>
+                          <option value="semaines">semaines</option>
+                          <option value="jours">jours</option>
                         </select>
                       </div>
                     </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Localisation</label>
-                      <input type="text" placeholder="Ex: Rabat, Maroc" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
-                    </div>
-                    
-                    <button 
-                      onClick={handleCalculateCost}
-                      disabled={showCostSimulation}
-                      className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium disabled:opacity-50"
+
+                    <button
+                      onClick={handleEstimerLocation}
+                      className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
                     >
-                      {showCostSimulation ? '⏳ Calcul...' : '🧮 Calculer le coût total'}
+                      🧮 Estimer le coût de location
                     </button>
+
+                    {estimation && (
+                      <div className="bg-white p-4 rounded-lg border border-orange-200">
+                        <p className="text-sm text-gray-700">
+                          {estimation.machine} — {estimation.quantite} {estimation.unite} au tarif publié de {estimation.tarif}€/{estimation.unite === 'mois' ? 'mois' : estimation.unite === 'semaines' ? 'semaine' : 'jour'}
+                        </p>
+                        <p className="text-2xl font-bold text-orange-600 mt-1">
+                          <Price amount={estimation.total} />
+                        </p>
+                        <p className="text-xs text-gray-600 mt-2">
+                          Location seule. Transport, carburant, chauffeur, assurance et caution ne sont pas chiffrés ici : demandez-les à l'entreprise.
+                        </p>
+                      </div>
+                    )}
+
+                    {estimationIndisponible && (
+                      <div className="bg-white p-4 rounded-lg border border-gray-300">
+                        <p className="text-sm text-gray-700">{estimationIndisponible}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Services d'accompagnement */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                {/* Demande de rappel */}
-                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center">
-                    <span className="text-orange-600 mr-2">📞</span>
-                    Rappel gratuit
-                  </h4>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Un expert vous rappelle sous 2h pour étudier votre projet
-                  </p>
-                  <button 
-                    onClick={handleCallbackRequest}
-                    disabled={showCallbackForm}
-                    className="w-full px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm disabled:opacity-50"
-                  >
-                    {showCallbackForm ? '⏳ Enregistrement...' : 'Demander un rappel'}
-                  </button>
-                </div>
-
-                {/* Conseiller expert */}
-                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center">
-                                          <span className="text-orange-600 mr-2">🧑‍🔧</span>
-                    Expert dédié
-                  </h4>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Accès direct à un conseiller spécialisé dans votre secteur
-                  </p>
-                  <button 
-                    onClick={handleExpertContact}
-                    disabled={showExpertContact}
-                    className="w-full px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm disabled:opacity-50"
-                  >
-                    {showExpertContact ? '⏳ Contact...' : 'Contacter l\'expert'}
-                  </button>
-                </div>
-
-                {/* Bundle clé-en-main */}
-                <div className="bg-teal-50 p-4 rounded-lg border border-teal-200">
-                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center">
-                    <span className="text-teal-600 mr-2">📦</span>
-                    Solution complète
-                  </h4>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Machine + transport + opérateur + maintenance
-                  </p>
-                  <button 
-                    onClick={handleBundleRequest}
-                    disabled={showBundleForm}
-                    className="w-full px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm disabled:opacity-50"
-                  >
-                    {showBundleForm ? '⏳ Demande...' : 'Demander un devis'}
-                  </button>
-                </div>
-              </div>
+              {/* Les trois cartes « Rappel gratuit », « Expert dédié » et « Solution
+                  complète » ont été retirées : aucun de ces services n'existe côté
+                  serveur (pas de file de rappel, pas d'équipe de conseillers, pas
+                  d'offre bundle). Leurs boutons affichaient un succès et un délai
+                  d'intervention après un simple setTimeout. À rétablir le jour où
+                  le service existe réellement, pas avant. */}
             </div>
 
             {/* Badges de confiance et carte des projets */}
@@ -1844,18 +1906,60 @@ export default function VitrinePersonnalisee() {
         </div>
       </div>
 
-      {/* Modal de réservation de location */}
+      {/* Demande de location — écrit une vraie demande (quote_requests) */}
       {showRentalForm && selectedMachine && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-8">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Réservation - {selectedMachine.name}
+            <h3 className="text-lg font-bold text-gray-900 mb-1">
+              Demande de location - {selectedMachine.name}
             </h3>
-            
+            <p className="text-xs text-gray-600 mb-4">
+              Ce formulaire envoie une demande au loueur : ce n'est pas une réservation confirmée.
+            </p>
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type de chantier</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                <label htmlFor="location-nom" className="block text-sm font-medium text-gray-700 mb-1">Votre nom *</label>
+                <input
+                  id="location-nom"
+                  type="text"
+                  value={rentalForm.nom}
+                  onChange={(e) => setRentalForm(prev => ({ ...prev, nom: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="location-email" className="block text-sm font-medium text-gray-700 mb-1">Votre email *</label>
+                  <input
+                    id="location-email"
+                    type="email"
+                    value={rentalForm.email}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="location-telephone" className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                  <input
+                    id="location-telephone"
+                    type="tel"
+                    value={rentalForm.telephone}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, telephone: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="location-chantier" className="block text-sm font-medium text-gray-700 mb-1">Type de chantier</label>
+                <select
+                  id="location-chantier"
+                  value={rentalForm.chantier}
+                  onChange={(e) => setRentalForm(prev => ({ ...prev, chantier: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
                   <option>Construction</option>
                   <option>Mining</option>
                   <option>Agriculture</option>
@@ -1863,39 +1967,77 @@ export default function VitrinePersonnalisee() {
                   <option>Autre</option>
                 </select>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date début</label>
-                  <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <label htmlFor="location-debut" className="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
+                  <input
+                    id="location-debut"
+                    type="date"
+                    value={rentalForm.dateDebut}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, dateDebut: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date fin</label>
-                  <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <label htmlFor="location-fin" className="block text-sm font-medium text-gray-700 mb-1">Date de fin</label>
+                  <input
+                    id="location-fin"
+                    type="date"
+                    value={rentalForm.dateFin}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, dateFin: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
                 </div>
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lieu de livraison</label>
-                <input type="text" placeholder="Adresse complète" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                <label htmlFor="location-lieu" className="block text-sm font-medium text-gray-700 mb-1">Lieu de livraison</label>
+                <input
+                  id="location-lieu"
+                  type="text"
+                  placeholder="Adresse complète"
+                  value={rentalForm.lieu}
+                  onChange={(e) => setRentalForm(prev => ({ ...prev, lieu: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
               </div>
-              
+
               <div className="space-y-2">
                 <label className="flex items-center">
-                  <input type="checkbox" className="mr-2" />
-                  <span className="text-sm">Transport inclus</span>
+                  <input
+                    type="checkbox"
+                    className="mr-2"
+                    checked={rentalForm.transport}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, transport: e.target.checked }))}
+                  />
+                  <span className="text-sm">Transport souhaité</span>
                 </label>
                 <label className="flex items-center">
-                  <input type="checkbox" className="mr-2" />
-                  <span className="text-sm">Chauffeur inclus</span>
+                  <input
+                    type="checkbox"
+                    className="mr-2"
+                    checked={rentalForm.chauffeur}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, chauffeur: e.target.checked }))}
+                  />
+                  <span className="text-sm">Chauffeur souhaité</span>
                 </label>
                 <label className="flex items-center">
-                  <input type="checkbox" className="mr-2" />
-                  <span className="text-sm">Maintenance sur site</span>
+                  <input
+                    type="checkbox"
+                    className="mr-2"
+                    checked={rentalForm.maintenance}
+                    onChange={(e) => setRentalForm(prev => ({ ...prev, maintenance: e.target.checked }))}
+                  />
+                  <span className="text-sm">Maintenance sur site souhaitée</span>
                 </label>
               </div>
+
+              {rentalError && (
+                <p className="text-sm text-red-600">{rentalError}</p>
+              )}
             </div>
-            
+
             <div className="flex space-x-3 mt-6">
               <button
                 onClick={() => setShowRentalForm(false)}
@@ -1904,13 +2046,11 @@ export default function VitrinePersonnalisee() {
                 Annuler
               </button>
               <button
-                onClick={() => {
-                  toast('Demande de réservation envoyée !');
-                  setShowRentalForm(false);
-                }}
-                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                onClick={handleEnvoyerDemandeLocation}
+                disabled={rentalSubmitting}
+                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
               >
-                Réserver
+                {rentalSubmitting ? 'Envoi...' : 'Envoyer la demande'}
               </button>
             </div>
           </div>

@@ -187,6 +187,63 @@ lieu de « tableau de bord » → 1 échec.
 
 **573 tests** au total (463 au début de la séance).
 
+## 🐛 Trois défauts RÉELS trouvés en cartographiant les gros fichiers (2026-09-28)
+
+Le découpage des gros fichiers a révélé des bugs bien plus importants que le problème de lignes.
+Les trois ci-dessous sont **confirmés par lecture du code**, corrigés, et verrouillés par des
+tests vérifiés par mutation.
+
+### 1. Tout lien de vitrine partagé par un vendeur ouvrait une page VIDE 🔴
+
+`getSellerIdFromHash` lisait l'identifiant avec `/^#vitrine\/?(\w+)?/`. Or `\w` vaut
+`[A-Za-z0-9_]` et **n'inclut pas le tiret**, alors que les identifiants Supabase sont des UUID à
+tirets. `#vitrine/3f2b1c4a-9d7e-4f11-8a20-0b6c5d4e3f21` devenait `3f2b1c4a`.
+
+Cet identifiant tronqué ne correspondait à aucune ligne, l'erreur PGRST116 était avalée en
+silence, et la page s'affichait vide — **sans message d'erreur**. Les trois endroits qui
+fabriquent ce lien passent pourtant un UUID complet : le bouton « Voir en public », le bouton
+« Voir vitrine du professionnel » d'une fiche machine, et le texte qui invite le vendeur à
+partager `votre-site.com/#vitrine/<user_id>`.
+
+Autrement dit : un vendeur envoyait le lien de sa vitrine à ses clients, et ses clients ne
+voyaient aucune de ses machines.
+
+Le test existant passait au travers parce qu'il utilisait `#vitrine/vendeur1` — une valeur sans
+tiret, commode mais irréelle. Les nouveaux tests n'emploient que de vrais UUID ; remettre
+l'ancienne expression en fait échouer 4.
+
+### 2. Rétrograder un membre ne changeait RIEN en base 🔴
+
+`handleUpdateMember` ne faisait qu'un `setTeamMembers` en mémoire. La fonction serveur
+`setOrgMemberRole` (RPC `set_org_member_role`, **présente dans les deux bases**) existait et
+n'était appelée **nulle part** dans `src/`.
+
+Un administrateur qui rétrogradait un « Administrateur » en « Lecteur » voyait l'écran changer,
+partait rassuré — et la base gardait `admin`. Au rechargement l'ancien rôle revenait, et la
+personne conservait tous ses droits côté RLS. **Un droit retiré à l'écran mais conservé en base
+est pire que pas de bouton du tout : il fait croire que l'accès est coupé.**
+
+Corrigé : le rôle part au serveur, et en cas de refus la fenêtre reste ouverte avec le motif —
+mieux vaut un échec visible qu'un succès imaginaire.
+
+### 3. Un échec de lecture ÉLARGISSAIT les droits 🟠
+
+Le chargement des affectations (Commercial / Appels d'offres) avait un `catch` qui gardait « le
+défaut », c'est-à-dire **accès à tout**. Un échec de lecture se confondait donc avec « ce membre
+a tous les accès » : rouvrir puis enregistrer la fiche d'un membre volontairement restreint lui
+rendait les deux espaces.
+
+Corrigé par un drapeau `affectationsConnues` : quand la lecture a échoué, l'enregistrement
+s'abstient et le dit. Un échec de lecture ne doit jamais élargir des droits.
+
+### Au passage : deux boutons muets pour un lecteur d'écran
+
+Les boutons « modifier » et « retirer » d'un membre étaient des icônes sans `title` ni
+`aria-label` — celui de l'historique, juste à côté, les avait. Un lecteur d'écran annonçait
+« bouton » trois fois de suite, sans rien pour distinguer « modifier » de « retirer un membre ».
+
+---
+
 ### Trouvé au passage : le `tsconfig` strict n'est jamais utilisé
 
 `tsconfig.app.json` déclare `strict: true`, `noUnusedLocals: true`, `noUnusedParameters: true`.
