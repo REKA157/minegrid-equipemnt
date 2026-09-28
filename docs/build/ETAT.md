@@ -48,7 +48,7 @@ mal, et deux personnes ne peuvent pas y travailler en même temps.
 | **1 — Registre des bases** | `npm run bases` : comparer prod et staging en 30 s | ✅ **fait** — 2 écarts et 8 manquants révélés dès le premier passage |
 | **2 — Un seul endroit pour le SQL** | Le SQL vivait dans **quatre** dossiers, dont « SQL_A_APPLIQUER » qui était déjà appliqué | ✅ **fait** — 56 fichiers archivés, garde-fou `npm run verifier:sql` |
 | **3 — Découper les gros fichiers** | 14 fichiers > 1 000 lignes (et non 11 : le chiffre a grossi avec le travail non commité) | 🔄 **en cours** — le plus gros est fait, voir ci-dessous |
-| **4 — Fusionner les 4 dossiers de widgets** | Quatre implémentations parallèles du même besoin | ⏳ **à faire** |
+| **4 — Les dossiers de widgets en double** | Il n'y avait pas à fusionner : un des forks était **mort** | ✅ **fait** — 33 fichiers / 8 779 lignes archivés |
 
 ### Priorité 2 — ce qui a été vérifié AVANT de déplacer quoi que ce soit
 
@@ -134,6 +134,49 @@ la testabilité — pas sur le poids téléchargé. Les charger à la demande se
 **Reste sur ce fichier** : 9 widgets refusés par le script (dont `active-deliveries`,
 `driver-schedule`, `route-optimization`, `repair-status`, `document-status`, `inventory-alerts`,
 `rental-revenue`), qui partagent `handleWidgetAction` ou une donnée du parent.
+
+### Priorité 4 — il n'y avait rien à fusionner : un fork était mort
+
+Le diagnostic de départ (« quatre dossiers de widgets parallèles à fusionner ») était le bon
+constat mais la mauvaise conclusion. `src/pages/enterprise/widgets/` contenait cinq fichiers
+portant **exactement le même nom** que leur jumeau de `src/components/dashboard/widgets/` —
+`ChartWidget`, `ListWidget`, `MetricWidget`, `SalesPipelineWidget`, `EquipmentAvailabilityWidget` —
+avec des tailles différentes. Pas des copies : des **versions divergentes**.
+
+Sauf qu'aucune des deux n'était en concurrence : **la racine de ce sous-arbre,
+`WidgetComponent.tsx` (462 lignes), n'a aucun importateur.** Les 33 fichiers qui en dépendent
+sont inatteignables depuis `main.tsx`.
+
+**33 fichiers / 8 779 lignes** déplacés dans `archive/code-mort/` — dont
+`SalesEvolutionWidgetEnriched.tsx` (1 723) et `SalesPipelineWidget.tsx` (1 354), **deux des
+quatorze fichiers de plus de 1 000 lignes de la priorité 3**, réglés sans refactor.
+
+Vérifié trois fois, parce que supprimer du code sur une analyse fausse est le pire des deux mondes :
+graphe d'imports résolu, **un audit d'août 2026 qui avait conclu la même chose**, puis `tsc` +
+538 tests + build après déplacement. Angles morts écartés : pas de `import.meta.glob`, pas
+d'import dynamique construit, pas d'alias de chemin, aucune référence depuis un test.
+
+⚠️ **Deux erreurs en chemin, corrigées** :
+- Un premier relevé annonçait 92 fichiers / 20 178 lignes mortes. Il ne reconnaissait que les
+  imports en guillemets **simples**, et condamnait donc à tort tout `src/pages/pro/widgets/`
+  (5 534 lignes), importé en guillemets doubles par `ProDashboard.tsx`. C'est le **désaccord avec
+  l'audit d'août** qui a révélé la faute. Chiffre exact : **83 fichiers, 14 644 lignes**.
+- Le dossier comptait 34 fichiers, dont 33 morts. Le déplacer en bloc a emporté
+  `InventoryStatusWidget.tsx`, bien utilisé lui. `tsc` l'a signalé sur-le-champ ; remis en place.
+
+**Reste** : ~50 fichiers / ~5 900 lignes mortes dispersées (`QuoteGenerator.tsx`,
+`ConfigurationPro.tsx`, doublons `dashboard/TopBar` vs `dashboard/layout/TopBar`…). Non traitées
+volontairement : ce sont des pages isolées dont certaines peuvent attendre un rebranchement.
+À trancher une par une.
+
+### Trouvé au passage : le `tsconfig` strict n'est jamais utilisé
+
+`tsconfig.app.json` déclare `strict: true`, `noUnusedLocals: true`, `noUnusedParameters: true`.
+Mais `npm run build` lance `tsc` tout court, qui lit `tsconfig.json` — où tout cela vaut **false**,
+`noImplicitAny` compris. Aucun script ne référence `tsconfig.app.json`, et `tsconfig.json` ne le
+déclare pas en `references` : **la configuration stricte est morte**. Le contrôle de types du build
+est donc bien plus laxiste qu'il n'en a l'air. Non corrigé ici : activer `strict` sur 580 fichiers
+est un chantier à part entière, à chiffrer avant de s'y mettre.
 
 ---
 
