@@ -169,6 +169,24 @@ d'import dynamique construit, pas d'alias de chemin, aucune référence depuis u
 volontairement : ce sont des pages isolées dont certaines peuvent attendre un rebranchement.
 À trancher une par une.
 
+### Priorité 3 (suite) — la logique métier enfouie, sortie et testée
+
+Deux pages parmi les plus grosses cachaient de la logique **pure et non testée**, non par
+négligence mais parce qu'on ne pouvait pas l'atteindre : il fallait monter la page entière, et la
+page exige une session, une organisation, des données.
+
+| Sortie de | Vers | Ce que ça protège |
+|---|---|---|
+| `MachineDetail.tsx` (1 166 → 1 120) | `machineDetailHelpers.ts` + **17 tests** | La table `machines` porte **quatre colonnes concurrentes** pour le vendeur (`seller_id`, `sellerid`, `user_id`, `owner_id`). Le choix entre elles décide **à qui part la demande de devis d'un client**. La priorité est alignée sur la fonction serveur `send-contact-email` : les deux doivent rester d'accord. |
+| `MultiUserManagement.tsx` (1 228 → 1 153) | `multiUserHelpers.ts` + **18 tests** | La traduction rôle → permissions **affichées**. Les permissions réelles viennent de la RLS ; si les deux divergent, l'écran ment à l'utilisateur sur ce qu'il a le droit de faire. |
+
+**Vérifiés par mutation**, parce qu'un test qui passe ne prouve rien tant qu'on n'a pas vu
+échouer : inverser la priorité des colonnes vendeur → 1 échec ; laisser passer les identifiants
+factices `00000000-…` → 2 échecs ; faire retomber un rôle inconnu sur « toutes permissions » au
+lieu de « tableau de bord » → 1 échec.
+
+**573 tests** au total (463 au début de la séance).
+
 ### Trouvé au passage : le `tsconfig` strict n'est jamais utilisé
 
 `tsconfig.app.json` déclare `strict: true`, `noUnusedLocals: true`, `noUnusedParameters: true`.

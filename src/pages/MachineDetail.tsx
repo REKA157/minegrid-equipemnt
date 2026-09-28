@@ -40,63 +40,17 @@ interface ContactFormData {
   offerAmount?: number;
 }
 
-interface MachineLegacyFields {
-  sellerid?: string | null;
-  seller_id?: string | null;
-  user_id?: string | null;
-  owner_id?: string | null;
-  photos?: string[] | null;
-}
+// Lecture defensive d'une fiche machine : sortie dans son propre module, ou
+// elle est enfin testable (machineDetailHelpers.test.ts).
+import {
+  getLegacySellerId,
+  isPlaceholderSellerUuid,
+  resolveSellerUuidFromMachineRecord,
+  getLegacyPhotos,
+  getDimensionsVolume,
+  type MachineLegacyFields,
+} from './machineDetailHelpers';
 
-interface DimensionsLike {
-  length?: string | number;
-  width?: string | number;
-  height?: string | number;
-}
-
-function getLegacySellerId(value: unknown): string {
-  if (!value || typeof value !== 'object') return '';
-  const v = value as MachineLegacyFields;
-  return v.sellerid || v.seller_id || v.user_id || v.owner_id || '';
-}
-
-const PLACEHOLDER_SELLER_IDS = new Set([
-  '00000000-0000-0000-0000-000000000000',
-  '00000000-0000-0000-0000-000000000001',
-]);
-
-function isPlaceholderSellerUuid(id: string): boolean {
-  return PLACEHOLDER_SELLER_IDS.has(id.trim().toLowerCase());
-}
-
-/** Priorité alignée avec send-contact-email */
-function resolveSellerUuidFromMachineRecord(row: Record<string, unknown>): string | null {
-  const keys = ['seller_id', 'sellerid', 'user_id', 'owner_id'] as const;
-  for (const k of keys) {
-    const raw = row[k];
-    if (typeof raw !== 'string') continue;
-    const uuid = parseSellerUuid(raw);
-    if (uuid && !isPlaceholderSellerUuid(uuid)) return uuid;
-  }
-  return null;
-}
-
-function getLegacyPhotos(value: unknown): string[] {
-  if (!value || typeof value !== 'object') return [];
-  const v = value as MachineLegacyFields;
-  return Array.isArray(v.photos) ? v.photos : [];
-}
-
-function getDimensionsVolume(dimensions: unknown): number | undefined {
-  if (!dimensions || typeof dimensions !== 'object') return undefined;
-  const { length, width, height } = dimensions as DimensionsLike;
-  const l = parseFloat(String(length ?? '0'));
-  const w = parseFloat(String(width ?? '0'));
-  const h = parseFloat(String(height ?? '0'));
-  if (!Number.isFinite(l) || !Number.isFinite(w) || !Number.isFinite(h)) return undefined;
-  const volume = l * w * h;
-  return volume > 0 ? volume : undefined;
-}
 
 
 
@@ -169,6 +123,18 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           .maybeSingle();
         if (!idsPick.error && idsPick.data && typeof idsPick.data === 'object') {
           merged = { ...merged, ...(idsPick.data as Record<string, unknown>) };
+        }
+
+        // FE-05 : la table `machines` n'impose NOT NULL ni sur `specifications`
+        // (jsonb) ni sur `category`. Une ligne importée (n8n) ou ancienne peut
+        // donc porter null, et le rendu plantait (`category.toLowerCase()`,
+        // `specifications.dimensions`). On normalise UNE fois à la source plutôt
+        // que de disperser des `?.` dans tout le JSX.
+        if (merged.specifications === null || typeof merged.specifications !== 'object') {
+          merged.specifications = {};
+        }
+        if (typeof merged.category !== 'string') {
+          merged.category = '';
         }
 
         const sellerUid = resolveSellerUuidFromMachineRecord(merged);
@@ -249,6 +215,17 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
                 finishSellerAndImages(stubPayload);
               }
               setLoading(false);
+            })
+            // FE-06 : sans ce catch, un REJET (coupure réseau, timeout) laissait
+            // `loading` à true => spinner infini + unhandledrejection.
+            .catch((sellerErr: unknown) => {
+              console.error('Erreur chargement vendeur (rejet):', sellerErr);
+              const basePayload = merged as unknown as MachineWithPremium;
+              setMachineData({
+                ...basePayload,
+                seller: { id: sellerUid, name: '', rating: 0, location: geoLine },
+              });
+              setLoading(false);
             });
         } else {
           const stubPayload: MachineWithPremium = {
@@ -264,6 +241,13 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
           finishSellerAndImages(stubPayload);
           setLoading(false);
         }
+      })
+      // FE-06 : idem sur la chaîne principale — un rejet réseau ne doit jamais
+      // laisser la page bloquée sur « Chargement de la machine... ».
+      .catch((err: unknown) => {
+        console.error('Erreur chargement machine (rejet):', err);
+        setError('Erreur lors du chargement de la machine. Veuillez réessayer.');
+        setLoading(false);
       });
     } else {
       setLoading(false);
@@ -545,7 +529,12 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
         if (!quoteSubmit) return '';
         if (quoteSubmit.transactionCaseId) {
           if (quoteSubmit.participantsLinked === false) {
-            return ` Dossier ouvert : #dossier/${quoteSubmit.transactionCaseId}. Les lignes « participants » n’ont pas pu être enregistrées (policy RLS) — déployez sql/patch_transaction_participants_insert_buyer.sql ou sql/transaction_platform_extended.sql puis réessayez une nouvelle demande si besoin.`;
+            // NE JAMAIS suggérer ici de déployer sql/transaction_platform_extended.sql :
+            // ce script ré-accorde les écritures sur inspection_reports et audit_logs
+            // et annule le durcissement p10/p12 (auto-certification vendeur,
+            // falsification du journal). Message neutre côté utilisateur, détail
+            // technique dans les logs.
+            return ` Dossier ouvert : #dossier/${quoteSubmit.transactionCaseId}. Les participants du dossier seront rattachés automatiquement ; si ce n’est pas le cas, signalez-le au support.`;
           }
           return ` Dossier ouvert : #dossier/${quoteSubmit.transactionCaseId}.`;
         }
@@ -608,10 +597,14 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
         <ChevronRight className="h-4 w-4 mx-2" />
         <a href="#machines" className="hover:text-primary-600">Machines</a>
         <ChevronRight className="h-4 w-4 mx-2" />
-        <a href={`#machines?categorie=${machineData.category.toLowerCase()}`} className="hover:text-primary-600">
-          {machineData.category}
-        </a>
-        <ChevronRight className="h-4 w-4 mx-2" />
+        {machineData.category ? (
+          <>
+            <a href={`#machines?categorie=${machineData.category.toLowerCase()}`} className="hover:text-primary-600">
+              {machineData.category}
+            </a>
+            <ChevronRight className="h-4 w-4 mx-2" />
+          </>
+        ) : null}
         <span className="text-gray-900">{machineData.name}</span>
       </div>
 
