@@ -29,6 +29,68 @@ Une première version ne signalait que les écarts — et déclarait donc « tou
 
 ---
 
+## 🧹 Hygiène et scalabilité du dépôt — chantier en cours
+
+Question posée le 2026-09-28 : *le dossier est-il propre et scalable, et les fichiers ne
+sont-ils pas trop gros (600 lignes max) ?* Réponse mesurée, pas estimée.
+
+**Ce qui est sain** : le socle (services, hooks, utilitaires, tests) est correctement
+découpé. 463 tests verts. Le build passe. Rien n'est cassé.
+
+**Ce qui ne l'est pas** : `src/pages` pèse **44 407 lignes sur 139 fichiers**, dont
+**11 fichiers de plus de 1 000 lignes** et **20 de plus de 600**. Et quatre dossiers de
+widgets parallèles font le même travail. Ce n'est pas un problème de performance — c'est
+un problème de vitesse de modification : un fichier de 2 000 lignes se relit mal, se teste
+mal, et deux personnes ne peuvent pas y travailler en même temps.
+
+| Priorité | Ce que c'est | État |
+|---|---|---|
+| **1 — Registre des bases** | `npm run bases` : comparer prod et staging en 30 s | ✅ **fait** — 2 écarts et 8 manquants révélés dès le premier passage |
+| **2 — Un seul endroit pour le SQL** | Le SQL vivait dans **quatre** dossiers, dont « SQL_A_APPLIQUER » qui était déjà appliqué | ✅ **fait** — 56 fichiers archivés, garde-fou `npm run verifier:sql` |
+| **3 — Découper les 11 fichiers > 1 000 lignes** | Un par un, les 463 tests relancés entre chaque | ⏳ **à faire** |
+| **4 — Fusionner les 4 dossiers de widgets** | Quatre implémentations parallèles du même besoin | ⏳ **à faire** |
+
+### Priorité 2 — ce qui a été vérifié AVANT de déplacer quoi que ce soit
+
+Déplacer du SQL sans vérifier ce qu'il contient, c'est risquer d'archiver une migration
+jamais appliquée. Contrôles faits :
+
+- `SQL_A_APPLIQUER/` (12 fichiers) : **déjà appliqué en production** — `escrow_transactions`,
+  `escrow_events`, `price_observations`, `transaction_cases`, `transaction_participants`
+  répondent toutes. Le nom du dossier mentait depuis des mois.
+- `sql/` (44 fichiers) : repris dans la baseline (7 670 lignes, 67 tables, 219 policies).
+  **Exception signalée** : `sql/nextgen/*` crée `finance_applications` et `finance_partners`,
+  qui n'existent **ni en prod ni dans la baseline** — jamais appliqués, et pas applicables en l'état.
+- Aucun code exécutable ne référençait ces chemins.
+
+**Deux corrections à ma propre règle**, après l'avoir exécutée :
+- `services/monitor-service/` a **sa propre base** : forcer ses migrations dans celles de la
+  plateforme casserait le radar. Ma première version du garde-fou les signalait à tort.
+- `AUDIT_CONTROL/` (83 sondes) n'est pas suivi par git et sert aux rapports d'audit : ce sont
+  des instruments de mesure, pas du schéma. Le seul vrai intrus était
+  `PREUVE-RLS-01-transaction_participants.sql`, resté à la racine — rangé dans `AUDIT_CONTROL/`,
+  renvois mis à jour.
+
+Garde-fou testé dans les deux sens : code 0 sur un dépôt rangé, code 1 sur un intrus posé exprès.
+
+### Trouvé au passage : deux migrations au MÊME numéro de version — corrigé
+
+`20260814140000_p29_subscription_payments.sql` et `20260814140000_p30_decisions_remediation.sql`
+partageaient le préfixe `20260814140000`. Or la CLI Supabase s'en sert de **clé primaire** dans
+`supabase_migrations.schema_migrations` : selon sa version, elle rejette en doublon **ou applique
+un seul des deux fichiers, silencieusement**. Exactement le genre de panne qui ne se voit qu'une
+fois en production.
+
+Corrigé par `git mv` vers `20260814130000_p29b_subscription_payments.sql` — le registre des
+paiements se place ainsi après `p29` (`…120000`) et avant `p30` (`…140000`), l'ordre logique.
+Les renvois ont suivi, dont **`supabase/tests/run_all_proofs.sh` ligne 39** : le manifeste des
+preuves aurait cherché un fichier disparu. Vérifié : plus aucun préfixe en double.
+
+Ni l'une ni l'autre n'est appliquée nulle part (`npm run bases` le confirme : `subscription_payments`
+absente des deux bases) — le renommage n'a donc aucune conséquence sur les bases existantes.
+
+---
+
 ## Où on en est
 
 Le **socle technique est sain** (sécurité auditée, abonnements prouvés de bout en bout, catalogue,

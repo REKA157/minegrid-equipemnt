@@ -4,7 +4,7 @@
 -- Enchaînement :
 --   p29_subscription_payments.prereq.sql
 --   + 20260813120000_p26_platform_admin.sql
---   + 20260814140000_p29_subscription_payments.sql
+--   + 20260814130000_p29b_subscription_payments.sql
 --   + p29_subscription_payments.countercases.sql
 -- =====================================================================
 

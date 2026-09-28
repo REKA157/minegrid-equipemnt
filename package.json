@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "postbuild": "node scripts/verifier-bundle.mjs",
     "bases": "node scripts/comparer-bases.mjs",
+    "verifier:sql": "node scripts/verifier-sql.mjs",
+    "verifier": "npm run verifier:sql && npm run bases",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
