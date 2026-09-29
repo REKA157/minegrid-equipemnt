@@ -65,7 +65,36 @@ function isMissingTableError(err: unknown): boolean {
   return e?.code === 'PGRST205' || msg.includes('could not find the table');
 }
 
-/** Accepte tout UUID Postgres / RFC (versions 1–8), sans rejeter falsed positive côté UI. */
+/**
+ * Identifiants de vendeur FICTIFS, laissés par l'import automatique du catalogue.
+ *
+ * Mesure du 2026-09-29 sur la production : **13 717 annonces sur 16 397 (83,7 %)**
+ * portent `00000000-0000-0000-0000-000000000001`. Ce compte n'existe pas.
+ *
+ * La même liste existe déjà dans `src/pages/machineDetailHelpers.ts` et dans la
+ * fonction serveur `send-contact-email` — mais PAS ici, sur le chemin qui crée
+ * réellement la demande de devis et le dossier transactionnel. Une demande
+ * adressée à l'une de ces annonces partait donc vers un vendeur inexistant :
+ * l'acheteur voyait « demande envoyée », et personne ne la recevait jamais.
+ */
+const VENDEURS_FICTIFS = new Set([
+  '00000000-0000-0000-0000-000000000000',
+  '00000000-0000-0000-0000-000000000001',
+]);
+
+/** Vrai si cet identifiant est un vendeur fictif de l'import automatique. */
+export function estVendeurFictif(id: unknown): boolean {
+  return typeof id === 'string' && VENDEURS_FICTIFS.has(id.trim().toLowerCase());
+}
+
+/**
+ * Accepte tout UUID Postgres / RFC (versions 1–8), et REJETTE les vendeurs fictifs.
+ *
+ * Le rejet se fait ici, et pas seulement à l'affichage : c'est cette fonction
+ * qui alimente `fetchSellerUserIdFromMachine`, donc la création du dossier
+ * transactionnel. Mieux vaut une demande sans destinataire identifié — que le
+ * code traite déjà — qu'une demande adressée à un compte qui n'existe pas.
+ */
 export function parseSellerUuid(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const t = raw.trim();
@@ -74,6 +103,7 @@ export function parseSellerUuid(raw: unknown): string | null {
   ) {
     return null;
   }
+  if (estVendeurFictif(t)) return null;
   return t;
 }
 
