@@ -1,57 +1,30 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
 import MachineCard from '../components/MachineCard';
 import { categories, iconMap } from '../data/categories';
 import type { Machine } from '../types';
-import supabase from '../utils/supabaseClient';
 import {
-  MACHINE_LIST_COLUMNS,
   MACHINES_CATALOG_INITIAL_LIMIT,
   MACHINES_CATALOG_MEMORY_CAP,
   MACHINES_CATALOG_STEP,
 } from '../constants/machineQueryFields';
 import { jobCategories } from '../data/jobcategories'; // ajout pour catégorie métier
-import { DEFAULT_JOB_SECTOR, GROUP_TO_JOB_SECTOR } from '../data/sectors';
+import {
+  chercherMachines,
+  chargerFacettes,
+  type Facette,
+} from '../utils/api/catalogueRecherche';
+import {
+  classerCategorie,
+  categoriesDuSecteur,
+  categoriesDuGroupe,
+  libelleVersSousType,
+} from './catalogueClassement';
 
-const subtypeToGroupName = new Map<string, string>();
-const subtypeToLabel = new Map<string, string>();
-categories.forEach((group) => {
-  (group.subcategories || []).forEach((sub) => {
-    subtypeToGroupName.set(String(sub.id || '').toLowerCase(), String(group.name || '').toLowerCase());
-    subtypeToLabel.set(String(sub.id || '').toLowerCase(), String(sub.name || ''));
-  });
-});
-
-const mascusCategoryAliases: Record<string, string> = {
-  crawlerexcavators: 'pelle-chenilles',
-  wheeledexcavators: 'pelle-pneus',
-  wheelloaders: 'chargeuse-pneus',
-  backhoeloaders: 'chargeuse-pelleteuse',
-  dozers: 'bulldozer',
-  motorgraders: 'niveleuse',
-  dumptrucks: 'camion-benne',
-  articulateddumptrucks: 'camion-benne',
-  rigiddumptrucks: 'tombereau-rigide',
-  singledrumrollers: 'compacteur-monocylindre',
-  tandemrollers: 'compacteur-tandem',
-  forklifts: 'chariot-elevateur',
-  telehandlers: 'telescopique',
-  asphaltpavers: 'finisseur',
-  generators: 'groupe-electrogene',
-  compressors: 'compresseur',
-  concretemixers: 'camion-melangeur',
-  crushers: 'concasseur',
-  screeners: 'crible',
-  drillingrigs: 'foreuse',
-  tractors: 'tracteur-routier',
-};
-
-const labelToSubtypeId: Record<string, string> = {};
-categories.forEach((group) => {
-  (group.subcategories || []).forEach((sub) => {
-    labelToSubtypeId[String(sub.name || '').toLowerCase()] = String(sub.id || '').toLowerCase();
-  });
-});
+// Les tables de correspondance categorie -> groupe -> secteur vivent desormais
+// dans ./catalogueClassement, pour etre appelables sur une simple chaine :
+// c'est ce qui permet de traduire « secteur = Terrassement » en une liste de
+// categories, et donc de filtrer COTE BASE au lieu du navigateur.
 
 type MachineRow = {
   sellerid?: string | null;
@@ -77,27 +50,17 @@ type MachineWithCatalogMeta = Machine & {
 function mapSupabaseRowToMachine(m: MachineRow): Machine {
   const specs = m.specifications || {};
   const fallbackLocation = [m.city, m.region, m.country].filter(Boolean).join(', ') || 'Localisation inconnue';
-  const rawCategoryId = String(m.category || '').toLowerCase();
-  const rawType = String(m.type || '').toLowerCase();
-  const rawCategoryName = String(specs?.category_name || '').toLowerCase();
-
-  const compactCategory = rawCategoryId.replace(/[\s_-]/g, '');
-  const compactCategoryName = rawCategoryName.replace(/[\s_-]/g, '');
-
-  let normalizedCategory =
-    mascusCategoryAliases[compactCategory] ||
-    mascusCategoryAliases[compactCategoryName] ||
-    rawCategoryId;
-
-  if (!subtypeToGroupName.has(normalizedCategory)) {
-    const fromTypeLabel = labelToSubtypeId[rawType];
-    const fromCategoryLabel = labelToSubtypeId[rawCategoryId];
-    normalizedCategory = fromTypeLabel || fromCategoryLabel || normalizedCategory;
-  }
-
-  const machineGroup = subtypeToGroupName.get(normalizedCategory) || '';
-  const machineType = subtypeToLabel.get(normalizedCategory) || m.type || m.category || '';
-  const jobSector = GROUP_TO_JOB_SECTOR[machineGroup] || DEFAULT_JOB_SECTOR;
+  // `MachineRow` porte un index de type `unknown` : on convertit explicitement
+  // plutot que d'elargir la signature de classerCategorie, qui doit rester stricte.
+  const classement = classerCategorie(
+    (m.category as string | null | undefined) ?? null,
+    (m.type as string | null | undefined) ?? null,
+    (specs?.category_name as string | null | undefined) ?? null,
+  );
+  const normalizedCategory = classement.sousType;
+  const machineGroup = classement.groupe;
+  const machineType = classement.libelle;
+  const jobSector = classement.secteur;
   const normalizedPower =
     specs?.power && typeof specs.power === 'object'
       ? specs.power
@@ -155,33 +118,64 @@ useEffect(() => {
 
   
 
+  // L'ADRESSE EST LA SOURCE DE VERITE des filtres.
+  //
+  // Defaut corrige le 2026-09-29 : cet effet POSAIT les filtres presents dans
+  // l'adresse mais n'EFFACAIT jamais les absents. Ouvrir un lien
+  // « marque=Komatsu » alors qu'une recherche « Hitachi » etait en cours
+  // gardait les deux, et l'ecran affichait « aucune annonce » sans que rien
+  // n'explique pourquoi. Un lien partage doit ouvrir EXACTEMENT la selection
+  // qu'il decrit, ni plus ni moins.
   useEffect(() => {
     const hash = window.location.hash;
     const params = new URLSearchParams(hash.split('?')[1]);
-  
+
     const cat = params.get('categorie');
-    const machineCat = params.get('machine');
+    setSelectedJobCategory(cat && cat !== 'Tous secteurs' ? cat : '');
+
+    setSelectedMachineCategory(params.get('machine') || '');
+
     const type = params.get('type');
-    const search = params.get('search');
-    const condition = params.get('etat');
-  
-    if (cat && cat !== 'Tous secteurs') {
-      setSelectedJobCategory(cat);
-    } else {
-      setSelectedJobCategory('');
-    }
-  
-    if (machineCat) setSelectedMachineCategory(machineCat);
     if (type) {
-      const rawType = type.toLowerCase();
-      setSelectedType(labelToSubtypeId[rawType] || rawType);
+      const brut = type.toLowerCase();
+      setSelectedType(libelleVersSousType[brut] || brut);
+    } else {
+      setSelectedType('');
     }
-    if (search) setSearchTerm(search);
-    if (condition) setFilterCondition(condition as 'all' | 'new' | 'used');
+
+    setSearchTerm(params.get('search') || '');
+
+    const condition = params.get('etat');
+    setFilterCondition(
+      condition === 'new' || condition === 'used' ? condition : 'all',
+    );
+
+    setSelectedBrand(params.get('marque') || '');
+    setYearMin(params.get('anneeMin') || '');
+    setYearMax(params.get('anneeMax') || '');
+    setPriceMin(params.get('prixMin') || '');
+    setPriceMax(params.get('prixMax') || '');
+
+    const tri = params.get('tri');
+    setSortBy(tri === 'price' || tri === 'name' ? tri : 'date');
+
     setIsHashInitialized(true);
-  }, [hashKey]); // ✅ bonne dépendance
+  }, [hashKey]);
   
   
+  // L'adresse du navigateur reflete les filtres, pour qu'un lien partage
+  // rouvre exactement la meme selection.
+  //
+  // DEUX DEFAUTS CORRIGES ICI (2026-09-29) :
+  //
+  //  1. Seuls 5 des 10 filtres etaient ecrits dans l'adresse. Un client qui
+  //     filtrait « Komatsu, a partir de 2018 » et envoyait le lien a un
+  //     collegue : le collegue ne voyait ni Komatsu ni 2018.
+  //  2. `window.location.hash = ...` ajoute une entree d'HISTORIQUE a chaque
+  //     changement — donc a chaque lettre tapee. Ecrire « caterpillar »
+  //     creait onze entrees, et le bouton « Retour » du navigateur ne
+  //     ramenait plus a la page precedente. `replaceState` remplace l'entree
+  //     courante au lieu d'en empiler une.
   useEffect(() => {
     if (!isHashInitialized) return;
     const params = new URLSearchParams();
@@ -190,91 +184,180 @@ useEffect(() => {
     if (selectedType) params.set('type', selectedType);
     if (searchTerm) params.set('search', searchTerm);
     if (filterCondition !== 'all') params.set('etat', filterCondition);
-    window.location.hash = `#machines?${params.toString()}`;
-  }, [selectedJobCategory, selectedMachineCategory, selectedType, searchTerm, filterCondition, isHashInitialized]);
+    if (selectedBrand) params.set('marque', selectedBrand);
+    if (yearMin) params.set('anneeMin', yearMin);
+    if (yearMax) params.set('anneeMax', yearMax);
+    if (priceMin) params.set('prixMin', priceMin);
+    if (priceMax) params.set('prixMax', priceMax);
+    if (sortBy !== 'date') params.set('tri', sortBy);
+    const cible = `#machines?${params.toString()}`;
+    if (window.location.hash !== cible) {
+      window.history.replaceState(null, '', cible);
+    }
+  }, [
+    selectedJobCategory,
+    selectedMachineCategory,
+    selectedType,
+    searchTerm,
+    filterCondition,
+    selectedBrand,
+    yearMin,
+    yearMax,
+    priceMin,
+    priceMax,
+    sortBy,
+    isHashInitialized,
+  ]);
+
+  // --------------------------------------------------------------------------
+  // CHARGEMENT : c'est la BASE qui filtre, plus le navigateur.
+  //
+  // Avant le 2026-09-29, cette page telechargeait les 400 annonces les plus
+  // recentes (3 000 au maximum) puis filtrait, cherchait et triait en memoire.
+  // Sur 16 397 annonces en base, cela rendait 82 % du catalogue introuvable :
+  // chercher « Hitachi » n'affichait rien alors que 113 Hitachi etaient en
+  // vente, et le menu « Marque » proposait 44 marques sur 449.
+  //
+  // Desormais chaque critere part dans la requete. On ne telecharge que ce qui
+  // correspond, et `totalTrouve` dit combien il y en a EN TOUT.
+  // --------------------------------------------------------------------------
+
+  /** Listes completes des marques et categories, fournies par la base (migration p33). */
+  const [facettes, setFacettes] = useState<{ marques: Facette[]; categories: Facette[] } | null>(null);
+  /** Nombre total d'annonces correspondant aux criteres, tous chargements confondus. */
+  const [totalTrouve, setTotalTrouve] = useState<number | null>(null);
+  /** Faux tant que la migration p33 n'est pas appliquee : le prix reste filtre en memoire. */
+  const [prixCoteBase, setPrixCoteBase] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchMachines = async () => {
-      const firstBatch = Math.min(
-        MACHINES_CATALOG_INITIAL_LIMIT,
-        MACHINES_CATALOG_MEMORY_CAP
-      );
-
-      // 1er essai : colonnes explicites (rapide, léger).
-      let { data, error } = await supabase
-        .from('machines')
-        .select(MACHINE_LIST_COLUMNS)
-        .order('created_at', { ascending: false })
-        .range(0, firstBatch - 1);
-
-      // Fallback de sécurité : si une colonne de la liste n'existe pas en prod
-      // (PostgREST renvoie une erreur 400), on retente avec select('*').
-      if (error) {
-        console.warn('[Machines] SELECT explicite a échoué, fallback select(*) :', error);
-        const fb = await supabase
-          .from('machines')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(0, firstBatch - 1);
-        data = fb.data;
-        error = fb.error;
-      }
-
-      if (cancelled) return;
-
-      if (!error && data) {
-        const mapped = data.map((m) => mapSupabaseRowToMachine(m as MachineRow));
-        setMachines(mapped as Machine[]);
-        setCatalogOffset(data.length);
-        setHasMoreCatalog(
-          data.length === firstBatch && data.length < MACHINES_CATALOG_MEMORY_CAP
-        );
-        if (data.length === 0) {
-          console.info('[Machines] Aucun résultat — table vide OU RLS bloque le SELECT anonyme.');
-        }
-      } else {
-        console.error('[Machines] Erreur chargement machines :', error);
-        setMachines([]);
-        setHasMoreCatalog(false);
-      }
-      setLoading(false);
-    };
-
-    void fetchMachines();
+    let annule = false;
+    void chargerFacettes().then((f) => {
+      if (!annule) setFacettes(f);
+    });
     return () => {
-      cancelled = true;
+      annule = true;
     };
   }, []);
 
+  /**
+   * Categories brutes de la base concernees par le secteur / le groupe choisi.
+   *
+   * On traduit un libelle de secteur en liste de categories reelles, parce que
+   * la base ne connait pas la notion de « secteur » : elle ne connait que la
+   * colonne `category`. Sans les facettes (migration non appliquee), on se
+   * rabat sur les categories des annonces deja chargees.
+   */
+  const categoriesConnues = useMemo(() => {
+    if (facettes?.categories?.length) return facettes.categories.map((c) => c.valeur);
+    return Array.from(
+      new Set(machines.map((m) => String((m as MachineWithCatalogMeta).category || '')).filter(Boolean)),
+    );
+  }, [facettes, machines]);
+
+  const categoriesFiltrees = useMemo(() => {
+    const parSecteur = categoriesDuSecteur(categoriesConnues, selectedJobCategory);
+    const parGroupe = categoriesDuGroupe(categoriesConnues, selectedMachineCategory || selectedType);
+    if (parSecteur.length && parGroupe.length) {
+      // Les deux filtres sont poses : on garde l'intersection.
+      const dansGroupe = new Set(parGroupe);
+      return parSecteur.filter((c) => dansGroupe.has(c));
+    }
+    return parSecteur.length ? parSecteur : parGroupe;
+  }, [categoriesConnues, selectedJobCategory, selectedMachineCategory, selectedType]);
+
+  /** Les criteres tels qu'ils partiront a la base. */
+  const criteres = useMemo(
+    () => ({
+      recherche: searchTerm,
+      marque: selectedBrand,
+      categories: categoriesFiltrees,
+      etat: filterCondition,
+      anneeMin: yearMin,
+      anneeMax: yearMax,
+      prixMin: priceMin,
+      prixMax: priceMax,
+      tri: (sortBy === 'price' ? 'price-asc' : sortBy === 'name' ? 'name' : 'recent') as
+        | 'recent'
+        | 'price-asc'
+        | 'name',
+    }),
+    [
+      searchTerm,
+      selectedBrand,
+      categoriesFiltrees,
+      filterCondition,
+      yearMin,
+      yearMax,
+      priceMin,
+      priceMax,
+      sortBy,
+    ],
+  );
+
+  // Cle stable des criteres : evite de relancer une requete identique a chaque
+  // rendu, et sert de dependance unique a l'effet ci-dessous.
+  const cleCriteres = JSON.stringify(criteres);
+
+  useEffect(() => {
+    let annule = false;
+    setLoading(true);
+
+    // On attend 300 ms avant d'interroger la base : sans cela, taper
+    // « caterpillar » declencherait onze requetes.
+    const minuteur = setTimeout(() => {
+      void (async () => {
+        const taille = Math.min(MACHINES_CATALOG_INITIAL_LIMIT, MACHINES_CATALOG_MEMORY_CAP);
+        const page = await chercherMachines(criteres, 0, taille);
+        if (annule) return;
+        setPrixCoteBase(page.prixCoteBase);
+        setTotalTrouve(page.total);
+        if (page.erreur) {
+          console.error('[Machines] Erreur chargement machines :', page.erreur);
+          setMachines([]);
+          setHasMoreCatalog(false);
+        } else {
+          setMachines(page.lignes.map((m) => mapSupabaseRowToMachine(m as MachineRow)) as Machine[]);
+          setCatalogOffset(page.lignes.length);
+          setHasMoreCatalog(
+            page.lignes.length === taille && page.lignes.length < MACHINES_CATALOG_MEMORY_CAP,
+          );
+        }
+        setLoading(false);
+      })();
+    }, 300);
+
+    return () => {
+      annule = true;
+      clearTimeout(minuteur);
+    };
+    // `criteres` est reconstruit a chaque rendu ; c'est `cleCriteres` qui dit
+    // s'il a REELLEMENT change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleCriteres]);
+
   const loadMoreCatalog = async () => {
     if (!hasMoreCatalog || loadingMore || loading) return;
-    const remaining = MACHINES_CATALOG_MEMORY_CAP - catalogOffset;
-    if (remaining <= 0) {
+    const restant = MACHINES_CATALOG_MEMORY_CAP - catalogOffset;
+    if (restant <= 0) {
       setHasMoreCatalog(false);
       return;
     }
     setLoadingMore(true);
     try {
-      const take = Math.min(MACHINES_CATALOG_STEP, remaining);
-      const end = catalogOffset + take - 1;
-      const { data, error } = await supabase
-        .from('machines')
-        .select(MACHINE_LIST_COLUMNS)
-        .order('created_at', { ascending: false })
-        .range(catalogOffset, end);
-
-      if (!error && data?.length) {
-        const mapped = data.map((m) => mapSupabaseRowToMachine(m as MachineRow));
-        setMachines((prev) => [...prev, ...mapped]);
-        const next = catalogOffset + data.length;
-        setCatalogOffset(next);
+      const taille = Math.min(MACHINES_CATALOG_STEP, restant);
+      // Meme criteres : la suite porte sur les annonces FILTREES, pas sur le
+      // catalogue entier comme auparavant.
+      const page = await chercherMachines(criteres, catalogOffset, taille);
+      if (page.erreur) {
+        console.error('Erreur chargement machines (suite) :', page.erreur);
+      } else if (page.lignes.length) {
+        const ajout = page.lignes.map((m) => mapSupabaseRowToMachine(m as MachineRow)) as Machine[];
+        setMachines((prev) => [...prev, ...ajout]);
+        const suivant = catalogOffset + page.lignes.length;
+        setCatalogOffset(suivant);
         setHasMoreCatalog(
-          data.length === take && next < MACHINES_CATALOG_MEMORY_CAP
+          page.lignes.length === taille && suivant < MACHINES_CATALOG_MEMORY_CAP,
         );
-      } else if (error) {
-        console.error('Erreur chargement machines (suite) :', error);
       } else {
         setHasMoreCatalog(false);
       }
@@ -283,129 +366,76 @@ useEffect(() => {
     }
   };
 
-  const deferredSearch = useDeferredValue(searchTerm);
-
   /**
-   * Marques dynamiques : agrégées depuis les annonces chargées,
-   * dédupliquées (case-insensitive), triées alphabétiquement.
-   * Évite la liste hardcodée qui masquait toutes les autres marques.
+   * Marques proposees dans le filtre.
+   *
+   * Elles viennent de la BASE (migration p33) : les 449 marques reelles, avec
+   * leur nombre d'annonces. Auparavant elles etaient deduites des seules
+   * annonces telechargees, ce qui n'en montrait que 44 sur 449 — Hitachi,
+   * Hyundai, Doosan et 329 autres n'apparaissaient jamais dans le menu.
+   *
+   * Repli si la migration n'est pas encore appliquee : l'ancien comportement,
+   * pour que la page continue de fonctionner.
    */
   const availableBrands = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const m of machines) {
-      const raw = (m.brand || '').trim();
-      if (!raw) continue;
-      const key = raw.toLowerCase();
-      if (!seen.has(key)) seen.set(key, raw);
+    if (facettes?.marques?.length) {
+      return facettes.marques.map((m) => m.valeur);
     }
-    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
-  }, [machines]);
+    const vues = new Map<string, string>();
+    for (const m of machines) {
+      const brut = (m.brand || '').trim();
+      if (!brut) continue;
+      const cle = brut.toLowerCase();
+      if (!vues.has(cle)) vues.set(cle, brut);
+    }
+    return Array.from(vues.values()).sort((a, b) => a.localeCompare(b));
+  }, [facettes, machines]);
 
+  /**
+   * Les annonces a afficher.
+   *
+   * La base a DEJA applique tous les criteres : recherche, marque, categorie,
+   * secteur, etat, annee, et le prix des lors que la migration p33 est en
+   * place. Il ne reste donc rien a filtrer ici.
+   *
+   * Le bloc precedent — 95 lignes — refaisait le travail dans le navigateur,
+   * sur les seules annonces telechargees. Il contenait aussi un piege :
+   * une variable `noFilters` enumerait A LA MAIN les dix filtres et, si tous
+   * etaient vides, court-circuitait tous les tests. Ajouter un onzieme filtre
+   * sans l'inscrire dans cette liste donnait un filtre qui s'affichait, se
+   * cliquait, et ne filtrait rien — sans aucune erreur. Le piege disparait
+   * avec le filtrage en memoire.
+   */
   const filteredMachines = useMemo(() => {
-    return machines.filter((machine) => {
-      const matchBrand = selectedBrand
-        ? machine.brand?.toLowerCase() === selectedBrand.toLowerCase()
-        : true;
-
-      // Filtrage secteur métier : tolérant (match sur __jobSector OU category brute).
-      const matchCategory =
-        selectedJobCategory && selectedJobCategory !== 'Tous secteurs'
-          ? ((machine as MachineWithCatalogMeta).__jobSector || '').includes(selectedJobCategory.toLowerCase()) ||
-            (machine.category || '').toLowerCase().includes(selectedJobCategory.toLowerCase())
-          : true;
-
-      // Filtrage groupe machine : tolérant (match sur __machineGroup OU type/category).
-      const matchMachineCategory = selectedMachineCategory
-        ? ((machine as MachineWithCatalogMeta).__machineGroup || '').includes(selectedMachineCategory.toLowerCase()) ||
-          (machine.type || '').toLowerCase().includes(selectedMachineCategory.toLowerCase()) ||
-          (machine.category || '').toLowerCase().includes(selectedMachineCategory.toLowerCase())
-        : true;
-
-      // Filtrage sous-type : tolérant — id exact OU label OU name/description.
-      const matchType = selectedType
-        ? String((machine as MachineWithCatalogMeta).__subcategoryId || '').toLowerCase() === selectedType.toLowerCase() ||
-          String(machine.type || '').toLowerCase().includes(selectedType.toLowerCase()) ||
-          String(machine.category || '').toLowerCase().includes(selectedType.toLowerCase()) ||
-          String(machine.name || '').toLowerCase().includes(selectedType.toLowerCase())
-        : true;
-
-      const matchCondition =
-        filterCondition === 'all' ? true : machine.condition === filterCondition;
-
-      const matchSearch = deferredSearch
-        ? [
-            machine.name,
-            (machine as { brand?: string }).brand,
-            (machine as { model?: string }).model,
-            (machine as { description?: string }).description,
-            machine.type,
-            machine.category,
-          ]
-            .filter(Boolean)
-            .some((field) => String(field).toLowerCase().includes(deferredSearch.toLowerCase()))
-        : true;
-
-      const matchPrice =
-        (!priceMin || machine.price >= parseFloat(priceMin)) &&
-        (!priceMax || machine.price <= parseFloat(priceMax));
-
-      const machineYear = Number(
-        (machine as MachineWithCatalogMeta).year ??
-          (machine as MachineWithCatalogMeta).specifications?.year ??
-          0
-      );
-      const matchYear =
-        (!yearMin || (machineYear && machineYear >= parseInt(yearMin, 10))) &&
-        (!yearMax || (machineYear && machineYear <= parseInt(yearMax, 10)));
-
-      const noFilters =
-        !selectedJobCategory &&
-        !selectedMachineCategory &&
-        !selectedType &&
-        !selectedBrand &&
-        !searchTerm &&
-        !yearMin &&
-        !yearMax &&
-        !priceMin &&
-        !priceMax &&
-        filterCondition === 'all';
-
-      return (
-        noFilters ||
-        (matchCategory &&
-          matchMachineCategory &&
-          matchType &&
-          matchCondition &&
-          matchSearch &&
-          matchPrice &&
-          matchYear &&
-          matchBrand)
-      );
+    if (prixCoteBase) return machines;
+    // Migration p33 pas encore appliquee : `price` est stocke en texte et la
+    // base ne sait pas le comparer. On applique donc ce seul critere ici, sur
+    // la page en cours. C'est une limite ASSUMEE et temporaire, signalee a
+    // l'utilisateur par le bandeau de resultats.
+    const min = priceMin ? parseFloat(priceMin) : null;
+    const max = priceMax ? parseFloat(priceMax) : null;
+    if (min === null && max === null) return machines;
+    return machines.filter((m) => {
+      const prix = Number(m.price) || 0;
+      return (min === null || prix >= min) && (max === null || prix <= max);
     });
-  }, [
-    machines,
-    selectedBrand,
-    selectedJobCategory,
-    selectedMachineCategory,
-    selectedType,
-    filterCondition,
-    deferredSearch,
-    searchTerm,
-    priceMin,
-    priceMax,
-    yearMin,
-    yearMax,
-  ]);
+  }, [machines, prixCoteBase, priceMin, priceMax]);
 
+  /**
+   * Tri.
+   *
+   * Il est fait par la base (`order by`) dans tous les cas sauf un : le tri
+   * par prix quand la migration p33 manque. La base trierait alors sur du
+   * TEXTE, et « 1 250 000 » passerait avant « 95 000 ». On retrie donc la page
+   * en memoire dans ce seul cas.
+   */
   const sortedMachines = useMemo(() => {
-    return [...filteredMachines].sort((a, b) => {
-      if (sortBy === 'price') return (a.price || 0) - (b.price || 0);
-      if (sortBy === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-      const ta = new Date((a as MachineWithCatalogMeta).created_at || 0).getTime();
-      const tb = new Date((b as MachineWithCatalogMeta).created_at || 0).getTime();
-      return tb - ta;
-    });
-  }, [filteredMachines, sortBy]);
+    if (sortBy === 'price' && !prixCoteBase) {
+      return [...filteredMachines].sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+    }
+    return filteredMachines;
+  }, [filteredMachines, sortBy, prixCoteBase]);
+
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -545,7 +575,25 @@ useEffect(() => {
           <div className="md:col-span-5">
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Toutes les machines</h1>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Toutes les machines</h1>
+                  {/* Le compte vient de la BASE, pas du nombre de cartes affichees.
+                      C'est ce qui permet d'annoncer « 113 annonces » quand on en
+                      montre 20 — et c'est la preuve visible que la recherche
+                      porte bien sur les 16 397 annonces et non sur les 400
+                      telechargees. */}
+                  {!loading && totalTrouve !== null && (
+                    <p className="mt-1 text-sm text-gray-600">
+                      {totalTrouve === 0
+                        ? 'Aucune annonce ne correspond'
+                        : `${totalTrouve.toLocaleString('fr-FR')} annonce${totalTrouve > 1 ? 's' : ''} ${
+                            totalTrouve > 1 ? 'correspondent' : 'correspond'
+                          }`}
+                      {totalTrouve > sortedMachines.length &&
+                        ` — ${sortedMachines.length} affichée${sortedMachines.length > 1 ? 's' : ''}`}
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex flex-col sm:flex-row gap-2 mt-4 sm:mt-0 sm:items-center">
                   <div className="relative w-full sm:w-auto">
@@ -580,7 +628,7 @@ useEffect(() => {
                     <p>
                       {machines.length === 0
                         ? 'Aucune annonce disponible pour le moment.'
-                        : 'Aucun résultat pour ces filtres. Élargissez votre recherche ou retirez un critère.'}
+                        : 'Aucune annonce ne correspond à ces critères. Essayez une autre marque, une autre période, ou élargissez la recherche.'}
                     </p>
                     {machines.length === 0 && (
                       <p className="text-xs text-gray-400 max-w-md mx-auto">

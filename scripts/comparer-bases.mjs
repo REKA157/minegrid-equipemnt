@@ -93,6 +93,12 @@ const ATTENDUS = [
   { type: 'fonction', nom: 'admin_payment_stats', args: {} },
 
   { type: 'fonction', nom: 'get_my_tender_workspace', args: {} },
+
+  // p33 — recherche du catalogue cote base. Sans eux, le filtre et le tri par
+  // prix restent limites aux annonces chargees, et le menu des marques n'en
+  // propose que 44 sur 449.
+  { type: 'table', nom: 'machines_catalogue' },
+  { type: 'fonction', nom: 'catalogue_facettes', args: {} },
 ];
 
 function cleAnon(env) {

@@ -5,6 +5,57 @@
 
 ---
 
+## 🔍 La recherche du catalogue passe CÔTÉ BASE (2026-09-29)
+
+**Le défaut, mesuré** : 16 397 annonces en base, mais la page « Machines » n'en téléchargeait que
+400 (3 000 au maximum) et faisait le filtrage, la recherche et le tri **dans le navigateur**, sur
+ces lignes-là seulement.
+
+| | Avant | Après |
+|---|---|---|
+| Recherche « Hitachi » | **0 résultat** (113 en vente) | **124 annonces** |
+| Recherche « Caterpillar » | **0 résultat** (11 en vente) | **11 annonces** |
+| Lien `marque=Komatsu&anneeMin=2018` | filtres perdus | **300 annonces**, chiffre identique à la base |
+| Part du catalogue atteignable | 18 % | **100 %** |
+| Compteur affiché | aucun | « 16 397 annonces correspondent — 400 affichées » |
+
+La base n'était pas en cause : elle répond en 0,23 s sur la première ligne et 0,27 s sur la
+16 000ᵉ. On ne lui demandait simplement jamais de filtrer.
+
+**Fonctionne DÈS MAINTENANT, sans migration.** Recherche, marque, catégorie, secteur, état et
+année passent côté base immédiatement. Le module détecte l'absence de la migration `p33` et le
+dit en console plutôt que de casser.
+
+**Ce que la migration `p33` ajoute** (à appliquer par le patron) :
+- une vue `machines_catalogue` avec le prix converti en nombre — `machines.price` est stocké en
+  **texte**, donc « entre 50 000 et 200 000 » est impossible sans elle ;
+- `catalogue_facettes()` : les **449 marques réelles** au lieu des 44 déduites des annonces
+  chargées ;
+- quatre index, dont un index d'expression sur le prix — **vérifié utilisé** (`Index Scan`).
+
+⚠️ **Point de sécurité, prouvé** : la vue porte `security_invoker = true`. Sans cette option, le
+contre-cas montre qu'elle expose **8 annonces là où la RLS n'en autorise que 2** — une fuite
+complète. Le contre-cas 12 recrée volontairement la vue sans l'option pour prouver que le
+contre-cas 9 mord vraiment.
+
+**Trois défauts corrigés au passage**, tous vérifiés :
+- le piège `noFilters` a disparu avec le filtrage en mémoire : il énumérait les dix filtres à la
+  main et court-circuitait tous les tests si aucun n'était posé — un onzième filtre oublié dans
+  cette liste se serait affiché sans rien filtrer ;
+- l'adresse du navigateur ne portait que 5 filtres sur 10 et **ajoutait une entrée d'historique à
+  chaque lettre tapée** (« caterpillar » = 11 entrées, bouton Retour cassé). Mesuré après
+  correction : **0 entrée ajoutée** ;
+- **mon propre défaut, trouvé en testant** : la relecture de l'adresse posait les filtres présents
+  mais n'effaçait pas les absents. Ouvrir un lien `marque=Komatsu` en gardant une recherche
+  « Hitachi » affichait « aucune annonce » sans explication. L'adresse est désormais la source de
+  vérité.
+
+**Reste connu** : `bulldozer` (3 622 annonces) et `chargeuse-pneus` (634) ne sont rattachés à
+aucun groupe et tombent dans « Construction » par défaut. Comportement existant, figé par un test.
+Les reclasser déplacerait 4 000 annonces d'un secteur à l'autre : décision produit.
+
+---
+
 ## 🔎 État réel des deux bases — `npm run bases`
 
 Un comparateur interroge prod et staging et liste les écarts en trente secondes,

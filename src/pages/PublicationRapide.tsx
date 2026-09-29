@@ -1922,13 +1922,24 @@ export default function PublicationRapide() {
                         <div className="text-center p-4 bg-orange-50 rounded-lg">
                           <h6 className="font-semibold text-orange-800 mb-2">Catégorie la plus vue</h6>
                           <p className="text-2xl font-bold text-orange-600">
-                            {Object.keys(analyticsData.categoryStats).length > 0 
-                              ? (Object.entries(analyticsData.categoryStats)
-                                  .reduce((max, [cat, stats]) => 
-                                    (stats as any).views > (max as any).views ? { category: cat, ...(stats as any) } : max
-                                  ) as any).category
-                              : 'N/A'
-                            }
+                            {/* Defaut corrige le 2026-09-29 : ce `reduce` n'avait
+                                pas de valeur de depart. Son accumulateur partait
+                                donc sur la premiere PAIRE [categorie, stats], un
+                                tableau — `max.views` valait `undefined`, la
+                                comparaison etait toujours fausse, et `.category`
+                                sur un tableau donnait « rien ». La case affichait
+                                donc TOUJOURS du vide, quelle que soit la donnee. */}
+                            {(() => {
+                              const entrees = Object.entries(analyticsData.categoryStats);
+                              if (entrees.length === 0) return 'N/A';
+                              const [meilleure] = entrees.reduce((max, courant) =>
+                                ((courant[1] as { views?: number })?.views ?? 0) >
+                                ((max[1] as { views?: number })?.views ?? 0)
+                                  ? courant
+                                  : max,
+                              );
+                              return meilleure || 'N/A';
+                            })()}
                           </p>
                           <p className="text-sm text-gray-600">
                             {Object.keys(analyticsData.categoryStats).length > 0 
