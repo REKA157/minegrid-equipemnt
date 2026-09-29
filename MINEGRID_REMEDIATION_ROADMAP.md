@@ -15,7 +15,7 @@ Trois actions qui ferment quatre P0 sans écrire une ligne de code applicatif.
 |---|---|---|---|
 | 0.1 | **Couper ou protéger `renders-ai`** dans le tableau de bord Supabase | `AO-06` | 10 min |
 | 0.2 | **Vérifier la consommation Anthropic**, révoquer la clé si anormale | `AO-06` | 20 min |
-| 0.3 | **Rendre le téléversement SÛR** — voir l'encadré rouge ci-dessous | nouveau P0 | 30 min |
+| 0.3 | ~~**Rendre le téléversement SÛR**~~ ✅ **FAIT** — voir l'encadré ci-dessous | nouveau P0 | fait |
 | 0.4 | **Téléverser `dist/`**, puis `npm run verifier:deploiement` | `CART-01`, `RES-01`, `SCA-01` | 30 min |
 | 0.5 | **Pousser les 329–373 commits** sur les remotes existants | `SAUV-01` | 10 min |
 
@@ -40,12 +40,30 @@ Second piège, même origine : `.env.production:32 VITE_TENDERS_SHARED=true` alo
 `get_my_tender_workspace` n'existe pas en base. Le module Appels d'offres afficherait un bandeau
 rouge permanent chez tous les clients.
 
-**Marche à suivre corrigée, dans cet ordre :**
+**✅ FAIT le 2026-09-29.** Les deux variables sont neutralisées, le paquet est reconstruit, et
+la garde compile désormais en `return!1` :
 
-1. Retirer `VITE_ENABLE_NEXTGEN=true` de `.env` (ou le forcer à `false` dans `.env.production`)
-2. Remettre `VITE_TENDERS_SHARED=false`, **ou** appliquer la migration `tender_workspaces`
-3. `npm run build`, puis vérifier que `dist/assets/InternalGate-*.js` ne contient plus `return!0`
-4. **Alors seulement** téléverser, puis `npm run verifier:deploiement`
+```
+$ cat dist/assets/InternalGate-*.js
+  function x(){return!1}        ← fermée ; le composant rend la page restreinte
+$ grep -c get_my_tender_workspace dist/assets/*.js
+  aucune occurrence             ← la RPC absente n'est plus appelée
+```
+
+Sauvegardes conservées : `.env.avant-audit-2026-09-29`, `.env.production.avant-audit-2026-09-29`.
+
+**Et surtout, cela ne peut plus se reproduire en silence** : `scripts/verifier-bundle.mjs` refuse
+désormais un paquet dont la garde vaut « toujours vrai », et il s'exécute automatiquement après
+chaque `npm run build`. Vérifié par mutation — reconstruire avec `VITE_ENABLE_NEXTGEN=true` fait
+**échouer le build** :
+
+```
+1. ESPACE INTERNE #nextgen OUVERT AU PUBLIC dans ce paquet.
+   La garde se compile en « toujours vrai ». Televerser publierait les ecrans
+   acheter, vendre, trust, inspection, escrow, finance et logistique.
+```
+
+**Il reste donc à téléverser `dist/`**, puis `npm run verifier:deploiement`.
 
 ### 🔴 La question à poser AVANT tout le reste
 
@@ -127,7 +145,9 @@ Tout est sur la branche `audit/production-2026-09-29`, aucune modification en pr
 | Correctif | Problème | Test de non-régression |
 |---|---|---|
 | Filtre du vendeur fictif dans le parcours de devis (`quoteRequests.ts`) | `SEQ-05`, `CTR-05` | `quoteRequests.vendeurFictif.test.ts` — 9 cas, vérifiés par mutation |
-| Garde-fou `npm run verifier:deploiement` | `CART-01` | Le script sort en code 1 aujourd'hui : il détecte le retard |
+| Garde-fou `npm run verifier:deploiement` | `CART-01` | `verifierDeploiement.test.ts` — 8 cas, vérifiés par mutation. Le script sort en code 1 aujourd'hui : il détecte le retard |
+| **Espace interne refermé** (`.env`, `.env.production`) + **le build refuse un paquet ouvert** | nouveau P0 de la contre-analyse | Vérifié par mutation : reconstruire avec `VITE_ENABLE_NEXTGEN=true` fait échouer le build |
+| **Plus de faux succès sur le formulaire de contact** (`MachineDetail.tsx`) : l'envoi n'est annoncé que si la fonction confirme un destinataire | `CART-02` | — (le chemin exige un envoi réel ; non testé volontairement) |
 
 **Pourquoi si peu de correctifs ?** Parce que la majorité des P0 ne se corrigent pas dans le
 dépôt : ils se corrigent en **déployant** ce qui y est déjà, ou en **appliquant** des migrations

@@ -94,6 +94,41 @@ if (suspects.length > 0) {
   );
 }
 
+// L'ESPACE INTERNE #nextgen NE DOIT PAS ETRE OUVERT DANS UN PAQUET DE PRODUCTION.
+//
+// Trouve par la contre-analyse du 2026-09-29, et c'est le defaut le plus
+// sournois rencontre sur ce depot : la SOURCE annonce « jamais ouvert au public
+// par defaut » (src/nextgen/integration/InternalGate.tsx:4-7), mais
+// `.env:16 VITE_ENABLE_NEXTGEN=true` etait charge par Vite dans TOUS les modes,
+// y compris la construction de production. La garde se compilait alors en
+// `return!0` — toujours vrai — et televerser aurait publie les ecrans acheter,
+// vendre, trust, inspection, escrow, finance et logistique, qui n'ont pas de
+// base derriere.
+//
+// Lire la source ne suffisait pas : il fallait lire l'ARTEFACT. Ce controle le
+// fait a chaque construction.
+const gardeInterne = fichiers.filter((f) => /InternalGate-[^\/]*\.js$/.test(f));
+if (gardeInterne.length === 0) {
+  erreurs.push(
+    "Garde de l'espace interne introuvable dans le paquet.\n" +
+      '      Le controle ne peut pas conclure : verifiez que InternalGate est bien construit.',
+  );
+} else {
+  // Apres minification, `return true` s'ecrit `return!0`. On cherche donc une
+  // fonction sans argument dont le corps entier est un retour de vrai.
+  const TOUJOURS_VRAI = /function\s+\w*\s*\(\s*\)\s*\{\s*return\s*(!\s*0|true)\s*\}/;
+  const ouverte = gardeInterne.filter((f) => TOUJOURS_VRAI.test(readFileSync(f, 'utf8')));
+  if (ouverte.length > 0) {
+    erreurs.push(
+      'ESPACE INTERNE #nextgen OUVERT AU PUBLIC dans ce paquet.\n' +
+        '      La garde se compile en « toujours vrai ». Televerser publierait les ecrans\n' +
+        '      acheter, vendre, trust, inspection, escrow, finance et logistique.\n' +
+        '      Cause habituelle : VITE_ENABLE_NEXTGEN=true dans .env, charge par Vite dans\n' +
+        '      TOUS les modes. Mettez-le a false avant de construire un paquet de production.',
+    );
+  }
+}
+
 // Le lien de réinitialisation ne doit JAMAIS porter de fragment : le service
 // d'authentification l'écrase (cf. src/utils/authLink.ts).
 if (/\/#update-password/.test(contenu)) {

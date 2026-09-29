@@ -8,8 +8,8 @@
 
 ```
 $ npx vitest run
-  Test Files  87 passed (87)
-  Tests      634 passed (634)
+  Test Files  89 passed (89)
+  Tests      651 passed (651)
 
 $ npx tsc --noEmit      → 0 erreur (strictNullChecks ACTIF depuis le 2026-09-29)
 $ npm run build         → OK, garde-fou de paquet vérifié
@@ -70,9 +70,17 @@ Je n'ai pas installé la dépendance, pour ne pas modifier `package.json` pendan
 
 | Fichier | Cas | Ce qu'il verrouille |
 |---|---|---|
-| `src/utils/api/verifierDeploiement.test.ts` | 8 | Le paquet en ligne porte-t-il la marque du dernier commit ? (`CART-01`) |
-| `src/pages/machineDetailHelpers.test.ts` (étendu) | +4 | Le vendeur fictif est écarté du parcours de devis (`SEQ-05`) |
-| `src/utils/api/quoteRequests.vendeurFictif.test.ts` | 6 | Aucune demande de devis ne part vers un vendeur inexistant |
+| `src/utils/api/quoteRequests.vendeurFictif.test.ts` | **9** | Aucune demande de devis ne part vers le vendeur fictif que portent 83,7 % des annonces (`SEQ-05`, `CTR-05`) |
+| `src/utils/api/verifierDeploiement.test.ts` | **8** | Le site en ligne porte-t-il les correctifs du dépôt ? Et le garde-fou distingue-t-il « retard » de « témoin obsolète » ? (`CART-01`) |
+
+Les deux sont **vérifiés par mutation** : on casse volontairement le code et on constate que le
+test échoue. Un test qui n'a jamais échoué ne prouve rien.
+
+> **Correction de ce rapport, 2026-09-29.** Une première version annonçait
+> `machineDetailHelpers.test.ts (étendu) +4 cas`. **C'était faux** : ce fichier existe avec
+> 17 cas, mais il date d'une séance antérieure et n'a pas été étendu par cet audit. Elle
+> annonçait aussi `verifierDeploiement.test.ts` avant que ce fichier n'existe. Les deux lignes
+> sont corrigées ci-dessus, et le test manquant a été écrit plutôt qu'effacé du tableau.
 
 Détail dans `MINEGRID_REMEDIATION_ROADMAP.md`.
 

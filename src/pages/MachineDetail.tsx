@@ -567,9 +567,32 @@ export default function MachineDetail({ machineId }: MachineDetailProps) {
         setSuccessMessage(
           `Demande enregistrée. Notification email temporairement indisponible.${dossierHint}`,
         );
-      } else {
+      } else if (emailRoute === 'machine_owner' || emailRoute === 'fallback_inbox') {
+        // La fonction a CONFIRMÉ un destinataire : on peut annoncer l'envoi.
         logger.info('[MachineDetail] email acheteur → vendeur / boîte', { routing: emailRoute, ok: Boolean(emailData) });
         setSuccessMessage(`Demande enregistrée et envoyée.${emailDeliveredHint}${dossierHint}`);
+      } else {
+        // NE PAS ANNONCER UN ENVOI NON CONFIRMÉ.
+        //
+        // Audit du 2026-09-29 : la fonction réellement déployée en production
+        // n'est pas celle du dépôt. Elle répond 200 {"ok":true,"received":null}
+        // à n'importe quoi — y compris à un corps vide, que le code du dépôt
+        // rejetterait par un 400. Sans champ `routing`, rien ne prouve qu'un
+        // destinataire a été résolu.
+        //
+        // L'ancien code traitait cette réponse comme un succès et affichait
+        // « Demande enregistrée et envoyée » : l'acheteur repartait convaincu
+        // que le vendeur était prévenu. La demande est bien écrite dans
+        // quote_requests, mais rien ne garantit la notification.
+        //
+        // Mieux vaut une phrase prudente qu'une promesse que l'on ne tient pas.
+        logger.warn('[MachineDetail] réponse de send-contact-email sans routage confirmé', {
+          reponse: emailData,
+        });
+        setSuccessMessage(
+          `Demande enregistrée. La notification au vendeur n'a pas pu être confirmée — ` +
+            `notre équipe est prévenue et prendra le relais.${dossierHint}`,
+        );
       }
 
       // Succès

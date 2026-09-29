@@ -1,4 +1,7 @@
-#!/usr/bin/env node
+// Pas de ligne shebang : ce fichier est lance par `node scripts/...` et il
+// est AUSSI importe par src/utils/api/verifierDeploiement.test.ts pour
+// tester sa regle. L'outil de compilation des tests ne sait pas analyser
+// un shebang, et le fichier entier devenait alors illisible.
 /**
  * GARDE-FOU : le site en ligne exécute-t-il bien le code de ce dépôt ?
  *
@@ -30,8 +33,9 @@
  * Code de sortie 1 si le site est en retard sur le dépôt.
  */
 
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const SITE = process.argv[2] || 'https://minegrid-equipement.com';
 
@@ -43,10 +47,35 @@ const SITE = process.argv[2] || 'https://minegrid-equipement.com';
  * les renomme, la vérification serait toujours fausse. Ajouter une ligne ici
  * fait partie de la livraison d'un correctif important.
  */
-const TEMOINS = [
+export const TEMOINS = [
   { chaine: 'catalogue_facettes', depuis: 'e184562a — recherche du catalogue côté base' },
   { chaine: 'machines_catalogue', depuis: 'e184562a — vue de recherche' },
 ];
+
+/**
+ * Compare deux paquets et dit lesquels des témoins manquent EN LIGNE.
+ *
+ * Fonction pure, séparée du téléchargement : c'est elle qui porte la règle, et
+ * c'est elle qui se teste. Un témoin absent du build LOCAL n'est pas un retard
+ * de déploiement — c'est un témoin devenu obsolète, et le confondre avec un
+ * retard ferait échouer le garde-fou à tort après un refactor.
+ */
+export function comparerPaquets(contenuLocal, contenuEnLigne, temoins = TEMOINS) {
+  const lignes = [];
+  for (const t of temoins) {
+    const local = contenuLocal.includes(t.chaine);
+    const enLigne = contenuEnLigne.includes(t.chaine);
+    lignes.push({
+      ...t,
+      local,
+      enLigne,
+      etat: !local ? 'temoin-obsolete' : enLigne ? 'a-jour' : 'manquant-en-ligne',
+    });
+  }
+  const manquants = lignes.filter((l) => l.etat === 'manquant-en-ligne');
+  const obsoletes = lignes.filter((l) => l.etat === 'temoin-obsolete');
+  return { lignes, manquants, obsoletes, aJour: manquants.length === 0 };
+}
 
 function paquetLocal() {
   const index = join('dist', 'index.html');
@@ -65,6 +94,16 @@ async function paquetEnLigne() {
   const contenu = await (await fetch(`${SITE}/assets/${m[1]}`)).text();
   return { nom: m[1], contenu };
 }
+
+// Le corps ci-dessous ne s'exécute QUE si le fichier est lancé directement.
+// Sans cette garde, importer le module depuis un test déclencherait un appel
+// réseau vers le site de production — un test ne doit dépendre de rien d'externe.
+const lanceDirectement =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (!lanceDirectement) {
+  // Importé pour ses fonctions : on s'arrête ici.
+} else {
 
 const local = paquetLocal();
 if (!local) {
@@ -88,13 +127,20 @@ if (!enLigne) {
 console.log(`\n  paquet local    : ${local.nom}`);
 console.log(`  paquet en ligne : ${enLigne.nom}\n`);
 
-const manquants = [];
-for (const t of TEMOINS) {
-  const l = local.contenu.includes(t.chaine);
-  const e = enLigne.contenu.includes(t.chaine);
-  const etat = !l ? 'absent du build LOCAL (témoin obsolète ?)' : e ? 'présent' : 'MANQUANT EN LIGNE';
-  console.log(`  ${e && l ? '✅' : '❌'} ${t.chaine.padEnd(24)} ${etat}`);
-  if (l && !e) manquants.push(t);
+const { lignes, manquants, obsoletes } = comparerPaquets(local.contenu, enLigne.contenu);
+const LIBELLE = {
+  'a-jour': 'présent',
+  'manquant-en-ligne': 'MANQUANT EN LIGNE',
+  'temoin-obsolete': 'absent du build LOCAL (témoin obsolète ?)',
+};
+for (const l of lignes) {
+  console.log(`  ${l.etat === 'a-jour' ? '✅' : '❌'} ${l.chaine.padEnd(24)} ${LIBELLE[l.etat]}`);
+}
+if (obsoletes.length) {
+  console.log(
+    `
+  ⚠️  ${obsoletes.length} témoin(s) absent(s) du build local : mettez la liste TEMOINS à jour.`,
+  );
 }
 
 if (manquants.length === 0) {
@@ -109,3 +155,5 @@ console.error(
     '   chez l’hébergeur, puis relancez cette commande.\n',
 );
 process.exit(1);
+
+}
