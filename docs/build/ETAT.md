@@ -607,6 +607,13 @@ purement local (rien n'a jamais été poussé).
 ## Prochaine action
 
 **Patron**, dans l'ordre :
+0. **Appliquer `.audit/APPLY_P33_RECHERCHE_CATALOGUE.sql`** (staging puis prod). Le catalogue
+   cherche déjà côté base sans elle ; cette migration ajoute le filtre/tri par **prix** et les
+   **449 marques** au lieu de 44. 12 contre-cas passés sur base vierge, dont un qui prouve que
+   la vue ne contourne pas la RLS.
+0 bis. **Déployer les fonctions serveur** — 2 sur 13 seulement répondent aujourd'hui, et sans
+   `paddle-webhook` un paiement réussi n'active aucun abonnement. Mode d'emploi complet :
+   `docs/build/deployer-fonctions.md`.
 1. Appliquer `.audit/APPLY_P27_ADMIN_ABONNES.sql` puis `.audit/APPLY_P28_CONTACT_PROMO.sql` —
    **staging d'abord**, prod ensuite. Sans elles, les onglets Abonnés, Messages et Codes promo
    affichent une erreur.
