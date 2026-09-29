@@ -57,7 +57,9 @@ Navigateur
 `src/tenders/store/tendersStore.ts:94,310` — `zustand/persist`, clé `minegrid-tenders-store`.
 
 Le module de partage `tendersSync.ts` existe, mais :
-- il est **opt-in** (`VITE_TENDERS_SHARED`) ;
+- il est opt-in… **et l'option est ACTIVÉE dans la configuration de production**
+  (`.env.production:32  VITE_TENDERS_SHARED=true`) — correction apportée par la contre-analyse,
+  mon premier constat sur ce point était faux ;
 - il repose sur la table `tender_workspaces`, **vérifiée absente en production** ;
 - il est documenté « dernière écriture gagnante au niveau société » — deux collègues qui
   travaillent en même temps s'écrasent.
@@ -65,6 +67,15 @@ Le module de partage `tendersSync.ts` existe, mais :
 **Conséquence en production aujourd'hui** : chaque collaborateur travaille sur sa copie, dans son
 navigateur. Vider le cache efface le travail. Rien n'est partagé. Aucun fournisseur ne peut rien
 déposer.
+
+> ⚠️ **Correction issue de la contre-analyse — piège de déploiement.**
+> Le partage étant activé dans `.env.production` alors que la RPC
+> `get_my_tender_workspace` n'existe pas en base (`PGRST202`), le paquet actuel ne « reste » pas
+> en mode local : il tombe en mode **erreur**, et `TendersShell.tsx:167-176` affiche un bandeau
+> rouge permanent « Vos modifications ne sont PAS partagées ». Déployer en l'état **dégrade**
+> l'expérience des clients du module au lieu de l'améliorer.
+> Remède : soit remettre `VITE_TENDERS_SHARED=false`, soit appliquer la migration qui crée
+> `tender_workspaces` — **avant** de téléverser.
 
 ---
 

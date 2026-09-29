@@ -15,11 +15,49 @@ Trois actions qui ferment quatre P0 sans écrire une ligne de code applicatif.
 |---|---|---|---|
 | 0.1 | **Couper ou protéger `renders-ai`** dans le tableau de bord Supabase | `AO-06` | 10 min |
 | 0.2 | **Vérifier la consommation Anthropic**, révoquer la clé si anormale | `AO-06` | 20 min |
-| 0.3 | **Téléverser `dist/` chez l'hébergeur**, puis `npm run verifier:deploiement` | `CART-01`, `RES-01`, `SCA-01` | 30 min |
-| 0.4 | **Pousser le dépôt sur un remote** | `SAUV-01` | 10 min |
+| 0.3 | **Rendre le téléversement SÛR** — voir l'encadré rouge ci-dessous | nouveau P0 | 30 min |
+| 0.4 | **Téléverser `dist/`**, puis `npm run verifier:deploiement` | `CART-01`, `RES-01`, `SCA-01` | 30 min |
+| 0.5 | **Pousser les 329–373 commits** sur les remotes existants | `SAUV-01` | 10 min |
 
 > ⚠️ 0.1 sans corriger `aiService.ts` bascule tous les clients payants en simulation (`M-04`).
 > Si vous coupez, prévenez-les ou faites les deux dans la même journée.
+
+### 🔴 CORRECTION — le téléversement n'est PAS sans risque en l'état
+
+La première version de cette feuille de route annonçait « téléverser `dist/` — 30 min, sans
+risque ». **C'était faux**, et c'est la contre-analyse qui l'a établi. Vérifié :
+
+```
+$ cat dist/assets/InternalGate-VFpDfocY.js
+  function r(){return!0}      ← la garde de l'espace interne vaut TOUJOURS vrai
+```
+
+Cause : `.env:16 VITE_ENABLE_NEXTGEN=true`, chargé par Vite dans **tous** les modes. Téléverser
+le paquet actuel **publierait l'espace interne `#nextgen`** (acheter, vendre, trust, inspection,
+escrow, finance, logistique) — des écrans sans base derrière.
+
+Second piège, même origine : `.env.production:32 VITE_TENDERS_SHARED=true` alors que la RPC
+`get_my_tender_workspace` n'existe pas en base. Le module Appels d'offres afficherait un bandeau
+rouge permanent chez tous les clients.
+
+**Marche à suivre corrigée, dans cet ordre :**
+
+1. Retirer `VITE_ENABLE_NEXTGEN=true` de `.env` (ou le forcer à `false` dans `.env.production`)
+2. Remettre `VITE_TENDERS_SHARED=false`, **ou** appliquer la migration `tender_workspaces`
+3. `npm run build`, puis vérifier que `dist/assets/InternalGate-*.js` ne contient plus `return!0`
+4. **Alors seulement** téléverser, puis `npm run verifier:deploiement`
+
+### 🔴 La question à poser AVANT tout le reste
+
+99,25 % du catalogue est importé, et les photos sont servies depuis les serveurs de tiers :
+197 images sur 200 échantillonnées viennent du CDN de **Ritchie Bros / IronPlanet**, 27 de
+**leboncoin**. Sous un vendeur fantôme, sans attribution visible.
+
+**Existe-t-il un accord avec ces sources ?** Si oui, documentez-le. Sinon, c'est une exposition
+qu'aucune correction de code ne réduit — et elle prime sur les treize P0 techniques.
+
+Dépendance d'exploitation associée : le jour où ce CDN bloque les liens externes, **83 % de vos
+vignettes disparaissent** sans qu'une ligne de votre code ne change.
 
 ---
 

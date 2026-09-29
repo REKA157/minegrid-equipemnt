@@ -154,7 +154,7 @@ Chacun est détaillé dans le document thématique correspondant.
 | `CTR-01` | Le client écrit lui-même `total_amount`, `currency` et `status` du dossier | `SECURITY` |
 | `CTR-02` | Un vendeur peut **supprimer** un dossier payé → cascade destructrice | `SECURITY` |
 | `CTR-03` | Prédicat tautologique : un courtier devient partie de **n'importe quel** dossier | `SECURITY` |
-| `SAUV-01` | 167 versions du code n'existent que sur cette machine | `PRODUCTION` |
+| `SAUV-01` | **329 à 373** versions du code ne sont poussées sur aucun des deux remotes existants (chiffre corrigé) | `PRODUCTION` |
 | `CICD-04` | La configuration de build de production n'est dans aucun dépôt | `PRODUCTION` |
 
 ---
