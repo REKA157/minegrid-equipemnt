@@ -135,11 +135,29 @@ export function MessagesTab({ messages, onRefresh }: { messages: any[], onRefres
       setSelectedMessage(null);
       await onRefresh();
       
-      // Afficher notification de succès
+      // L'ENVOI N'EST ANNONCÉ QUE S'IL EST CONFIRMÉ.
+      //
+      // Même correction que MachineDetail et MessagesBoite. L'absence d'erreur
+      // ne prouve pas l'envoi : la fonction réellement déployée répond
+      // {"ok":true,"received":null} à n'importe quelle entrée, sans champ de
+      // routage (audit du 2026-09-29). Le message « Réponse envoyée avec
+      // succès ! » était donc affiché même quand rien n'était parti.
+      //
+      // L'ancien message promettait en plus « une notification interne » qui
+      // n'existe nulle part : la table `notifications` est absente de la
+      // production (404 PGRST205).
+      const routageReponse =
+        emailData &&
+        typeof emailData === 'object' &&
+        typeof (emailData as { routing?: unknown }).routing === 'string'
+          ? (emailData as { routing: string }).routing
+          : '';
       if (emailError) {
-        toast('Réponse sauvegardée mais erreur d\'envoi email. Le destinataire recevra une notification interne.');
-      } else {
+        toast('Réponse sauvegardée, mais l\'envoi du courriel a échoué.');
+      } else if (routageReponse === 'machine_owner' || routageReponse === 'fallback_inbox') {
         toast('Réponse envoyée avec succès !');
+      } else {
+        toast('Réponse enregistrée. L\'envoi du courriel n\'a pas pu être confirmé.');
       }
 
     } catch (error) {

@@ -180,11 +180,28 @@ export default function MessagesBoite() {
         return;
       }
 
+      // L'ENVOI N'EST ANNONCÉ QUE S'IL EST CONFIRMÉ.
+      //
+      // Audit du 2026-09-29 : la fonction réellement déployée répond
+      // {"ok":true,"received":null} à n'importe quoi, SANS champ `success` ni
+      // `routing`. Le test ci-dessus ne l'attrape donc pas — `undefined === false`
+      // est faux — et l'écran affichait « ✅ Réponse envoyée au client par
+      // e-mail. » alors que rien ne prouvait qu'un destinataire existait.
+      const routage =
+        data && typeof data === 'object' && typeof (data as { routing?: unknown }).routing === 'string'
+          ? (data as { routing: string }).routing
+          : '';
+      const envoiConfirme = routage === 'machine_owner' || routage === 'fallback_inbox';
+
       // Marquer le message original comme répondu.
       await updateMessageStatus(selectedMessage.id, 'repondu');
 
       setReplyContent('');
-      toast('✅ Réponse envoyée au client par e-mail.');
+      toast(
+        envoiConfirme
+          ? '✅ Réponse envoyée au client par e-mail.'
+          : 'Réponse enregistrée. L’envoi du courriel n’a pas pu être confirmé — vérifiez auprès du client.',
+      );
     } catch (error) {
       console.error('Erreur:', error);
       toast("Erreur lors de l'envoi de la réponse.");

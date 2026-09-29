@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseSellerUuid, estVendeurFictif } from './quoteRequests';
+import { parseSellerUuid, estVendeurFictif, cleanQuotePayloadPourTest } from './quoteRequests';
 
 const VENDEUR_REEL = '3f2b1c4a-9d7e-4f11-8a20-0b6c5d4e3f21';
 const FICTIF_1 = '00000000-0000-0000-0000-000000000001'; // 13 717 annonces
@@ -70,5 +70,51 @@ describe('parseSellerUuid — le garde-fou du parcours de devis', () => {
     // Le code appelant sait traiter l'absence de vendeur. Il ne sait pas
     // traiter un vendeur qui n'existe pas : il crée un dossier orphelin.
     expect(parseSellerUuid(FICTIF_1)).toBeNull();
+  });
+});
+
+describe('cleanQuotePayload — le point de passage UNIQUE', () => {
+  /**
+   * CE BLOC EXISTE À CAUSE D'UNE FAILLE DE MON PROPRE CORRECTIF.
+   *
+   * La première version ne filtrait que la résolution du vendeur depuis la
+   * machine. Mais la ligne réellement insérée s'écrit :
+   *
+   *     seller_id: sellerId ?? cleaned.seller_id ?? null
+   *
+   * Quand le filtre rendait `null`, le repli reprenait `cleaned.seller_id` —
+   * la valeur BRUTE du payload, jamais filtrée. Le vendeur fictif repartait
+   * donc en base par la ligne d'à côté. Une relecture indépendante l'a trouvé.
+   *
+   * Le filtre est désormais posé dans `cleanQuotePayload`, par où TOUT passe.
+   */
+  const base = {
+    machine_id: 'm-1',
+    machine_name: 'Pelle',
+    buyer_name: 'Karim',
+    buyer_email: 'Karim@Exemple.MA',
+  };
+
+  it('nettoie le vendeur fictif transmis DIRECTEMENT par l’appelant', () => {
+    // C'est exactement ce que fait VitrinePersonnalisee.tsx:641, qui passe
+    // `seller_id: vitrineData?.user_id` sans aucun filtre.
+    const r = cleanQuotePayloadPourTest({ ...base, seller_id: FICTIF_1 } as never);
+    expect(r.seller_id).toBeNull();
+  });
+
+  it('laisse passer un vendeur réel transmis par l’appelant', () => {
+    const r = cleanQuotePayloadPourTest({ ...base, seller_id: VENDEUR_REEL } as never);
+    expect(r.seller_id).toBe(VENDEUR_REEL);
+  });
+
+  it('rend null sur un identifiant mal formé plutôt que de l’écrire tel quel', () => {
+    const r = cleanQuotePayloadPourTest({ ...base, seller_id: 'pas-un-uuid' } as never);
+    expect(r.seller_id).toBeNull();
+  });
+
+  it('n’altère pas le reste du payload', () => {
+    const r = cleanQuotePayloadPourTest({ ...base, seller_id: FICTIF_1 } as never);
+    expect(r.machine_id).toBe('m-1');
+    expect(r.buyer_email).toBe('karim@exemple.ma');
   });
 });

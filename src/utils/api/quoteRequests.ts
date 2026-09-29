@@ -41,12 +41,33 @@ export interface SubmitQuoteResult {
   participantsLinked?: boolean | null;
 }
 
+/**
+ * Exporte `cleanQuotePayload` pour les tests UNIQUEMENT.
+ *
+ * C'est le point de passage unique de toute demande de devis : sans accès de
+ * test, on ne peut pas prouver que le vendeur fictif y est bien écarté — et
+ * c'est précisément la faille qui avait échappé au premier correctif.
+ */
+export function cleanQuotePayloadPourTest(payload: QuoteRequestPayload): QuoteRequestPayload {
+  return cleanQuotePayload(payload);
+}
+
 function cleanQuotePayload(payload: QuoteRequestPayload): QuoteRequestPayload {
   return {
     machine_id: payload.machine_id,
     machine_name: payload.machine_name?.trim() || 'Machine',
     brand: payload.brand?.trim() || null,
-    seller_id: payload.seller_id || null,
+    // Le filtre du vendeur fictif est pose ICI, au point de passage UNIQUE du
+    // payload, et pas seulement dans parseSellerUuid.
+    //
+    // Pourquoi : la premiere version du correctif ne filtrait que la resolution
+    // depuis la machine. Or la ligne inseree s'ecrit
+    // `seller_id: sellerId ?? cleaned.seller_id ?? null` (plus bas) : quand le
+    // filtre rendait null, le repli reprenait la valeur BRUTE du payload, jamais
+    // filtree — et le vendeur fictif repartait en base. Le correctif etait donc
+    // contourne par la ligne d'a cote. Trouve par la relecture independante du
+    // 2026-09-29.
+    seller_id: parseSellerUuid(payload.seller_id) ?? null,
     buyer_name: payload.buyer_name.trim(),
     buyer_email: payload.buyer_email.trim().toLowerCase(),
     buyer_phone: payload.buyer_phone?.trim() || null,

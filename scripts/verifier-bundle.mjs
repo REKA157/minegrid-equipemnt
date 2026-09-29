@@ -17,7 +17,7 @@
  * paquet (les fichiers qui seront servis à tous les visiteurs).
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
 const DIST = 'dist';
@@ -125,6 +125,65 @@ if (gardeInterne.length === 0) {
         '      acheter, vendre, trust, inspection, escrow, finance et logistique.\n' +
         '      Cause habituelle : VITE_ENABLE_NEXTGEN=true dans .env, charge par Vite dans\n' +
         '      TOUS les modes. Mettez-le a false avant de construire un paquet de production.',
+    );
+  }
+}
+
+// LES AUTRES PORTES DEROBEES, MEME MOTIF.
+//
+// L'espace interne n'etait pas la seule garde pilotee par une variable de
+// construction. La relecture independante du 2026-09-29 en a trouve deux
+// autres, avec exactement le meme mode de defaillance : une valeur posee dans
+// un fichier d'environnement, figee a la compilation, que plus personne ne
+// regarde ensuite.
+//
+//   VITE_MONITOR_TEMP_ACCESS_CODE  ouvre TOUTES les routes protegees sans
+//                                  compte (src/components/ProtectedRoute.tsx:5-6
+//                                  puis ligne 28)
+//   VITE_TENDERS_SHARED            branche le partage des appels d'offres sur
+//                                  une table absente de la production
+//
+// Ce controle-ci lit les FICHIERS D'ENVIRONNEMENT et non l'artefact, parce
+// qu'une valeur vide ne laisse aucune trace reconnaissable apres minification.
+// C'est une limite assumee, et elle est dite : il protege contre l'oubli, pas
+// contre quelqu'un qui contournerait volontairement le garde-fou.
+const DRAPEAUX_DANGEREUX = [
+  {
+    nom: 'VITE_MONITOR_TEMP_ACCESS_CODE',
+    sur: (v) => v.trim() === '',
+    risque:
+      'ouvre TOUTES les routes protegees sans compte : un visiteur qui connait le code\n' +
+      '      entre partout. A laisser VIDE en production.',
+  },
+  {
+    nom: 'VITE_TENDERS_SHARED',
+    sur: (v) => v.trim() !== 'true',
+    risque:
+      'branche le partage des appels d\'offres sur la table tender_workspaces, absente\n' +
+      '      de la production : bandeau rouge permanent chez tous les clients.\n' +
+      '      A remettre a true LE JOUR OU la migration teamE est appliquee.',
+  },
+];
+
+for (const d of DRAPEAUX_DANGEREUX) {
+  // `.env.production` l'emporte sur `.env` et `.env.local` en mode production.
+  // On lit donc dans cet ordre et on retient la DERNIERE definition trouvee.
+  let valeur = null;
+  let source = null;
+  for (const fichier of ['.env', '.env.local', '.env.production']) {
+    if (!existsSync(fichier)) continue;
+    for (const ligne of readFileSync(fichier, 'utf8').split(/\r?\n/)) {
+      const m = ligne.match(new RegExp(`^\\s*${d.nom}\\s*=(.*)$`));
+      if (m) {
+        valeur = m[1];
+        source = fichier;
+      }
+    }
+  }
+  if (valeur !== null && !d.sur(valeur)) {
+    erreurs.push(
+      `${d.nom} est dans un etat dangereux pour la production (${source}).\n` +
+        `      Il ${d.risque}`,
     );
   }
 }
