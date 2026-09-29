@@ -99,6 +99,11 @@ const ATTENDUS = [
   // propose que 44 sur 449.
   { type: 'table', nom: 'machines_catalogue' },
   { type: 'fonction', nom: 'catalogue_facettes', args: {} },
+
+  // p34 — le vendeur fictif ne peut plus entrer dans la chaine. Tant que
+  // cette fonction est absente, les 13 717 annonces importees peuvent encore
+  // engendrer des dossiers transactionnels orphelins.
+  { type: 'fonction', nom: 'est_vendeur_fictif', args: { p_id: '00000000-0000-0000-0000-000000000001' } },
 ];
 
 function cleAnon(env) {

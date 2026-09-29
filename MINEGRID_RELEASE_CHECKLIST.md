@@ -36,6 +36,13 @@ par une commande, pas par une impression.
 
 ### Données
 
+- [ ] **`p34` appliquée** (`.audit/APPLY_P34_VENDEUR_FICTIF.sql`) : le vendeur fictif ne peut
+      plus entrer dans la chaîne transactionnelle, quel que soit l'appelant — y compris la clé
+      de service. 9 contre-cas rejoués sur base vierge. Vérifier ensuite :
+      ```bash
+      curl -s -X POST -H "apikey: <CLE_ANON>" -H "Authorization: Bearer <CLE_ANON>" -H 'Content-Type: application/json' -d '{"p_id":"00000000-0000-0000-0000-000000000001"}' https://tnfbggrftmtxpgbcwqzo.supabase.co/rest/v1/rpc/est_vendeur_fictif
+      ```
+      **Attendu : `true`.** Un `PGRST202` signifie que la migration n'est pas appliquée.
 - [ ] **Les 13 717 annonces à vendeur fictif sont traitées** : soit rattachées à un vendeur réel,
       soit retirées du catalogue, soit marquées « à titre indicatif, non contactable ».
       Aujourd'hui elles représentent 83,7 % de ce qu'un acheteur voit.

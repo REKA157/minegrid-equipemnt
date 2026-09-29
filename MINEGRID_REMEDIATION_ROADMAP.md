@@ -147,12 +147,31 @@ Tout est sur la branche `audit/production-2026-09-29`, aucune modification en pr
 | Filtre du vendeur fictif dans le parcours de devis (`quoteRequests.ts`) | `SEQ-05`, `CTR-05` | `quoteRequests.vendeurFictif.test.ts` — 9 cas, vérifiés par mutation |
 | Garde-fou `npm run verifier:deploiement` | `CART-01` | `verifierDeploiement.test.ts` — 8 cas, vérifiés par mutation. Le script sort en code 1 aujourd'hui : il détecte le retard |
 | **Espace interne refermé** (`.env`, `.env.production`) + **le build refuse un paquet ouvert** | nouveau P0 de la contre-analyse | Vérifié par mutation : reconstruire avec `VITE_ENABLE_NEXTGEN=true` fait échouer le build |
+| **Migration `p34`** : le vendeur fictif ne peut plus entrer dans la chaîne transactionnelle, **côté base** | `SEQ-05`, `CTR-05` — la moitié serveur, qui manquait | 9 contre-cas rejoués sur PostgreSQL vierge, vérifiés par **deux** mutations |
+| Le garde-fou du paquet couvre aussi `VITE_MONITOR_TEMP_ACCESS_CODE` et `VITE_TENDERS_SHARED` | trous signalés par la relecture | Vérifié par mutation sur chacun des deux |
+| Plus de faux succès sur **MessagesBoite** et **MessagesTab** non plus | `CART-02`, étendu | — (exige un envoi réel) |
 | **Plus de faux succès sur le formulaire de contact** (`MachineDetail.tsx`) : l'envoi n'est annoncé que si la fonction confirme un destinataire | `CART-02` | — (le chemin exige un envoi réel ; non testé volontairement) |
 
 **Pourquoi si peu de correctifs ?** Parce que la majorité des P0 ne se corrigent pas dans le
 dépôt : ils se corrigent en **déployant** ce qui y est déjà, ou en **appliquant** des migrations
 déjà écrites. Écrire du code neuf par-dessus aurait aggravé l'écart entre le dépôt et la
 production, qui est précisément le problème central.
+
+### Ce que la relecture indépendante a corrigé dans mes correctifs
+
+Trois relecteurs ont éprouvé la remédiation. Ils ont trouvé **trois trous**, tous réels :
+
+1. **Le filtre du vendeur fictif était contourné par la ligne d'à côté.** La ligne insérée
+   s'écrit `seller_id: sellerId ?? cleaned.seller_id ?? null` : quand le filtre rendait `null`,
+   le repli reprenait la valeur brute du payload. Le filtre est désormais au **point de passage
+   unique** (`cleanQuotePayload`), et `p34` le pose **aussi côté base**, où aucun appelant ne
+   peut le contourner.
+2. **Deux autres écrans annonçaient un envoi non confirmé** (`MessagesBoite`, `MessagesTab`).
+3. **Deux autres drapeaux du même type que l'espace interne** n'étaient couverts par rien, dont
+   `VITE_MONITOR_TEMP_ACCESS_CODE` qui ouvre toutes les routes protégées sans compte.
+
+C'est la troisième fois de la journée que la contradiction trouve une faute dans mon travail
+plutôt que dans le projet. C'est la méthode qui fonctionne, pas moi.
 
 ---
 
