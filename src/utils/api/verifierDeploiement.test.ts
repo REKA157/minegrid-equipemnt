@@ -17,7 +17,11 @@
 
 import { describe, it, expect } from 'vitest';
 // Script d'outillage en JavaScript : TypeScript le résout sans difficulté.
-import { comparerPaquets, TEMOINS } from '../../../scripts/verifier-deploiement.mjs';
+import {
+  comparerPaquets,
+  comparerPolitiques,
+  TEMOINS,
+} from '../../../scripts/verifier-deploiement.mjs';
 
 const TEMOINS_ESSAI = [
   { chaine: 'catalogue_facettes', depuis: 'commit A' },
@@ -110,5 +114,37 @@ describe('la liste de témoins livrée', () => {
       );
       expect(t.depuis, `« ${t.chaine} » doit dire de quel commit il vient`).toBeTruthy();
     }
+  });
+});
+
+describe('comparerPolitiques — le .htaccess a-t-il suivi le paquet ?', () => {
+  // Le cas du 2026-10-01 : le paquet local autorise le radar, le site en ligne non.
+  const LOCAL =
+    `Header always set Content-Security-Policy "default-src 'self'; ` +
+    `connect-src 'self' https://*.supabase.co https://monitor.minegrid-equipement.com"`;
+  const EN_LIGNE_ANCIENNE = "default-src 'self'; connect-src 'self' https://*.supabase.co";
+  const RADAR = [{ url: 'https://monitor.minegrid-equipement.com/health', role: 'radar' }];
+
+  it('signale un service autorisé en local mais bloqué en ligne (.htaccess non envoyé)', () => {
+    const r = comparerPolitiques(LOCAL, EN_LIGNE_ANCIENNE, RADAR);
+    expect(r.lignes[0].etat).toBe('bloque-en-ligne');
+    expect(r.bloques).toHaveLength(1);
+  });
+
+  it('déclare à jour quand la politique en ligne autorise le service', () => {
+    const enLigne = "default-src 'self'; connect-src 'self' https://monitor.minegrid-equipement.com";
+    expect(comparerPolitiques(LOCAL, enLigne, RADAR).bloques).toHaveLength(0);
+  });
+
+  it('ne compte PAS comme retard un service bloqué aussi en local', () => {
+    // C'est au garde-fou du build de refuser ce paquet, pas à celui-ci.
+    const localSansRadar = `Header always set Content-Security-Policy "connect-src 'self'"`;
+    const r = comparerPolitiques(localSansRadar, EN_LIGNE_ANCIENNE, RADAR);
+    expect(r.lignes[0].etat).toBe('bloque-en-local');
+    expect(r.bloques).toHaveLength(0);
+  });
+
+  it('sans aucune politique en ligne, rien n est bloqué', () => {
+    expect(comparerPolitiques(LOCAL, null, RADAR).bloques).toHaveLength(0);
   });
 });

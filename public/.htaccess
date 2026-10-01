@@ -24,5 +24,9 @@
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "geolocation=(self), microphone=(), camera=()"
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
-  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.paddle.com https://sandbox-cdn.paddle.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://*.hstgr.cloud https://nominatim.openstreetmap.org; frame-src https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+  # connect-src : chaque service appele par le navigateur doit y figurer, sinon il
+  # est bloque AVANT de partir. monitor.minegrid-equipement.com = le radar (Global
+  # Monitor) : son absence l'a casse en ligne jusqu'au 2026-10-01. Verifie apres
+  # chaque build par scripts/verifier-bundle.mjs.
+  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.paddle.com https://sandbox-cdn.paddle.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://*.hstgr.cloud https://nominatim.openstreetmap.org https://monitor.minegrid-equipement.com; frame-src https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'"
 </IfModule>

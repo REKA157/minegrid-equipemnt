@@ -36,6 +36,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { origineAutorisee, sourcesConnexion } from './csp.mjs';
 
 const SITE = process.argv[2] || 'https://minegrid-equipement.com';
 
@@ -77,6 +78,42 @@ export function comparerPaquets(contenuLocal, contenuEnLigne, temoins = TEMOINS)
   return { lignes, manquants, obsoletes, aJour: manquants.length === 0 };
 }
 
+/**
+ * Services que le navigateur doit pouvoir joindre depuis le site en ligne.
+ *
+ * Le paquet JavaScript n'est que la moitié du déploiement : la politique de
+ * sécurité voyage dans `.htaccess`, un fichier CACHÉ que beaucoup de logiciels
+ * FTP n'envoient pas par défaut. Téléverser `dist/` sans lui laisserait le
+ * Global Monitor bloqué — constaté le 2026-10-01 — alors que les témoins
+ * ci-dessus diraient « à jour ».
+ */
+export const SERVICES_APPELES = [
+  { url: 'https://monitor.minegrid-equipement.com/health', role: 'le radar (Global Monitor)' },
+];
+
+/**
+ * Compare la politique du paquet local et celle que le site envoie réellement.
+ *
+ * `politiqueEnLigne` est la valeur brute de l'en-tête Content-Security-Policy,
+ * ou `null` si le site n'en envoie aucune (dans ce cas rien n'est bloqué).
+ * Un service bloqué AUSSI en local n'est pas un retard de déploiement : c'est
+ * au garde-fou du build (`verifier-bundle.mjs`) de le refuser.
+ */
+export function comparerPolitiques(politiqueLocale, politiqueEnLigne, services = SERVICES_APPELES) {
+  const local = sourcesConnexion(politiqueLocale);
+  const enLigne =
+    politiqueEnLigne === null ? null : sourcesConnexion(`Content-Security-Policy: ${politiqueEnLigne}`);
+  const lignes = services.map((s) => {
+    const okLocal = origineAutorisee(local, s.url);
+    const okEnLigne = origineAutorisee(enLigne, s.url);
+    return {
+      ...s,
+      etat: !okLocal ? 'bloque-en-local' : okEnLigne ? 'a-jour' : 'bloque-en-ligne',
+    };
+  });
+  return { lignes, bloques: lignes.filter((l) => l.etat === 'bloque-en-ligne') };
+}
+
 function paquetLocal() {
   const index = join('dist', 'index.html');
   if (!existsSync(index)) return null;
@@ -88,11 +125,13 @@ function paquetLocal() {
 }
 
 async function paquetEnLigne() {
-  const html = await (await fetch(SITE, { redirect: 'follow' })).text();
+  const page = await fetch(SITE, { redirect: 'follow' });
+  const politique = page.headers.get('content-security-policy');
+  const html = await page.text();
   const m = html.match(/assets\/(index-[A-Za-z0-9_-]+\.js)/);
   if (!m) return null;
   const contenu = await (await fetch(`${SITE}/assets/${m[1]}`)).text();
-  return { nom: m[1], contenu };
+  return { nom: m[1], contenu, politique };
 }
 
 // Le corps ci-dessous ne s'exécute QUE si le fichier est lancé directement.
@@ -143,16 +182,38 @@ if (obsoletes.length) {
   );
 }
 
-if (manquants.length === 0) {
+const htaccessLocal = join('dist', '.htaccess');
+const { lignes: services, bloques } = comparerPolitiques(
+  existsSync(htaccessLocal) ? readFileSync(htaccessLocal, 'utf8') : '',
+  enLigne.politique,
+);
+console.log('\n  Politique de sécurité (services joignables depuis le site en ligne) :');
+for (const s of services) {
+  const libelle = { 'a-jour': 'autorisé', 'bloque-en-ligne': 'BLOQUÉ EN LIGNE', 'bloque-en-local': 'bloqué aussi en local' }[s.etat];
+  console.log(`  ${s.etat === 'a-jour' ? '✅' : '❌'} ${new URL(s.url).host.padEnd(36)} ${libelle}`);
+}
+
+if (manquants.length === 0 && bloques.length === 0) {
   console.log('\n✅ Le site en ligne porte bien les correctifs du dépôt.\n');
   process.exit(0);
 }
 
-console.error(`\n❌ LE SITE EN LIGNE EST EN RETARD SUR LE DÉPÔT — ${manquants.length} correctif(s) absent(s) :\n`);
-for (const t of manquants) console.error(`   • ${t.chaine}   (${t.depuis})`);
+if (manquants.length > 0) {
+  console.error(`\n❌ LE SITE EN LIGNE EST EN RETARD SUR LE DÉPÔT — ${manquants.length} correctif(s) absent(s) :\n`);
+  for (const t of manquants) console.error(`   • ${t.chaine}   (${t.depuis})`);
+}
+if (bloques.length > 0) {
+  console.error(`\n❌ LA POLITIQUE DE SÉCURITÉ EN LIGNE BLOQUE ${bloques.length} SERVICE(S) :\n`);
+  for (const s of bloques) console.error(`   • ${s.role} — ${new URL(s.url).host}`);
+  console.error(
+    '\n   Le fichier .htaccess du site n’est pas celui du dépôt. C’est un fichier CACHÉ :\n' +
+      '   vérifiez que votre logiciel de téléversement affiche et envoie les fichiers\n' +
+      '   qui commencent par un point.',
+  );
+}
 console.error(
   '\n   Les utilisateurs n’ont donc PAS ces corrections. Téléversez le contenu de dist/\n' +
-    '   chez l’hébergeur, puis relancez cette commande.\n',
+    '   chez l’hébergeur, .htaccess compris, puis relancez cette commande.\n',
 );
 process.exit(1);
 

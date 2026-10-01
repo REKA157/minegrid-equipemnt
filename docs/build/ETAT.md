@@ -1,7 +1,49 @@
 # ETAT — MineGrid Équipement
 
 > Tableau de bord du projet. **À lire en début de session, à mettre à jour avant chaque commit.**
-> Dernière mise à jour : **2026-09-28** — séance « hygiène et scalabilité » (priorités 1 à 4)
+> Dernière mise à jour : **2026-10-01** — bilan du site en ligne, panne du Global Monitor
+
+---
+
+## 📡 Global Monitor cassé en ligne : la politique de sécurité bloquait le radar (2026-10-01)
+
+**Bilan complet, 27 points sondés** : https://claude.ai/artifact/Ld4PT26jd116VBTKCh5vnT
+(7 cassés, 1 exposé, 5 absents, 7 limités, 6 fonctionnent, 1 non vérifié).
+
+**La cause, prouvée dans un vrai navigateur** : le service du radar fonctionne
+(`/health` → 200, CORS correct, 401 sans compte comme prévu, `get_effective_subscription_for`
+présente et protégée). C'est la directive `connect-src` de `public/.htaccess` qui n'autorisait pas
+`monitor.minegrid-equipement.com`. La console du site en ligne le dit en toutes lettres :
+« *violates the following Content Security Policy directive* ». Touchés : Global Monitor,
+Opportunités de vente, widgets IA du tableau de bord.
+
+**Pourquoi personne ne l'avait vu** : l'essai du paquet du 2026-08-12 (plus bas, « radar de prod
+joignable, zéro erreur console ») passait par `vite preview`, **qui ignore `.htaccess`**. L'essai
+était juste, mais il ne testait pas la politique.
+
+**Corrigé (dépôt + `dist/`, rien en production)** :
+- domaine du radar ajouté à `connect-src` (`public/.htaccess`, et `public/_headers` par cohérence) ;
+- `scripts/csp.mjs` lit une politique ; `verifier-bundle.mjs` (après chaque build) **refuse un
+  paquet dont la politique bloque la base ou le radar** — il refusait bien le paquet d'avant ;
+- `verifier-deploiement.mjs` compare aussi la politique **servie en ligne** : `.htaccess` est un
+  fichier caché que beaucoup de logiciels FTP n'envoient pas ;
+- `scripts/servir-paquet.mjs` (port 4173, `minegrid-paquet` dans le launch.json de session) sert
+  `dist/` **avec** les en-têtes de `.htaccess`. Preuve : radar `/health` → 200 depuis ce serveur ;
+- 17 tests (`csp.test.ts` 13, `verifierDeploiement.test.ts` +4), trois mutations détectées.
+  Suite complète : **668/668**, types OK, build OK.
+
+**Trouvé au passage, non corrigé (décision ou production)** :
+- **`renders-ai` toujours ouverte** au 2026-10-01 : `ping` avec la clé publique → 200, `hasKey: true` ;
+- **détection du pays bloquée** par la même politique (api.country.is, get.geojs.io, ipapi.co) :
+  repli sur la langue du navigateur, donc des euros pour un visiteur marocain en « fr-FR ».
+  Débloquer = envoyer l'IP de chaque visiteur à trois tiers → **décision RGPD du patron** ;
+- **taux de change figés** dans `exchange_rates()` (valeurs en dur datées `now()`), fonction
+  `exchange-rates` non déployée ;
+- **page « Documentation API »** : décrit `api.minegrid-equipment.com`, domaine inexistant ;
+- radar local Docker : 16 134 redémarrages (échec DNS au démarrage), sans effet en ligne.
+
+**Reste non vérifié** : un abonné Pro voit-il les projets ? Exige un compte payant → au patron,
+après téléversement.
 
 ---
 
@@ -360,6 +402,8 @@ pas encore encaisser, et il n'existe aucun outil d'administration.
   à sable, aucune adresse localhost (hors constante inoffensive de la librairie d'auth).
 - Essai réel du paquet construit (`vite preview`, port 4188) : **400 annonces affichées**, base de
   prod joignable, radar de prod joignable, **zéro erreur console**.
+  ⚠️ *2026-10-01 : `vite preview` ignore `.htaccess`, donc cet essai ne testait pas la politique de
+  sécurité — qui bloquait le radar en ligne. Utiliser `scripts/servir-paquet.mjs` (port 4173).*
 
 ⚠️ **Ordre imposé** : `.env.production` pointe la fonction IA `tenders-ai`, **pas encore déployée**.
 Tant qu'elle ne l'est pas, les appels d'offres affichent honnêtement « mode simulation » (l'ancienne
@@ -578,7 +622,7 @@ Runbooks : `.audit/PADDLE_SETUP.md` · `docs/TENDERS_OPERATIONS.md` · `.audit/S
 | Inscription, connexion, mot de passe oublié | **Paiement par carte** → message honnête : « paiement pas encore configuré, utilisez un code promo ou contactez le support » (B2) |
 | Catalogue, recherche, fiches machines, devis, messagerie | **IA des appels d'offres** → mention « mode simulation » tant que A1 n'est pas fait |
 | Publication d'annonces, dossiers, tableaux de bord | **Administration de la plateforme** → aucune console (B3) |
-| Appels d'offres (cycle complet, hors IA), Global Monitor | Confirmations d'inscription : risque de spam tant que SPF/DKIM absents (A2) |
+| Appels d'offres (cycle complet, hors IA), Global Monitor (**seulement si `.htaccess` est téléversé avec le paquet** — 2026-10-01) | Confirmations d'inscription : risque de spam tant que SPF/DKIM absents (A2) |
 | Codes promo (vérifiés côté serveur) → seule voie d'accès payant | |
 
 ---
@@ -607,6 +651,10 @@ purement local (rien n'a jamais été poussé).
 ## Prochaine action
 
 **Patron**, dans l'ordre :
+00. **Couper ou protéger `renders-ai`** (toujours ouverte au 2026-10-01), puis **téléverser
+   `dist/` avec `.htaccess`** (afficher les fichiers cachés dans le logiciel FTP) et lancer
+   `npm run verifier:deploiement` : il doit passer au vert, radar compris. Ensuite, ouvrir le
+   Global Monitor avec un compte Pro. Bilan : https://claude.ai/artifact/Ld4PT26jd116VBTKCh5vnT
 0. **Appliquer `.audit/APPLY_P33_RECHERCHE_CATALOGUE.sql`** (staging puis prod). Le catalogue
    cherche déjà côté base sans elle ; cette migration ajoute le filtre/tri par **prix** et les
    **449 marques** au lieu de 44. 12 contre-cas passés sur base vierge, dont un qui prouve que

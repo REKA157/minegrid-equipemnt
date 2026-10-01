@@ -20,7 +20,9 @@ par une commande, pas par une impression.
 
 ### Conformité dépôt ↔ production
 
-- [ ] **`npm run verifier:deploiement` sort en code 0.** Aujourd'hui il sort **1**.
+- [ ] **`npm run verifier:deploiement` sort en code 0.** Aujourd'hui il sort **1**. Depuis le
+      2026-10-01 il vérifie aussi la politique de sécurité servie en ligne : téléverser
+      `dist/` **avec `.htaccess`** (fichier caché), sinon le Global Monitor reste bloqué.
 - [ ] **Les Edge Functions déployées sont celles du dépôt.** Vérifier qu'un corps vide sur
       `send-contact-email` renvoie **400** et non `{"ok":true}`.
 - [ ] **Aucune fonction déployée sous un nom absent du dépôt** (cas `renders-ai`).

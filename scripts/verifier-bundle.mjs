@@ -19,6 +19,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { origineAutorisee, sourcesConnexion } from './csp.mjs';
 
 const DIST = 'dist';
 
@@ -165,7 +166,8 @@ const DRAPEAUX_DANGEREUX = [
   },
 ];
 
-for (const d of DRAPEAUX_DANGEREUX) {
+/** Valeur qu'une variable prendra dans un build de production. */
+function valeurEnProduction(nom) {
   // `.env.production` l'emporte sur `.env` et `.env.local` en mode production.
   // On lit donc dans cet ordre et on retient la DERNIERE definition trouvee.
   let valeur = null;
@@ -173,18 +175,63 @@ for (const d of DRAPEAUX_DANGEREUX) {
   for (const fichier of ['.env', '.env.local', '.env.production']) {
     if (!existsSync(fichier)) continue;
     for (const ligne of readFileSync(fichier, 'utf8').split(/\r?\n/)) {
-      const m = ligne.match(new RegExp(`^\\s*${d.nom}\\s*=(.*)$`));
+      const m = ligne.match(new RegExp(`^\\s*${nom}\\s*=(.*)$`));
       if (m) {
         valeur = m[1];
         source = fichier;
       }
     }
   }
+  return { valeur, source };
+}
+
+for (const d of DRAPEAUX_DANGEREUX) {
+  const { valeur, source } = valeurEnProduction(d.nom);
   if (valeur !== null && !d.sur(valeur)) {
     erreurs.push(
       `${d.nom} est dans un etat dangereux pour la production (${source}).\n` +
         `      Il ${d.risque}`,
     );
+  }
+}
+
+// LES SERVICES QUE LE SITE APPELLE DOIVENT ETRE AUTORISES PAR LA CSP.
+//
+// Constate le 2026-10-01 : le Global Monitor etait casse en ligne alors que son
+// service repondait. La politique de securite de `public/.htaccess` n'autorisait
+// pas son domaine dans `connect-src` : le navigateur refusait chaque appel avant
+// qu'il parte. Le service, lui, ne voyait rien — la requete n'arrivait jamais.
+//
+// Ce controle relie les deux bouts que personne ne relisait ensemble : l'adresse
+// compilee dans le paquet, et la politique qui l'accompagne.
+const SERVICES_APPELES = [
+  { nom: 'VITE_SUPABASE_URL', role: 'la base (connexion, catalogue, comptes)' },
+  { nom: 'VITE_MONITOR_API_URL', role: 'le radar (Global Monitor, Opportunites de vente)' },
+];
+const fichierPolitique = join(DIST, '.htaccess');
+if (!existsSync(fichierPolitique)) {
+  erreurs.push(
+    'Aucun .htaccess dans le paquet : ni redirections, ni politique de securite.\n' +
+      '      Il doit venir de public/.htaccess.',
+  );
+} else {
+  const sources = sourcesConnexion(readFileSync(fichierPolitique, 'utf8'));
+  for (const { nom, role } of SERVICES_APPELES) {
+    const { valeur, source } = valeurEnProduction(nom);
+    const url = (valeur ?? '').trim().replace(/^["']|["']$/g, '');
+    if (!url) continue;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+      erreurs.push(
+        `${nom} pointe vers ${url} (${source}).\n` +
+          `      Cette adresse n'existe que sur votre poste : en ligne, ${role} serait injoignable.`,
+      );
+    } else if (!origineAutorisee(sources, url)) {
+      erreurs.push(
+        `${nom} = ${url} est BLOQUE par la politique de securite du site.\n` +
+          `      Le navigateur refusera tout appel vers ${role}.\n` +
+          `      Ajoutez ce domaine a « connect-src » dans public/.htaccess.`,
+      );
+    }
   }
 }
 
@@ -206,6 +253,7 @@ if (erreurs.length > 0) {
 
 console.log(
   `\n✅ Paquet vérifié : base de production ${REF_PRODUCTION}, ` +
-    `aucune base de test, aucun secret, lien de réinitialisation valide ` +
+    `aucune base de test, aucun secret, base et radar autorisés par la politique ` +
+    `de sécurité, lien de réinitialisation valide ` +
     `(${fichiers.length} fichiers analysés).\n`,
 );
