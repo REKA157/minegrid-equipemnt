@@ -1,7 +1,33 @@
 # ETAT — MineGrid Équipement
 
 > Tableau de bord du projet. **À lire en début de session, à mettre à jour avant chaque commit.**
-> Dernière mise à jour : **2026-10-01** — bilan du site en ligne, panne du Global Monitor
+> Dernière mise à jour : **2026-10-02** — code promo en échec (index unique manquant), correctif prouvé
+
+---
+
+## 🎟️ Code promo en échec : index UNIQUE manquant sur `pro_clients.user_id` (2026-10-02)
+
+**Le défaut, reproduit en Docker.** `redeem_promo_code` (et `paddle-webhook`) activent l'abonnement par
+`INSERT INTO pro_clients … ON CONFLICT (user_id) DO UPDATE`. Or en **production**, `pro_clients.user_id`
+n'a qu'un **index simple** (`idx_pro_clients_user_id`), **pas d'unique** → Postgres lève
+`42P10 : there is no unique or exclusion constraint matching the ON CONFLICT specification`, et **toute
+rédemption de code promo échoue**. Le site en ligne pointant déjà la base morte masquait le symptôme ;
+branché sur la vraie base, le code promo plantait quand même — d'où « aujourd'hui même il ne marche pas ».
+
+**Pourquoi passé inaperçu.** La migration `20260717100000_paddle_payments.sql` crée pourtant cet index
+(dédoublonnage + `create unique index pro_clients_user_id_key`) mais **n'a jamais été appliquée**. Le
+comparateur le **documentait** (commentaire « index unique pro_clients → code promo et webhook Paddle en
+échec ») **sans le vérifier**. Le test de l'audit (p15) passait car son `pro_clients` de test avait, lui,
+une unicité sur `user_id` — mismatch test/prod classique.
+
+**Prouvé (Docker, 2026-10-02).** Sur un `pro_clients` identique à la prod (index simple) : l'appel
+**plante** ; après le correctif → utilisateur 1 `{"ok": true}` + abonnement « active », 2ᵉ fois « déjà
+utilisé » (sans plantage), quota respecté. `uses_count` reste à 0 après le plantage (rollback, aucune
+corruption).
+
+**Correctif livré, à appliquer par le patron.** `.audit/APPLY_CORRECTIF_CODE_PROMO.sql` (dédoublonnage +
+index unique, idempotent) — **STAGING d'abord, puis PROD**. Même famille que les objets « écrits mais
+jamais appliqués » listés par `npm run bases`.
 
 ---
 
@@ -651,6 +677,9 @@ purement local (rien n'a jamais été poussé).
 ## Prochaine action
 
 **Patron**, dans l'ordre :
+0 avant tout. **Code promo cassé → appliquer `.audit/APPLY_CORRECTIF_CODE_PROMO.sql`** (SQL Editor :
+   **staging puis prod**). Index unique manquant sur `pro_clients.user_id` : sans lui, aucune rédemption
+   de code promo n'aboutit — or c'est la **seule voie d'accès payant** aujourd'hui. Prouvé en Docker.
 00. **Couper ou protéger `renders-ai`** (toujours ouverte au 2026-10-01), puis **téléverser
    `dist/` avec `.htaccess`** (afficher les fichiers cachés dans le logiciel FTP) et lancer
    `npm run verifier:deploiement` : il doit passer au vert, radar compris. Ensuite, ouvrir le
