@@ -1,0 +1,182 @@
+# Déploiement du site en ligne (minegrid-equipement.com)
+#
+# POURQUOI CE WORKFLOW EXISTE
+# ---------------------------
+# Constaté le 2026-10-02 : le Global Monitor était cassé en ligne alors que le
+# correctif existait dans le dépôt depuis le 2026-10-01. Le site servait encore
+# l'ancien `public/.htaccess`, dont la directive `connect-src` n'autorisait pas
+# `monitor.minegrid-equipement.com` : le navigateur bloquait chaque appel au
+# radar avant qu'il parte. Le téléversement manuel par FTP avait emporté les
+# fichiers visibles mais PAS `.htaccess`, qui commence par un point et que la
+# plupart des clients FTP masquent par défaut.
+#
+# Deux pannes de production sont nées de cette zone d'ombre :
+#   - 2026-08-12 : `.env.local` pointait vers la base de STAGING et Vite le lit
+#     aussi pour `npm run build` ; le paquet du site en ligne a été construit
+#     contre la mauvaise base, sans aucun avertissement ;
+#   - 2026-10-02 : `.env.local` forçait `VITE_TENDERS_SHARED=true` alors que la
+#     RPC n'existe pas en production.
+#
+# D'où les deux partis pris de ce fichier :
+#   1. la configuration de production est écrite ICI, versionnée et relisible,
+#      au lieu de dépendre d'un fichier local invisible ;
+#   2. le déploiement n'est pas « terminé » parce que le FTP n'a pas protesté :
+#      il n'est accepté que si la politique RÉELLEMENT servie en ligne autorise
+#      le radar (dernière étape, bloquante).
+#
+# SECRETS À CRÉER (Settings > Secrets and variables > Actions)
+#   VITE_SUPABASE_URL       url du projet Supabase de production
+#   VITE_SUPABASE_ANON_KEY  clé « anon » du même projet
+#   FTP_SERVER              hôte FTP de l'hébergeur
+#   FTP_USERNAME            identifiant FTP
+#   FTP_PASSWORD            mot de passe FTP
+#
+# Déclenchement MANUEL uniquement : publier en production est un acte délibéré,
+# jamais un effet de bord d'un push.
+
+name: Déploiement du site
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Taper « deployer » pour confirmer la publication en production"
+        required: true
+        default: ""
+
+concurrency:
+  group: deploiement-site
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    name: Construire, publier et vérifier en ligne
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Refuser un déclenchement non confirmé
+        if: inputs.confirmation != 'deployer'
+        run: |
+          echo "::error::Confirmation absente. Relancez en tapant « deployer »."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      # Mêmes valeurs factices que ci.yml : les tests ne doivent jamais toucher
+      # la base de production.
+      - name: Unit tests (Vitest)
+        run: npm test
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: dummy-anon-key-for-ci
+
+      # `.env.production` est ignoré par git (il n'a donc aucune valeur ici) :
+      # on l'écrit à partir des secrets + de la configuration ci-dessous.
+      # Les deux jetons restent VIDES volontairement :
+      #   - VITE_MONITOR_ADMIN_TOKEN vide masque l'outil interne #admin-sources ;
+      #   - VITE_MONITOR_TEMP_ACCESS_CODE vide désactive le contournement d'accès.
+      # Les remplir ici exposerait un accès privilégié dans un paquet public.
+      - name: Écrire la configuration de production
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Secrets VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY absents."
+            exit 1
+          fi
+          {
+            echo "VITE_SUPABASE_URL=$SUPABASE_URL"
+            echo "VITE_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
+            echo "VITE_PRODUCTION_URL=https://minegrid-equipement.com"
+            echo "VITE_ENABLE_NEXTGEN=false"
+            echo "VITE_MONITOR_API_URL=https://monitor.minegrid-equipement.com"
+            echo "VITE_MONITOR_ADMIN_TOKEN="
+            echo "VITE_MONITOR_TEMP_ACCESS_CODE="
+            echo "VITE_TENDERS_AI_FUNCTION=tenders-ai"
+            echo "VITE_TENDERS_AI_URL=supabase"
+            echo "VITE_TENDERS_SHARED=false"
+          } > .env.production
+          echo "Variables écrites (noms seuls) :"
+          cut -d= -f1 .env.production | sed 's/^/  /'
+
+      # `postbuild` lance scripts/verifier-bundle.mjs, qui refuse un paquet
+      # construit contre une base de test, contenant un secret, ou dont la
+      # politique de sécurité bloque la base ou le radar.
+      - name: Production build
+        run: npm run build
+
+      # Le défaut exact du 2026-10-02 : sans ce fichier, le site se charge mais
+      # tous les appels au radar sont bloqués par le navigateur.
+      - name: Vérifier que .htaccess est bien dans dist/
+        run: |
+          if [ ! -f dist/.htaccess ]; then
+            echo "::error::dist/.htaccess absent : la politique de sécurité ne serait pas publiée."
+            exit 1
+          fi
+          if ! grep -q 'monitor\.minegrid-equipement\.com' dist/.htaccess; then
+            echo "::error::dist/.htaccess n'autorise pas le radar dans connect-src."
+            exit 1
+          fi
+          echo "dist/.htaccess présent et autorisant le radar."
+
+      # local-dir et server-dir doivent se terminer par « / ».
+      # L'action transfère aussi les fichiers commençant par un point, ce que le
+      # FTP manuel ne faisait pas — mais on ne s'en contente pas : l'étape
+      # suivante le vérifie sur le site réel.
+      - name: Publier dist/ par FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: public_html/
+
+      # Compare le dépôt au site réellement servi (paquet + politique + RPC).
+      # Non bloquant : il signale aussi des migrations SQL en attente, qui ne
+      # relèvent pas de ce déploiement et ne doivent pas le faire échouer.
+      - name: Comparer le dépôt au site en ligne (indicatif)
+        continue-on-error: true
+        run: |
+          {
+            echo "## Comparaison dépôt / site en ligne"
+            echo '```'
+            npm run --silent verifier:deploiement 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # LE critère de réussite. Un FTP sans erreur ne prouve rien : c'est la
+      # politique servie au navigateur qui décide si le radar est joignable.
+      - name: Exiger que la politique en ligne autorise le radar
+        run: |
+          for essai in 1 2 3 4 5; do
+            csp=$(curl -sS -I --max-time 20 https://minegrid-equipement.com/ \
+                  | tr -d '\r' | grep -i '^content-security-policy:' || true)
+            if printf '%s' "$csp" | grep -q 'monitor\.minegrid-equipement\.com'; then
+              echo "Politique en ligne à jour : le radar est autorisé."
+              exit 0
+            fi
+            echo "Essai $essai : le radar est encore bloqué, nouvelle tentative dans 15 s…"
+            sleep 15
+          done
+          echo "::error::La politique servie en ligne bloque toujours le radar."
+          echo "::error::.htaccess n'a pas atteint public_html/ — vérifiez le chemin FTP (server-dir)."
+          exit 1
