@@ -6,7 +6,9 @@ services:
       POSTGRES_PASSWORD: monitor
       POSTGRES_DB: monitor_db
     ports:
-      - "5432:5432"
+      # Ports configurables (.env) : sur un poste de dev, 5432/8000 sont
+      # souvent déjà pris par un autre projet — évite « port is already allocated ».
+      - "${MONITOR_DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +20,7 @@ services:
   monitor-api:
     build: .
     ports:
-      - "8000:8000"
+      - "${MONITOR_API_PORT:-8000}:8000"
     env_file:
       - .env
     environment:

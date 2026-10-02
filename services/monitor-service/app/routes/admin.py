@@ -15,7 +15,7 @@ from app.ingestion.asset import ProjectAsset
 from app.ingestion.upsert import upsert_assets
 from app.ingestion.registry import run_all
 from app.llm.enrichment import enrich_projects_batch, analyze_project_debug, compare_project_methods
-from app.alerts.generator import generate_alert_events
+from app.alerts.generator import generate_alert_events, generate_alerts_after_ingest
 from app.models import Project
 from sqlalchemy import select
 from uuid import UUID
@@ -36,6 +36,8 @@ async def run_ingest(db: AsyncSession = Depends(get_db)):
         "Ingest complete: inserted=%d updated=%d errors=%d",
         result.inserted, result.updated, result.errors,
     )
+    # Alertes dès la fin de l'ingestion (constaté le 2026-10-01 : 6 h d'attente).
+    await generate_alerts_after_ingest(db, result)
     return result
 
 
@@ -101,6 +103,7 @@ async def import_csv(
 
     result = await upsert_assets(db, assets)
     logger.info("CSV import: %d rows -> inserted=%d updated=%d", len(assets), result.inserted, result.updated)
+    await generate_alerts_after_ingest(db, result)
     return result
 
 
@@ -136,6 +139,7 @@ async def import_json(
 
     result = await upsert_assets(db, assets)
     logger.info("JSON import: %d items -> inserted=%d updated=%d", len(assets), result.inserted, result.updated)
+    await generate_alerts_after_ingest(db, result)
     return result
 
 

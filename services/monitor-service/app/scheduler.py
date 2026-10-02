@@ -3,6 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.database import AsyncSessionLocal
 from app.config import get_settings
 from app.ingestion.registry import run_all
+from app.alerts.generator import generate_alerts_after_ingest
 
 logger = logging.getLogger("monitor.scheduler")
 
@@ -14,10 +15,13 @@ async def scheduled_ingest():
     logger.info("Scheduled ingest started")
     async with AsyncSessionLocal() as db:
         result = await run_all(db)
-    logger.info(
-        "Scheduled ingest complete: inserted=%d updated=%d errors=%d",
-        result.inserted, result.updated, result.errors,
-    )
+        logger.info(
+            "Scheduled ingest complete: inserted=%d updated=%d errors=%d",
+            result.inserted, result.updated, result.errors,
+        )
+        # Constaté le 2026-10-01 : les alertes n'étaient générées que toutes les
+        # 6 h. Elles le sont désormais aussi dès la fin de l'ingestion.
+        await generate_alerts_after_ingest(db, result)
 
 
 async def scheduled_enrich():

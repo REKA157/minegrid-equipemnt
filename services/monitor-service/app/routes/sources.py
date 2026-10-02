@@ -14,6 +14,7 @@ from app.ingestion.registry import CONNECTOR_MAP
 from app.ingestion.registry import run_all as run_all_from_yaml
 from app.ingestion.upsert import upsert_assets
 from app.ingestion.machine_upsert import upsert_machines
+from app.alerts.generator import generate_alerts_after_ingest
 
 logger = logging.getLogger("monitor.sources")
 
@@ -115,6 +116,10 @@ async def run_source(source_id: UUID, db: AsyncSession = Depends(get_db)):
         await db.commit()
 
         logger.info("Source %s: inserted=%d updated=%d errors=%d", source.name, result.inserted, result.updated, result.errors)
+        if source.connector_type not in ("mascus", "leboncoin"):
+            # Alertes dès la fin de l'ingestion (constaté le 2026-10-01 : 6 h
+            # d'attente). Les connecteurs machines n'alimentent pas les projets.
+            await generate_alerts_after_ingest(db, result)
         return result
 
     except Exception as exc:
@@ -149,6 +154,7 @@ async def run_all_sources(db: AsyncSession = Depends(get_db)):
     # Fallback: if no sources are configured in DB, execute the YAML registry directly.
     if len(rows) == 0:
         yaml_result = await run_all_from_yaml(db)
+        await generate_alerts_after_ingest(db, yaml_result)
         return {
             "total_sources": 0,
             "inserted": yaml_result.inserted,
@@ -159,6 +165,9 @@ async def run_all_sources(db: AsyncSession = Depends(get_db)):
             "details": yaml_result.details or [],
             "mode": "yaml_fallback",
         }
+
+    # Projets (pas machines) insérés/mis à jour : décide de la génération d'alertes.
+    projects_changed = IngestResult()
 
     for source in rows:
         try:
@@ -175,6 +184,8 @@ async def run_all_sources(db: AsyncSession = Depends(get_db)):
             else:
                 assets = await connector.fetch()
                 result = await upsert_assets(db, assets)
+                projects_changed.inserted += result.inserted
+                projects_changed.updated += result.updated
 
             source.last_run_at = datetime.utcnow()
             source.stats = {
@@ -221,4 +232,5 @@ async def run_all_sources(db: AsyncSession = Depends(get_db)):
             source.stats = {"error": str(exc)}
 
     await db.commit()
+    await generate_alerts_after_ingest(db, projects_changed)
     return summary

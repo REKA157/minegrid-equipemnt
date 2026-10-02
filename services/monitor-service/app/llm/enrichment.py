@@ -489,13 +489,37 @@ def _upsert_equipment_rows(
     return len(seen_categories), removed
 
 
+# ---------------------------------------------------------------------------
+# Client simulé — constaté le 2026-10-01 : sans clé d'IA, enrich_project
+# ENREGISTRAIT en base les réponses fabriquées du client simulé : budget
+# 350 000 000 USD, dates 2025-06-01 → 2029-12-31 et acteurs « AECOM », « China
+# State Construction »… sur tout projet qui n'en avait pas, plus des besoins
+# « [LLM] » inventés (pelles 4-8, camions 6-12…). Ces lignes étaient ensuite
+# servies à tous comme des données réelles, sans aucun marquage possible.
+# Désormais, en mode simulé, les étapes IA (1 : métadonnées, 3 : besoins) ne
+# sont NI appelées NI enregistrées ; seule l'extraction déterministe du texte
+# de l'AO (étape 2, aucune IA) tourne. Le résultat porte simulated=True.
+# Avec une vraie clé, le comportement est inchangé.
+# ---------------------------------------------------------------------------
+_SIMULATED_SKIP_REASON = (
+    "simulation : aucune IA n'est configurée sur le radar, aucune réponse "
+    "simulée n'est enregistrée"
+)
+_SIMULATED_COMPARE_REASON = (
+    "Aucune IA n'est configurée sur le radar : seule l'extraction depuis le "
+    "texte de l'appel d'offres est disponible, aucune comparaison IA n'est "
+    "possible."
+)
+
+
 async def enrich_project(db: AsyncSession, project: Project) -> dict:
     """
     Run the full LLM enrichment pipeline on a single project.
     Returns a summary dict of what was updated.
     """
     client = get_llm_client()
-    result = {"project_id": str(project.id), "steps": []}
+    simulated = bool(getattr(client, "simulated", False))
+    result = {"project_id": str(project.id), "simulated": simulated, "steps": []}
 
     raw_text = ""
     if project.raw:
@@ -504,54 +528,59 @@ async def enrich_project(db: AsyncSession, project: Project) -> dict:
     user_context = _build_equipment_user_context(project, source_text)
 
     # Step 1: Extract metadata (dates, budget, actors, locations)
-    try:
-        extract_resp = await client.complete(EXTRACT_PROMPT, user_context)
-        extracted = json.loads(extract_resp.text)
+    if simulated:
+        result["steps"].append(
+            {"step": "extract", "skipped": True, "reason": _SIMULATED_SKIP_REASON}
+        )
+    else:
+        try:
+            extract_resp = await client.complete(EXTRACT_PROMPT, user_context)
+            extracted = json.loads(extract_resp.text)
 
-        # Update dates if missing
-        if not project.start_date:
-            d = _safe_date(extracted.get("dates", {}).get("start"))
-            if d:
-                project.start_date = d
-        if not project.end_date:
-            d = _safe_date(extracted.get("dates", {}).get("end"))
-            if d:
-                project.end_date = d
+            # Update dates if missing
+            if not project.start_date:
+                d = _safe_date(extracted.get("dates", {}).get("start"))
+                if d:
+                    project.start_date = d
+            if not project.end_date:
+                d = _safe_date(extracted.get("dates", {}).get("end"))
+                if d:
+                    project.end_date = d
 
-        # Update budget if missing
-        if not project.budget_usd:
-            b = _safe_decimal(extracted.get("budget_usd"))
-            if b:
-                project.budget_usd = b
+            # Update budget if missing
+            if not project.budget_usd:
+                b = _safe_decimal(extracted.get("budget_usd"))
+                if b:
+                    project.budget_usd = b
 
-        # Add actors as entities
-        actors = extracted.get("actors", [])
-        for actor in actors:
-            name = actor.get("name", "").strip()
-            if not name:
-                continue
-            existing = (await db.execute(
-                select(ProjectEntity).where(
-                    ProjectEntity.project_id == project.id,
-                    ProjectEntity.name == name,
-                )
-            )).scalar_one_or_none()
-            if not existing:
-                db.add(ProjectEntity(
-                    project_id=project.id,
-                    name=name,
-                    role=actor.get("role", ""),
-                ))
+            # Add actors as entities
+            actors = extracted.get("actors", [])
+            for actor in actors:
+                name = actor.get("name", "").strip()
+                if not name:
+                    continue
+                existing = (await db.execute(
+                    select(ProjectEntity).where(
+                        ProjectEntity.project_id == project.id,
+                        ProjectEntity.name == name,
+                    )
+                )).scalar_one_or_none()
+                if not existing:
+                    db.add(ProjectEntity(
+                        project_id=project.id,
+                        name=name,
+                        role=actor.get("role", ""),
+                    ))
 
-        result["steps"].append({
-            "step": "extract",
-            "actors_found": len(actors),
-            "model": extract_resp.model,
-            "tokens": extract_resp.tokens_used,
-        })
-    except Exception as exc:
-        logger.warning("Extract step failed for %s: %s", project.id, exc)
-        result["steps"].append({"step": "extract", "error": str(exc)})
+            result["steps"].append({
+                "step": "extract",
+                "actors_found": len(actors),
+                "model": extract_resp.model,
+                "tokens": extract_resp.tokens_used,
+            })
+        except Exception as exc:
+            logger.warning("Extract step failed for %s: %s", project.id, exc)
+            result["steps"].append({"step": "extract", "error": str(exc)})
 
     # Step 2: deterministic extraction from tender/source text (priority path)
     try:
@@ -629,6 +658,15 @@ async def enrich_project(db: AsyncSession, project: Project) -> dict:
                     "reason": "deterministic extraction already produced enough needs",
                     "needs_count": len(current_rows),
                 }
+            )
+            await db.commit()
+            return result
+
+        if simulated:
+            # Voir _SIMULATED_SKIP_REASON : les besoins inventés du client simulé
+            # ne sont jamais enregistrés (ils seraient servis comme réels).
+            result["steps"].append(
+                {"step": "equipment", "skipped": True, "reason": _SIMULATED_SKIP_REASON}
             )
             await db.commit()
             return result
@@ -745,6 +783,9 @@ async def analyze_project_debug(project: Project) -> dict:
     return {
         "project_id": str(project.id),
         "analyzed_at": datetime.utcnow().isoformat() + "Z",
+        # Constaté le 2026-10-01 : rien ne distinguait ici une réponse du client
+        # simulé d'une vraie analyse (outil admin, aucun enregistrement).
+        "simulated": bool(getattr(client, "simulated", False)),
         "provider": settings_provider,
         "model": resp.model,
         "tokens_used": resp.tokens_used,
@@ -800,8 +841,18 @@ async def compare_project_methods(project: Project) -> dict:
 
     llm_norm: list[dict] = []
     llm_meta: dict = {"called": False}
-    if not _is_non_machine_project(project, raw_text, source_text):
-        client = get_llm_client()
+    # Constaté le 2026-10-01 : sans clé d'IA, la colonne « IA » de cette
+    # comparaison (bouton « Comparer IA » du front) montrait les besoins
+    # INVENTÉS du client simulé (pelles 4-8, camions 6-12… identiques pour tout
+    # projet) comme une vraie analyse. Désormais, en mode simulé, le client
+    # simulé n'est pas appelé : la partie IA vaut null / listes vides, la
+    # réponse porte simulated=true et une raison. Contrat partagé avec le
+    # front, point (a). La partie déterministe (texte de l'AO) reste servie.
+    client = get_llm_client()
+    simulated = bool(getattr(client, "simulated", False))
+    if simulated:
+        llm_meta["simulated"] = True
+    elif not _is_non_machine_project(project, raw_text, source_text):
         llm_meta["called"] = True
         resp = await client.complete(EQUIPMENT_PROMPT, user_context)
         llm_meta.update({"model": resp.model, "tokens": resp.tokens_used})
@@ -819,8 +870,39 @@ async def compare_project_methods(project: Project) -> dict:
     def _qty_span_sum(items: list[dict]) -> int:
         return sum(max(0, (it.get("qty_max", 0) - it.get("qty_min", 0))) for it in items)
 
+    if simulated:
+        # Aucune comparaison possible sans IA : aucun « accord » n'est
+        # prétendu (intersection_count null, listes d'accord et « IA seule »
+        # vides — des listes, pour les clients qui lisent .length).
+        # Constaté le 2026-10-01 (relecture, REV-6) : only_deterministic était
+        # vidé aussi ; un front qui construit ses « catégories extraites » à
+        # partir des listes d'accord n'affichait plus que « Extract: N », sans
+        # les catégories RÉELLEMENT lues dans l'avis (aucune IA). Sans IA, toute
+        # catégorie extraite est, par définition, « seulement extraction ».
+        return {
+            "project_id": str(project.id),
+            "simulated": True,
+            "raison": _SIMULATED_COMPARE_REASON,
+            "deterministic_count": len(deterministic_norm),
+            "llm_count": None,
+            "agreement": {
+                "intersection_count": None,
+                "intersection_categories": [],
+                "only_deterministic": sorted(det_categories),
+                "only_llm": [],
+            },
+            "spread": {
+                "deterministic_qty_span_sum": _qty_span_sum(deterministic_norm),
+                "llm_qty_span_sum": None,
+            },
+            "llm_meta": llm_meta,
+            "deterministic_preview": deterministic_norm[:20],
+            "llm_preview": [],
+        }
+
     return {
         "project_id": str(project.id),
+        "simulated": False,
         "deterministic_count": len(deterministic_norm),
         "llm_count": len(llm_norm),
         "agreement": {

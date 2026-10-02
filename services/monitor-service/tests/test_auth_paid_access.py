@@ -61,7 +61,7 @@ def _patch_http_client(post_return: MagicMock) -> MagicMock:
     return mock_client
 
 
-def _rpc_row(*, is_active: bool, sub_type: str = "pro",
+def _rpc_row(*, is_active: bool, sub_type: str = "premium",
              status: str = "active", source: str = "self") -> list[dict]:
     """Forme de reponse de get_effective_subscription_for : toujours une ligne."""
     return [{
@@ -87,23 +87,113 @@ def test_admin_token_bypasses_pro_clients_check():
     assert result is True
 
 
-def test_pro_clients_404_denies_access():
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+# ---------------------------------------------------------------------------
+# Constaté le 2026-10-01 : un échec de la RPC (404 si absente, 5xx, réponse
+# illisible) donnait 403 « Abonnement payant requis », mis en cache 60 s : un
+# abonné en règle était accusé de ne pas payer pendant une panne de la
+# plateforme. Une panne donne désormais 503, jamais mise en cache. Seule une
+# réponse valide (is_active=false, palier sans radar) donne 403.
+# ---------------------------------------------------------------------------
+
+def test_rpc_abonnement_404_est_une_panne_503_pas_un_refus():
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
                     status_code=404,
-                    text='relation "public.pro_clients" does not exist',
+                    text='function public.get_effective_subscription_for(uuid) does not exist',
                 ),
             )
             with pytest.raises(HTTPException) as exc:
                 asyncio.run(_require_paid())
-    assert exc.value.status_code == 403
-    assert exc.value.detail == "Abonnement payant requis"
+    assert exc.value.status_code == 503
+    assert exc.value.detail != "Abonnement payant requis"
+    assert "abonnement" in exc.value.detail.lower()
+    assert "réessayez" in exc.value.detail.lower()
+    # Le refus n'est PAS retenu : rien en cache pour cet utilisateur.
+    assert USER_ID not in _paid_access_cache
+
+
+@pytest.mark.parametrize("status_code", [500, 502, 503, 401, 400])
+def test_rpc_abonnement_statut_non_2xx_donne_503(status_code):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(
+                _mock_pro_clients_response(status_code=status_code, text="erreur"),
+            )
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(_require_paid())
+    assert exc.value.status_code == 503
+    assert USER_ID not in _paid_access_cache
+
+
+@pytest.mark.parametrize(
+    "corps",
+    [
+        [],                                  # aucune ligne (la RPC en renvoie toujours une)
+        {"message": "inattendu"},            # objet sans is_active
+        [{"is_active": None}],               # is_active non booléen
+        [{"is_active": "true"}],             # is_active en texte
+        "pas une liste",
+    ],
+)
+def test_rpc_abonnement_reponse_inexploitable_donne_503(corps):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(
+                _mock_pro_clients_response(status_code=200, json_body=corps),
+            )
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(_require_paid())
+    assert exc.value.status_code == 503
+    assert USER_ID not in _paid_access_cache
+
+
+def test_rpc_abonnement_json_illisible_donne_503():
+    res = _mock_pro_clients_response(status_code=200, text="<html>")
+    res.json = MagicMock(side_effect=ValueError("pas du JSON"))
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(res)
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(_require_paid())
+    assert exc.value.status_code == 503
+
+
+def test_panne_puis_retablissement_l_abonne_passe_aussitot():
+    """La panne n'est pas mise en cache : dès que la RPC répond, l'abonné passe
+    (avant : 60 s de 403 après la panne)."""
+    panne = _patch_http_client(_mock_pro_clients_response(status_code=500, text="down"))
+    retablie = _patch_http_client(
+        _mock_pro_clients_response(status_code=200, json_body=_rpc_row(is_active=True)),
+    )
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient", side_effect=[panne, retablie]):
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(_require_paid())
+            assert exc.value.status_code == 503
+            assert asyncio.run(_require_paid()) is True
+
+
+def test_vrai_refus_reste_403_et_est_mis_en_cache():
+    """is_active=false est une réponse VALIDE : 403, retenu 60 s (pas de second
+    appel réseau)."""
+    client = _patch_http_client(
+        _mock_pro_clients_response(status_code=200, json_body=_rpc_row(is_active=False, status="none")),
+    )
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient", return_value=client) as client_cls:
+            for _ in range(2):
+                with pytest.raises(HTTPException) as exc:
+                    asyncio.run(_require_paid())
+                assert exc.value.status_code == 403
+                assert exc.value.detail == "Abonnement payant requis"
+    assert client_cls.call_count == 1
+    assert _paid_access_cache[USER_ID][0] is False
 
 
 def test_pro_clients_empty_list_denies_access():
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
@@ -117,12 +207,12 @@ def test_pro_clients_empty_list_denies_access():
 
 
 def test_pro_clients_active_subscription_allows_access():
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
                     status_code=200,
-                    json_body=_rpc_row(is_active=True, sub_type="pro"),
+                    json_body=_rpc_row(is_active=True, sub_type="premium"),
                 ),
             )
             result = asyncio.run(_require_paid())
@@ -130,7 +220,7 @@ def test_pro_clients_active_subscription_allows_access():
 
 
 def test_pro_clients_inactive_subscription_denies_access():
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
@@ -145,7 +235,7 @@ def test_pro_clients_inactive_subscription_denies_access():
 
 
 def test_pro_clients_http_error_returns_503():
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(side_effect=httpx.ConnectError("down"))
@@ -167,12 +257,12 @@ def test_org_member_inherits_owner_subscription():
     Ce membre n'a AUCUNE ligne `pro_clients` a son nom ; l'ancienne requete
     directe le refusait alors qu'il est ayant droit.
     """
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(
                     status_code=200,
-                    json_body=_rpc_row(is_active=True, sub_type="pro", source="org"),
+                    json_body=_rpc_row(is_active=True, sub_type="premium", source="org"),
                 ),
             )
             result = asyncio.run(_require_paid())
@@ -193,7 +283,7 @@ def test_expired_subscription_denies_access():
         "ends_at": "2020-01-01T00:00:00+00:00",
         "source": "self",
     }]
-    with patch("app.auth.jwt.decode", return_value={"sub": USER_ID}):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
         with patch("app.auth.httpx.AsyncClient") as client_cls:
             client_cls.return_value = _patch_http_client(
                 _mock_pro_clients_response(status_code=200, json_body=expired),
@@ -201,3 +291,46 @@ def test_expired_subscription_denies_access():
             with pytest.raises(HTTPException) as exc:
                 asyncio.run(_require_paid())
     assert exc.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Constaté le 2026-10-01 : nomenclature croisée des plans (src/config/plans.ts).
+# Code interne 'pro' = plan AFFICHÉ « Premium » 20 $ (gestion du parc, sans
+# radar) ; code 'premium' = plan affiché « Pro » 50 $ (radar). Le site réserve
+# le radar au code 'premium' et plus ; le service l'ouvrait aussi à 'pro'.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("sub_type", ["pro", "basic", "free"])
+def test_formule_sans_radar_refusee(sub_type):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(
+                _mock_pro_clients_response(
+                    status_code=200,
+                    json_body=_rpc_row(is_active=True, sub_type=sub_type),
+                ),
+            )
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(_require_paid())
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("sub_type", ["premium", "enterprise", "Entreprise"])
+def test_formule_avec_radar_acceptee(sub_type):
+    with patch("app.auth.verify_supabase_token", AsyncMock(return_value=USER_ID)):
+        with patch("app.auth.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _patch_http_client(
+                _mock_pro_clients_response(
+                    status_code=200,
+                    json_body=_rpc_row(is_active=True, sub_type=sub_type),
+                ),
+            )
+            assert asyncio.run(_require_paid()) is True
+
+
+def test_jeton_invalide_donne_401_avant_tout_appel_abonnement():
+    with patch("app.auth.httpx.AsyncClient") as client_cls:
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(_require_paid(credentials=_credentials("pas.un.jeton")))
+    assert exc.value.status_code == 401
+    client_cls.assert_not_called()

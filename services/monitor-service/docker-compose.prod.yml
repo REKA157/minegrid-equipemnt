@@ -31,7 +31,15 @@ services:
     # Aucun `ports:` -> Postgres reste PRIVÉ (réseau Docker interne uniquement).
 
   monitor-api:
-    build: .
+    build:
+      context: .
+      # Version affichée par GET /health (build_sha / build_date). À poser au build :
+      #   BUILD_SHA=$(git rev-parse --short HEAD) BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+      #   docker compose -f docker-compose.prod.yml build monitor-api
+      # Sans elles, /health répond « inconnue » (rien ne casse).
+      args:
+        BUILD_SHA: ${BUILD_SHA:-inconnue}
+        BUILD_DATE: ${BUILD_DATE:-inconnue}
     env_file:
       - .env
     environment:

@@ -74,8 +74,15 @@ def compute_equipment_needs(
     budget_mult = _get_budget_multiplier(budget_usd, rules)
 
     combined = phase_mult * budget_mult
-    if combined == 0:
-        combined = 0.01  # study phase: return near-zero but not empty
+    # Constaté le 2026-10-01 (test test_study_phase_near_zero, en échec depuis
+    # son écriture) : la phase « study » a un multiplicateur 0.0 dans
+    # equipment_rules.json — aucun engin à ce stade. L'ancien code le remplaçait
+    # par 0.01 puis arrondissait au-dessus (ceil) : CHAQUE catégorie valait
+    # alors 0–1, soit 10 lignes « [estimated] » inventées pour un projet encore
+    # à l'étude (GET /projects/{id} les servait comme besoins estimés).
+    # Désormais : liste toujours complète (10 catégories), quantités à 0 ; la
+    # route filtre `qty_max > 0` et n'affiche donc aucune estimation fictive.
+    no_equipment_expected = combined == 0
 
     estimates: list[EquipmentEstimate] = []
 
@@ -83,8 +90,11 @@ def compute_equipment_needs(
         base_min = base["base_min"]
         base_max = base["base_max"]
 
-        qty_min = max(0, math.floor(base_min * combined))
-        qty_max = max(qty_min, math.ceil(base_max * combined))
+        if no_equipment_expected:
+            qty_min, qty_max = 0, 0
+        else:
+            qty_min = max(0, math.floor(base_min * combined))
+            qty_max = max(qty_min, math.ceil(base_max * combined))
 
         # Confidence based on how much info we have
         conf = Decimal("0.5")

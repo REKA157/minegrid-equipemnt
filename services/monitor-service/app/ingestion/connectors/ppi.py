@@ -45,7 +45,10 @@ class PPIConnector(BaseConnector):
         if not file_path.is_absolute():
             file_path = base_dir / file_path
         file_path = file_path.resolve()
-        if not str(file_path).startswith(str(base_dir.resolve())):
+        # Constaté le 2026-10-01 : la comparaison de PRÉFIXE de chaîne acceptait
+        # un dossier voisin (« /app2/x.csv » commence par « /app »). On exige
+        # désormais que le fichier soit réellement SOUS le dossier du service.
+        if not file_path.is_relative_to(base_dir.resolve()):
             self.logger.error("Path traversal blocked: %s", file_path)
             return []
 

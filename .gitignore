@@ -67,3 +67,15 @@ MineGrid-*.zip
 .env.production
 # Sauvegardes de .env.local (contiennent les memes cles)
 .env.local.avant-*
+
+# Python du radar (services/monitor-service) : environnement virtuel et
+# bytecode. Cree le 2026-10-02 pour lancer la suite de tests du service ;
+# .venv pese des centaines de Mo et depend de la machine.
+.venv/
+__pycache__/
+*.pyc
+
+# Paquets de deploiement produits par le build (reconstructibles)
+dist-minegrid-*.zip
+correctif-*.zip
+minegrid-site.zip

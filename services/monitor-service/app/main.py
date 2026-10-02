@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -6,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import engine, Base
 from app.scheduler import start_scheduler, stop_scheduler
+from app.startup import SchemaNotCurrentError, wait_for_database
 from app.routes import health, projects, admin, alerts, sources, mascus, leboncoin, ai_widgets
 
 settings = get_settings()
@@ -30,12 +32,20 @@ async def _verify_schema_is_current() -> None:
     from alembic.script import ScriptDirectory
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    cfg = Config(os.path.join(root, "alembic.ini"))
+    # Configuration construite SANS le fichier alembic.ini. Constaté le
+    # 2026-10-01 : avec le fichier, alembic/env.py appelle fileConfig(), qui
+    # DÉSACTIVE tous les journaux déjà créés (monitor.*, uvicorn) : plus aucun
+    # message de démarrage ni d'erreur. Seuls script_location et l'URL servent.
+    cfg = Config()
     cfg.set_main_option("script_location", os.path.join(root, "alembic"))
     cfg.set_main_option("sqlalchemy.url", settings.database_url)
 
     if os.environ.get("MONITOR_AUTO_MIGRATE") == "1":
-        command.upgrade(cfg, "head")
+        # Dans un fil séparé : alembic/env.py appelle asyncio.run(), interdit
+        # dans la boucle déjà lancée par uvicorn (« asyncio.run() cannot be
+        # called from a running event loop »). Constaté le 2026-10-01 à la
+        # lecture : ce chemin de développement ne pouvait pas fonctionner.
+        await asyncio.to_thread(command.upgrade, cfg, "head")
         return
 
     head = ScriptDirectory.from_config(cfg).get_current_head()
@@ -47,7 +57,9 @@ async def _verify_schema_is_current() -> None:
         current = await conn.run_sync(_current)
 
     if current != head:
-        raise RuntimeError(
+        # Classe dédiée : wait_for_database ne la réessaie JAMAIS (une base
+        # joignable mais non migrée doit refuser de démarrer immédiatement).
+        raise SchemaNotCurrentError(
             f"Schema non migre : base a la revision {current!r}, attendu {head!r}. "
             "Executez `alembic upgrade head` avant de demarrer le service."
         )
@@ -67,7 +79,13 @@ async def lifespan(app: FastAPI):
     # parallele. Elles s'appliquent au deploiement (`alembic upgrade head`).
     # Ici on se contente de VERIFIER, et de refuser de demarrer sur un schema
     # non migre plutot que de servir du trafic sur une base incoherente.
-    await _verify_schema_is_current()
+    #
+    # Constate le 2026-10-01 : RestartCount=16134 sur le conteneur local. La
+    # base n'etait pas encore resolvable au demarrage (socket.gaierror) et le
+    # processus mourait aussitot. On attend desormais la base au plus ~60 s
+    # (MONITOR_DB_WAIT_SECONDS), en reessayant UNIQUEMENT sur les erreurs de
+    # connexion ; un schema non migre arrete toujours le service tout de suite.
+    await wait_for_database(_verify_schema_is_current)
     start_scheduler()
     yield
     stop_scheduler()
